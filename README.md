@@ -1,7 +1,6 @@
 # OSCAR Viewer
 
-OSCAR Viewer is Web App for OpenSensorHub enabling interaction and visualization with sensors and observations 
-served by OpenSensorHub server instances.
+OSCAR Viewer is the web operator and administration interface for [ORNL/oscar](https://github.com/ORNL/oscar), enabling real-time monitoring, alarm adjudication, operational views, and visualization of OpenSensorHub instances.
 
 ## Development
 
@@ -15,7 +14,7 @@ npm run test:component
 npm run build
 ```
 
-The production static export continues to use Next.js Webpack mode because the pinned `osh-js` source package still loads web workers through `worker-loader`. Cypress component tests use Vite and Chrome. The `osh-js` dependency is pinned directly to the immutable upstream commit and lockfile integrity hash from [osh-js PR #6](https://github.com/earocorn/osh-js/pull/6), so clean installs reproduce the reviewed MQTT MessagePort implementation without depending on a personal packaging fork. OSCAR imports only `osh-js/source/core/...`; the larger upstream source archive affects install size, not the static production output.
+The production static export continues to use Next.js Webpack mode because the pinned `osh-js` source package still loads web workers through `worker-loader`. Cypress component tests use Vite and Chrome. The `osh-js` dependency is pinned directly to the immutable upstream commit and lockfile integrity hash from [ORNL/osh-js](https://github.com/ORNL/osh-js/commit/0d3716dc5f5ce8c310757fd5e1e939231e22fe93), so clean installs reproduce the reviewed MQTT MessagePort implementation directly from the ORNL organization. OSCAR imports only `osh-js/source/core/...`; the larger upstream source archive affects install size, not the static production output.
 
 ## Retained alarm media
 

@@ -1,26 +1,36 @@
 name: Build OSCAR-Viewer
+
 on:
   push:
     branches: [ main, dev, cicd ]
   pull_request:
     branches: [ main, dev ]
   workflow_dispatch:
+
+concurrency:
+  group: viewer-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '22'
-  OSCAR_DIR: 'oscar-viewer'
+
 jobs:
   build:
+    name: Build, audit, lint, and component suite
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          repository: Botts-Innovative-Research/oscar-viewer
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Install oscar-viewer dependencies
@@ -28,6 +38,11 @@ jobs:
 
       - name: Audit production and development dependencies
         run: npm run audit:dependencies
+
+      - name: Validate dependency policy and locale catalogs
+        run: |
+          npm run validate:dependencies
+          npm run validate:locales
 
       - name: Check TypeScript
         run: npm run lint
