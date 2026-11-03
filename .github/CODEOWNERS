@@ -1,1 +1,5 @@
-* @tyronechrisharris
+# Day-to-day Viewer UI, localization, and component changes can be approved by ORNL or Botts lead
+* @tyronechrisharris @earocorn
+
+# Repository governance and CI workflows require ORNL sign-off
+/.github/ @tyronechrisharris
