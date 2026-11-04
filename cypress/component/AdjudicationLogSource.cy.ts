@@ -1,4 +1,6 @@
 import {
+    formatAdjudicationAttachmentLabel,
+    formatAdjudicationAttachmentLabels,
     mergeAdjudicationLogs,
     waitForAdjudicationLogSource,
 } from "../../src/app/_components/adjudication/AdjudicationLog";
@@ -114,5 +116,21 @@ describe("adjudication log source discovery", () => {
         expect(merged[0].id).to.equal("02fc");
         expect(merged[0].commandId).to.equal("02fc");
         expect(merged[0].feedback).to.equal("Vvvhhh");
+    });
+
+    it("formats Linux forward-slash, Windows backslash, and duplicate-basename attachment link labels", () => {
+        expect(formatAdjudicationAttachmentLabel("adjudication/evidence-01.txt")).to.equal("evidence-01.txt");
+        expect(formatAdjudicationAttachmentLabel("/adjudication/evidence-01.txt")).to.equal("evidence-01.txt");
+        expect(formatAdjudicationAttachmentLabel("adjudication\\evidence-01.txt")).to.equal("evidence-01.txt");
+        expect(formatAdjudicationAttachmentLabel("\\adjudication\\evidence-01.txt")).to.equal("evidence-01.txt");
+        expect(formatAdjudicationAttachmentLabel("standalone.n42")).to.equal("standalone.n42");
+
+        expect(formatAdjudicationAttachmentLabels([
+            "/bucket/uploads/spectrum.n42",
+            "/bucket/webid/spectrum.n42",
+        ])).to.deep.equal([
+            "uploads/spectrum.n42",
+            "webid/spectrum.n42",
+        ]);
     });
 });
