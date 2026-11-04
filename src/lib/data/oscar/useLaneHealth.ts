@@ -97,7 +97,11 @@ function chunk<T>(values: T[], size: number): T[][] {
     return chunks;
 }
 
-async function fetchHealthQueryPage(query: any, signal: AbortSignal): Promise<any[]> {
+async function fetchHealthQueryPage(
+    query: any,
+    signal: AbortSignal,
+    lowPriority = false,
+): Promise<any[]> {
     // The pinned osh-js Collection does not yet expose AbortSignal. Its public
     // query metadata and parser let this bounded health request use the same
     // URL/decoding while still cancelling the underlying browser fetch.
@@ -105,17 +109,23 @@ async function fetchHealthQueryPage(query: any, signal: AbortSignal): Promise<an
         && typeof query?.filter?.toQueryString === "function"
         && typeof query?.parseResponse === "function") {
         const queryString = `${query.filter.toQueryString()}&offset=0&limit=${query.pageSize}`;
-        const response = await fetch(`${query.url}?${queryString}`, {
+        const fetchOptions: RequestInit = {
             method: "GET",
             credentials: "include",
             headers: query.headers ?? {},
             signal,
-        });
+            ...(lowPriority ? ({priority: "low"} as RequestInit) : {}),
+        };
+        const response = await fetch(`${query.url}?${queryString}`, fetchOptions);
         if (!response.ok)
             throw new Error(`Got ${response.status} response from ${query.url}`);
-        const payload = query.responseFormat === "arraybuffer"
-            ? await response.arrayBuffer()
-            : await response.json();
+        if (query.responseFormat === "arraybuffer") {
+            return await query.parseResponse(await response.arrayBuffer());
+        }
+        const payload = await response.json();
+        if (Array.isArray(payload?.items)) {
+            return payload.items.map((properties: any) => ({properties}));
+        }
         return await query.parseResponse(payload);
     }
 
@@ -628,6 +638,7 @@ export function useLaneHealth() {
             bindingsByStream: Map<string, StreamBinding[]>,
             streamIds: string[],
             batchNumber: number,
+            lowPriority: boolean,
         ) => {
             try {
                 const observations = await withHealthQueryTimeout(async (signal) => {
@@ -638,7 +649,7 @@ export function useLaneHealth() {
                         }),
                         streamIds.length,
                     );
-                    return fetchHealthQueryPage(query, signal);
+                    return fetchHealthQueryPage(query, signal, lowPriority);
                 }, healthRequestControllers);
                 if (!active) return;
                 const appliedBindings = new Set<StreamBinding>();
@@ -675,7 +686,7 @@ export function useLaneHealth() {
             }
         };
 
-        const reconcileLatest = (): Promise<void> => {
+        const reconcileLatest = (lowPriority = false): Promise<void> => {
             if (reconciliationPromise)
                 return reconciliationPromise;
 
@@ -718,6 +729,7 @@ export function useLaneHealth() {
                             task.bindingsByStream,
                             task.streamIds,
                             task.batchNumber,
+                            lowPriority,
                         );
                     }
                 },
@@ -734,7 +746,7 @@ export function useLaneHealth() {
         const requestFreshReconciliation = (): Promise<void> => {
             const inFlight = reconciliationPromise;
             if (!inFlight)
-                return reconcileLatest();
+                return reconcileLatest(false);
             if (queuedRefreshPromise)
                 return queuedRefreshPromise;
 
@@ -743,7 +755,7 @@ export function useLaneHealth() {
                 if (!active) return;
                 if (reconciliationPromise === inFlight)
                     reconciliationPromise = null;
-                await reconcileLatest();
+                await reconcileLatest(false);
             }).finally(() => {
                 if (queuedRefreshPromise === queued)
                     queuedRefreshPromise = null;
@@ -756,11 +768,11 @@ export function useLaneHealth() {
         const initialize = async () => {
             if (bindings.length > 0) {
                 reconciliationTimer = window.setInterval(() => {
-                    void reconcileLatest();
+                    void reconcileLatest(true);
                 }, HEALTH_RECONCILIATION_INTERVAL_MS);
             }
 
-            await reconcileLatest();
+            await reconcileLatest(false);
             if (active && laneMapReady) setIsLoading(false);
         };
 

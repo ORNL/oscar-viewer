@@ -19,6 +19,7 @@ import ControlStreamFilter from "osh-js/source/core/consysapi/controlstream/Cont
 import DataStream from "osh-js/source/core/consysapi/datastream/DataStream.js";
 import ControlStream from "osh-js/source/core/consysapi/controlstream/ControlStream";
 import ConSysApi from "osh-js/source/core/datasource/consysapi/ConSysApi.datasource";
+import MqttTopicConnector from "osh-js/source/core/connector/MqttTopicConnector.js";
 import {Mode} from "osh-js/source/core/datasource/Mode";
 import {
     buildOperationalViewCatalog,
@@ -27,6 +28,64 @@ import {
 } from "@/lib/data/oscar/OperationalView";
 
 const LANE_SYSTEM_UID_PREFIX = "urn:osh:system:lane:";
+
+/**
+ * Creates a per-instance lazy stream connector wrapper for osh-js ConnectedSystemsApi
+ * REST models. In pinned osh-js, ConnectedSystemsApi eagerly constructs a new
+ * MqttTopicConnector (opening an unclosed BroadcastChannel + message listener) on
+ * every deserialized System, DataStream, ControlStream, and Observation even when
+ * only REST methods are used. Deferring MqttTopicConnector construction until a
+ * streaming method is invoked eliminates listener/channel accumulation on 24/7
+ * wallboards while preserving full streaming capability on demand.
+ */
+function createLazyStreamConnector(rawNetworkProperties: Record<string, any>) {
+    let delegate: any = null;
+    const wrapper: any = {
+        onMessage: () => {},
+        onChangeStatus: () => {},
+        onReconnect: () => true,
+        ensureDelegate() {
+            if (!delegate) {
+                delegate = new MqttTopicConnector(
+                    rawNetworkProperties.mqttOpts?.bcId,
+                    rawNetworkProperties,
+                );
+            }
+            delegate.onMessage = wrapper.onMessage;
+            delegate.onChangeStatus = wrapper.onChangeStatus;
+            delegate.onReconnect = wrapper.onReconnect;
+            return delegate;
+        },
+        connect() {
+            return wrapper.ensureDelegate().connect();
+        },
+        doRequest(topic?: string, queryString?: string) {
+            return wrapper.ensureDelegate().doRequest(topic, queryString);
+        },
+        publishRequest(topic?: string, payload?: any) {
+            return wrapper.ensureDelegate().publishRequest(topic, payload);
+        },
+        disconnect() {
+            if (delegate) delegate.disconnect();
+        },
+        fullDisconnect(removeInterval?: boolean) {
+            if (delegate) delegate.fullDisconnect(removeInterval);
+        },
+        reconnect() {
+            if (delegate) delegate.reconnect();
+        },
+        close() {
+            if (delegate) delegate.close();
+        },
+        isConnected() {
+            return delegate ? delegate.isConnected() : false;
+        },
+        checkStatus(status: any) {
+            if (delegate) delegate.checkStatus(status);
+        },
+    };
+    return wrapper;
+}
 
 /**
  * Returns the terminal lane identifier used by subsystem UIDs.
@@ -181,13 +240,19 @@ export class Node implements INode {
             connectorOpts.password = this.auth.password;
         }
 
-        let networkProperties = {
+        const rawNetworkProperties = {
             endpointUrl: `${this.address}:${this.port}${this.oshPathRoot}${this.csAPIEndpoint}`,
             tls: this.isSecure,
             streamProtocol: "mqtt",
             mqttOpts: mqttOpts,
-            connectorOpts
-        }
+            connectorOpts,
+        };
+        const networkProperties: Record<string, any> = {...rawNetworkProperties};
+        Object.defineProperty(networkProperties, "connector", {
+            enumerable: true,
+            configurable: true,
+            get: () => createLazyStreamConnector(rawNetworkProperties),
+        });
 
         this.dataStreamsApi = new DataStreams(networkProperties);
         this.systemsApi = new Systems(networkProperties);

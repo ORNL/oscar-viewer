@@ -1,4 +1,5 @@
 import {
+    fetchOccupancyAdjudicationStatuses,
     formatAdjudicationAttachmentLabel,
     formatAdjudicationAttachmentLabels,
     mergeAdjudicationLogs,
@@ -132,5 +133,203 @@ describe("adjudication log source discovery", () => {
             "uploads/spectrum.n42",
             "webid/spectrum.n42",
         ]);
+    });
+
+    it("fetches zero control-stream status pages when occupancy result.adjudicatedIds is empty", () => {
+        const requestedUrls: string[] = [];
+        const searchStatus = cy.stub();
+        const fetchStub = cy.stub().callsFake(async (url: string) => {
+            requestedUrls.push(url);
+            return new Response(JSON.stringify({
+                id: "obs-empty",
+                result: {occupancyCount: 12, adjudicatedIds: []},
+            }), {status: 200, headers: {"Content-Type": "application/om+json"}});
+        });
+
+        const source = {
+            lane: {
+                parentNode: {
+                    getConnectedSystemsEndpoint: () => "https://oscar.example.test/sensorhub/api",
+                    getBasicAuthHeader: () => ({}),
+                },
+            },
+            controlStream: {properties: {id: "cs-lane1"}, searchStatus},
+        } as any;
+
+        cy.wrap(fetchOccupancyAdjudicationStatuses({
+            event: {occupancyObsId: "obs-empty", occupancyCount: "12"},
+            source,
+            fetchImpl: fetchStub as any,
+        })).then((entries) => {
+            expect(entries).to.deep.equal([]);
+            expect(requestedUrls).to.deep.equal([
+                "https://oscar.example.test/sensorhub/api/observations/obs-empty",
+            ]);
+            expect(searchStatus).not.to.have.been.called;
+        });
+    });
+
+    it("resolves adjudicatedIds in O(k) via per-command status endpoints without scanning full control-stream history", () => {
+        const requestedUrls: string[] = [];
+        const searchStatus = cy.stub();
+        const fetchStub = cy.stub().callsFake(async (url: string) => {
+            requestedUrls.push(url);
+            if (url.endsWith("/observations/obs-44")) {
+                return new Response(JSON.stringify({
+                    id: "obs-44",
+                    result: {occupancyCount: 44, adjudicatedIds: ["cmd-1", "cmd-2"]},
+                }), {status: 200});
+            }
+            if (url.includes("/commands/cmd-1/status?")) {
+                return new Response(JSON.stringify({
+                    items: [{
+                        id: "status-1",
+                        "command@id": "cmd-1",
+                        reportTime: "2026-11-04T12:00:00Z",
+                        statusCode: "COMPLETED",
+                        results: [{
+                            data: {
+                                occupancyObsId: "obs-44",
+                                adjudicationCode: 2,
+                                feedback: "First note",
+                                isotopes: ["Cs-137"],
+                                secondaryInspectionStatus: "NONE",
+                                vehicleId: "TRK-01",
+                                filePaths: [],
+                                username: "operator1",
+                            },
+                        }],
+                    }],
+                }), {status: 200});
+            }
+            if (url.includes("/commands/cmd-2/status?")) {
+                return new Response(JSON.stringify({
+                    items: [{
+                        id: "status-2",
+                        "command@id": "cmd-2",
+                        reportTime: "2026-11-04T12:05:00Z",
+                        statusCode: "COMPLETED",
+                        results: [{
+                            data: {
+                                occupancyObsId: "obs-44",
+                                adjudicationCode: 3,
+                                feedback: "Second note",
+                                isotopes: ["Co-60"],
+                                secondaryInspectionStatus: "COMPLETED",
+                                vehicleId: "TRK-01",
+                                filePaths: ["/adjudication/report.pdf"],
+                                username: "supervisor1",
+                            },
+                        }],
+                    }],
+                }), {status: 200});
+            }
+            return new Response("Not Found", {status: 404});
+        });
+
+        const source = {
+            lane: {
+                parentNode: {
+                    getConnectedSystemsEndpoint: () => "https://oscar.example.test/sensorhub/api",
+                    getBasicAuthHeader: () => ({}),
+                },
+            },
+            controlStream: {properties: {id: "cs-lane1"}, searchStatus},
+        } as any;
+
+        cy.wrap(fetchOccupancyAdjudicationStatuses({
+            event: {occupancyObsId: "obs-44", occupancyCount: "44"},
+            source,
+            fetchImpl: fetchStub as any,
+        })).then((entries: any[]) => {
+            expect(entries).to.have.length(2);
+            expect(entries[0].commandId).to.equal("cmd-1");
+            expect(entries[0].feedback).to.equal("First note");
+            expect(entries[1].commandId).to.equal("cmd-2");
+            expect(entries[1].feedback).to.equal("Second note");
+            expect(searchStatus).not.to.have.been.called;
+            expect(requestedUrls).to.have.length(3);
+        });
+    });
+
+    it("aborts in-flight adjudication status fetches immediately when AbortSignal fires", () => {
+        const controller = new AbortController();
+        let capturedSignal: AbortSignal | undefined;
+        const searchStatus = cy.stub();
+        const fetchStub = cy.stub().callsFake((_url: string, init?: RequestInit) => {
+            capturedSignal = init?.signal ?? undefined;
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener("abort", () => {
+                    const abortErr = new DOMException("The operation was aborted.", "AbortError");
+                    reject(abortErr);
+                });
+            });
+        });
+
+        const source = {
+            lane: {
+                parentNode: {
+                    getConnectedSystemsEndpoint: () => "https://oscar.example.test/sensorhub/api",
+                    getBasicAuthHeader: () => ({}),
+                },
+            },
+            controlStream: {properties: {id: "cs-lane1"}, searchStatus},
+        } as any;
+
+        const pending = fetchOccupancyAdjudicationStatuses({
+            event: {occupancyObsId: "obs-abort", occupancyCount: "9"},
+            source,
+            signal: controller.signal,
+            fetchImpl: fetchStub as any,
+        });
+        setTimeout(() => controller.abort(), 5);
+
+        cy.wrap(pending).then((entries) => {
+            expect(entries).to.deep.equal([]);
+            expect(capturedSignal?.aborted).to.equal(true);
+            expect(searchStatus).not.to.have.been.called;
+        });
+    });
+
+    it("falls back to controlStream.searchStatus when occupancy observation lookup is unavailable", () => {
+        let called = false;
+        const searchStatus = cy.stub().resolves({
+            hasNext: () => !called,
+            nextPage: async () => {
+                called = true;
+                return [{
+                    id: "fallback-status-1",
+                    "command@id": "cmd-fallback",
+                    reportTime: "2026-11-04T12:10:00Z",
+                    results: [{
+                        data: {
+                            occupancyObsId: "obs-legacy",
+                            adjudicationCode: 1,
+                            feedback: "Fallback note",
+                            isotopes: [],
+                            secondaryInspectionStatus: "NONE",
+                            vehicleId: "VAN-9",
+                            filePaths: [],
+                            username: "admin",
+                        },
+                    }],
+                }];
+            },
+        });
+
+        const source = {
+            lane: {parentNode: {}},
+            controlStream: {properties: {id: "cs-legacy"}, searchStatus},
+        } as any;
+
+        cy.wrap(fetchOccupancyAdjudicationStatuses({
+            event: {occupancyObsId: "obs-legacy", occupancyCount: "7"},
+            source,
+        })).then((entries: any[]) => {
+            expect(searchStatus).to.have.been.calledOnce;
+            expect(entries).to.have.length(1);
+            expect(entries[0].commandId).to.equal("cmd-fallback");
+            expect(entries[0].feedback).to.equal("Fallback note");
+        });
     });
 });
