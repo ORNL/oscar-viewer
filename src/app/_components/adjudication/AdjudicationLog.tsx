@@ -182,6 +182,184 @@ function buildAdjudicationData(
     return data;
 }
 
+const ADJUDICATION_COMMAND_CONCURRENCY = 4;
+
+function mapStatusItemsToAdjudications(
+    items: any[],
+    occupancyCount: string,
+    fallbackCommandId?: string,
+): AdjudicationData[] {
+    return items.map((obs: any) => {
+        if (!obs?.results?.[0]?.data)
+            return null;
+        const commandId = obs["command@id"] ?? fallbackCommandId;
+        return buildAdjudicationData(
+            obs.reportTime,
+            occupancyCount,
+            obs.results[0].data,
+            obs.id ?? commandId,
+            commandId,
+        );
+    }).filter((value: AdjudicationData | null): value is AdjudicationData => value !== null);
+}
+
+/**
+ * Resolves COMPLETED adjudication command statuses for an occupancy event in O(k)
+ * HTTP requests by reading result.adjudicatedIds from /observations/{occupancyObsId}
+ * and querying /controlstreams/{csId}/commands/{cmdId}/status directly, with an
+ * AbortSignal-aware fallback to controlStream.searchStatus when unavailable.
+ */
+export async function fetchOccupancyAdjudicationStatuses(options: {
+    event: Pick<EventTableData, "occupancyObsId" | "occupancyCount"> & {adjudicatedIds?: string[]};
+    node?: Partial<Pick<INode, "getConnectedSystemsEndpoint" | "getBasicAuthHeader">> | null;
+    source: AdjudicationLogSource;
+    signal?: AbortSignal;
+    cancelled?: () => boolean;
+    fetchImpl?: typeof fetch;
+}): Promise<AdjudicationData[]> {
+    const fetchFn = options.fetchImpl ?? fetch;
+    const isStopped = () => Boolean(options.cancelled?.() || options.signal?.aborted);
+    if (isStopped()) return [];
+
+    const restNode = options.source.lane?.parentNode ?? options.node;
+    const controlStreamId = options.source.controlStream?.properties?.id;
+    const occupancyObsId = String(options.event?.occupancyObsId ?? "").trim();
+
+    if (
+        occupancyObsId.length > 0 &&
+        typeof controlStreamId === "string" &&
+        controlStreamId.length > 0 &&
+        typeof restNode?.getConnectedSystemsEndpoint === "function"
+    ) {
+        try {
+            const endpoint = String(restNode.getConnectedSystemsEndpoint(false)).replace(/\/+$/, "");
+            const authHeaders = typeof restNode.getBasicAuthHeader === "function"
+                ? (restNode.getBasicAuthHeader() ?? {})
+                : {};
+            const obsResponse = await fetchFn(
+                `${endpoint}/observations/${encodeURIComponent(occupancyObsId)}`,
+                {
+                    method: "GET",
+                    credentials: "include",
+                    headers: {Accept: "application/om+json", ...authHeaders},
+                    signal: options.signal,
+                },
+            );
+            if (isStopped()) return [];
+            if (obsResponse.ok) {
+                const obsPayload = await obsResponse.json();
+                const obsResult = obsPayload?.properties?.result ?? obsPayload?.result;
+                if (obsResult && Array.isArray(obsResult.adjudicatedIds)) {
+                    const combinedIds = [
+                        ...obsResult.adjudicatedIds,
+                        ...(Array.isArray(options.event?.adjudicatedIds) ? options.event.adjudicatedIds : []),
+                    ];
+                    const commandIds = Array.from(new Set(
+                        combinedIds
+                            .map((value: unknown) => String(value ?? "").trim())
+                            .filter((value: string) => value.length > 0),
+                    ));
+                    if (commandIds.length === 0) {
+                        return [];
+                    }
+
+                    const perCommandResults: AdjudicationData[][] = new Array(commandIds.length).fill([]);
+                    let nextIndex = 0;
+                    const workers = Array.from(
+                        {length: Math.min(ADJUDICATION_COMMAND_CONCURRENCY, commandIds.length)},
+                        async () => {
+                            while (!isStopped()) {
+                                const currentIndex = nextIndex++;
+                                if (currentIndex >= commandIds.length) return;
+                                const commandId = commandIds[currentIndex];
+                                const statusUrl =
+                                    `${endpoint}/controlstreams/${encodeURIComponent(controlStreamId)}` +
+                                    `/commands/${encodeURIComponent(commandId)}/status` +
+                                    `?statusCode=COMPLETED&format=application/json&offset=0&limit=100`;
+                                const statusResponse = await fetchFn(statusUrl, {
+                                    method: "GET",
+                                    credentials: "include",
+                                    headers: authHeaders,
+                                    signal: options.signal,
+                                });
+                                if (isStopped()) return;
+                                if (statusResponse.status === 404) {
+                                    perCommandResults[currentIndex] = [];
+                                    continue;
+                                }
+                                if (!statusResponse.ok) {
+                                    throw new Error(`Command status ${commandId} returned ${statusResponse.status}`);
+                                }
+                                const statusPayload = await statusResponse.json();
+                                const items = Array.isArray(statusPayload?.items)
+                                    ? statusPayload.items
+                                    : (Array.isArray(statusPayload) ? statusPayload : []);
+                                perCommandResults[currentIndex] = mapStatusItemsToAdjudications(
+                                    items,
+                                    options.event.occupancyCount,
+                                    commandId,
+                                );
+                            }
+                        },
+                    );
+                    await Promise.all(workers);
+                    return isStopped() ? [] : perCommandResults.flat();
+                }
+            }
+        } catch (error: any) {
+            if (isStopped() || error?.name === "AbortError") {
+                return [];
+            }
+            // Fall through to full control-stream status pagination if direct lookup is unsupported.
+        }
+    }
+
+    const commandStatuses = await options.source.controlStream.searchStatus(
+        new ControlStreamFilter({statusCode: "COMPLETED"}),
+        100,
+    );
+    const adjudications: AdjudicationData[] = [];
+
+    if (
+        typeof commandStatuses?.url === "string" &&
+        typeof commandStatuses?.filter?.toQueryString === "function" &&
+        typeof commandStatuses?.parseResponse === "function"
+    ) {
+        let pageOffset = 0;
+        const pageSize = Number(commandStatuses.pageSize) || 100;
+        while (!isStopped()) {
+            const queryString = `${commandStatuses.filter.toQueryString()}&offset=${pageOffset}&limit=${pageSize}`;
+            const response = await fetchFn(`${commandStatuses.url}?${queryString}`, {
+                method: "GET",
+                credentials: "include",
+                headers: commandStatuses.headers ?? {},
+                signal: options.signal,
+            });
+            if (isStopped()) return [];
+            if (!response.ok) {
+                throw new Error(`Got ${response.status} response from ${commandStatuses.url}`);
+            }
+            const payload = await response.json();
+            const cmdRes = Array.isArray(payload?.items)
+                ? payload.items
+                : await commandStatuses.parseResponse(payload);
+            adjudications.push(...mapStatusItemsToAdjudications(cmdRes, options.event.occupancyCount));
+            if (!Array.isArray(cmdRes) || cmdRes.length < pageSize) {
+                break;
+            }
+            pageOffset += pageSize;
+        }
+        return isStopped() ? [] : adjudications;
+    }
+
+    while (!isStopped() && commandStatuses.hasNext()) {
+        const cmdRes = await commandStatuses.nextPage();
+        if (isStopped()) return [];
+        adjudications.push(...mapStatusItemsToAdjudications(cmdRes, options.event.occupancyCount));
+    }
+    return isStopped() ? [] : adjudications;
+}
+
 export default function AdjudicationLog(props: {
     event: EventTableData;
     node: INode;
@@ -342,64 +520,61 @@ export default function AdjudicationLog(props: {
     }, [props.node]);
 
 
-    const fetchStatuses = useCallback(async(cancelled: () => boolean) => {
+    const fetchStatuses = useCallback(async (cancelled: () => boolean, signal?: AbortSignal) => {
+        const isStopped = () => Boolean(cancelled() || signal?.aborted);
         const source = await waitForAdjudicationLogSource(
             laneMapRef,
             props.event.laneId,
-            {cancelled},
+            {cancelled: isStopped},
         );
-        if (!source || cancelled()) {
-            if (!cancelled()) console.warn(
+        if (!source || isStopped()) {
+            if (!isStopped()) console.warn(
                 "Cannot load adjudication statuses: lane/control stream is unavailable:",
                 props.event.laneId,
             );
             return;
         }
-        const commandStatuses = await source.controlStream.searchStatus(
-            new ControlStreamFilter({statusCode: "COMPLETED"}),
-            100,
-        );
-        const adjudications: AdjudicationData[] = [];
-
-        while (commandStatuses.hasNext()) {
-            const cmdRes = await commandStatuses.nextPage();
-
-            const pageAdjudications = cmdRes.map((obs: any) => {
-                if (!obs?.results?.[0]?.data)
-                    return null;
-
-                return buildAdjudicationData(
-                    obs.reportTime,
-                    props.event.occupancyCount,
-                    obs.results[0].data,
-                    obs.id ?? obs["command@id"],
-                    obs["command@id"],
-                );
-            }).filter((value: AdjudicationData | null): value is AdjudicationData => value !== null);
-            adjudications.push(...pageAdjudications);
-        }
-        if (!cancelled()) setAdjLog((prev) => mergeAdjudicationLogs(prev, adjudications));
-    }, [laneMapRef, props.event]);
+        const adjudications = await fetchOccupancyAdjudicationStatuses({
+            event: props.event,
+            node: props.node,
+            source,
+            cancelled: isStopped,
+            signal,
+        });
+        if (!isStopped()) setAdjLog((prev) => mergeAdjudicationLogs(prev, adjudications));
+    }, [laneMapRef, props.event, props.node]);
 
     useEffect(() => {
         let cancelled = false;
-        if (props.event) void fetchStatuses(() => cancelled).catch((error) => {
-            if (!cancelled) console.error("Error loading adjudication statuses:", error);
+        const controller = new AbortController();
+        if (props.event) void fetchStatuses(() => cancelled, controller.signal).catch((error) => {
+            if (!cancelled && !controller.signal.aborted && error?.name !== "AbortError") {
+                console.error("Error loading adjudication statuses:", error);
+            }
         });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, [props.event, fetchStatuses]);
 
     useEffect(() => {
         if (!props.shouldFetch) return;
         let cancelled = false;
-        void fetchStatuses(() => cancelled)
+        const controller = new AbortController();
+        void fetchStatuses(() => cancelled, controller.signal)
             .catch((error) => {
-                if (!cancelled) console.error("Error refreshing adjudication statuses:", error);
+                if (!cancelled && !controller.signal.aborted && error?.name !== "AbortError") {
+                    console.error("Error refreshing adjudication statuses:", error);
+                }
             })
             .finally(() => {
-                if (!cancelled) props.onFetchComplete?.();
+                if (!cancelled && !controller.signal.aborted) props.onFetchComplete?.();
             });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, [props.shouldFetch, props.onFetchComplete, fetchStatuses]);
 
     useEffect(() => {

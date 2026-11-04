@@ -6,8 +6,10 @@ import {DataSourceContext} from "../../src/app/contexts/DataSourceContext";
 import {LanguageProvider} from "../../src/app/contexts/LanguageContext";
 import laneReducer, {setLaneMap} from "../../src/lib/state/OSCARLaneSlice";
 import {manageSharedConnection} from "../../src/lib/data/oscar/LaneCollection";
+import {Node} from "../../src/lib/data/osh/Node";
 import {
     HEALTH_QUERY_TIMEOUT_MS,
+    HEALTH_RECONCILIATION_INTERVAL_MS,
     useLaneHealth,
 } from "../../src/lib/data/oscar/useLaneHealth";
 import {
@@ -873,6 +875,110 @@ describe("Status of Health page", () => {
             finishDisconnect();
             await Promise.all([disconnect, reconnect]);
             expect(calls).to.deep.equal(["connect", "disconnect-start", "disconnect-finish", "connect"]);
+        });
+    });
+
+    it("does not open BroadcastChannel listeners when Node constructs or parses ConnectedSystemsApi REST models", () => {
+        const OriginalBroadcastChannel = window.BroadcastChannel;
+        let constructedChannels = 0;
+
+        class CountingBroadcastChannel extends OriginalBroadcastChannel {
+            constructor(name: string) {
+                super(name);
+                constructedChannels += 1;
+            }
+        }
+
+        window.BroadcastChannel = CountingBroadcastChannel as typeof BroadcastChannel;
+        cy.then(async () => {
+            try {
+                const node = new Node({
+                    name: "Wallboard Node",
+                    address: "oscar.example.test",
+                    port: 443,
+                    isSecure: true,
+                });
+                const obsCollection = await node.getObservationsApi().searchObservations();
+                const parsedObs = await obsCollection.parseResponse({
+                    items: [{
+                        id: "obs-1",
+                        "datastream@id": "ds-1",
+                        resultTime: "2026-11-04T12:00:00Z",
+                        result: {isConnected: true},
+                    }],
+                });
+                const dsCollection = await node.getDataStreamsApi().searchDataStreams();
+                const parsedStreams = await dsCollection.parseResponse({
+                    items: [{
+                        id: "ds-1",
+                        name: "Connection",
+                        outputName: "connection",
+                        "system@id": "sys-1",
+                    }],
+                });
+
+                expect(parsedObs).to.have.length(1);
+                expect(parsedStreams).to.have.length(1);
+                expect(constructedChannels).to.equal(0);
+
+                // Lazily opens BroadcastChannel only when a streaming method is actually called.
+                parsedStreams[0].stream().doRequest("/datastreams/ds-1/observations", "format=application/swe+json");
+                expect(constructedChannels).to.equal(1);
+                parsedStreams[0].stream().disconnect();
+            } finally {
+                window.BroadcastChannel = OriginalBroadcastChannel;
+            }
+        });
+    });
+
+    it("uses default fetch priority for initial health hydration and priority low on periodic background ticks without Observation model allocation", () => {
+        const now = Date.parse("2026-11-04T12:00:00.000Z");
+        cy.clock(now);
+
+        const parseResponse = cy.stub().rejects(new Error("parseResponse must not be called for JSON items"));
+        const fetchPriorities: Array<string | undefined> = [];
+        cy.stub(window, "fetch").callsFake(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            fetchPriorities.push((init as any)?.priority);
+            return new Response(JSON.stringify({
+                items: [{
+                    id: "obs-conn",
+                    "datastream@id": "rpm-connection",
+                    resultTime: "2026-11-04T12:00:00.000Z",
+                    result: {isConnected: true},
+                }],
+            }), {status: 200, headers: {"Content-Type": "application/json"}});
+        });
+
+        const rpmConnection = stream("rpm-connection", "rpm-1", [CONNECTION_DEF], []);
+        const urlCollectionNode = {
+            id: "node-url-health",
+            name: "Local Node",
+            getObservationsApi: () => ({
+                searchObservations: cy.stub().callsFake(async (filter: any, pageSize: number) => ({
+                    url: "https://oscar.example.test/sensorhub/api/observations",
+                    headers: {},
+                    filter,
+                    pageSize,
+                    responseFormat: "json",
+                    parseResponse,
+                })),
+            }),
+        };
+        const laneMap = new Map([["Lane 1", lane("Lane 1", [
+            system("rpm-1", "RPM 1", "urn:osh:system:rapiscan:1"),
+        ], [rpmConnection], [], urlCollectionNode as any)]]);
+
+        cy.mount(healthView(laneMap));
+        cy.get('[data-testid="health-lane-Lane 1"]').contains("RPM (RPM 1) · Online");
+        cy.then(() => {
+            expect(fetchPriorities).to.deep.equal([undefined]);
+            expect(parseResponse).not.to.have.been.called;
+        });
+
+        cy.tick(HEALTH_RECONCILIATION_INTERVAL_MS);
+        cy.wrap(null).should(() => {
+            expect(fetchPriorities).to.deep.equal([undefined, "low"]);
+            expect(parseResponse).not.to.have.been.called;
         });
     });
 });

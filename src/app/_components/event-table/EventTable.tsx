@@ -129,7 +129,14 @@ export default function EventTable({
     const [rowCount, setRowCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [paginationModel, setPaginationModel] = useState({page: 0, pageSize: PAGE_SIZE});
-    const [pageLoadedTime, setPageLoadedTime] = useState(() => new Date().toISOString());
+    const [filterEpoch, setFilterEpoch] = useState(0);
+    // Stamp the REST snapshot upper bound when discovered lanes hydrate (or when filters
+    // are re-applied), rather than at empty initial mount before MQTT subscriptions exist.
+    const pageLoadedTime = useMemo(
+        () => new Date().toISOString(),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [stableLaneMap, filterEpoch],
+    );
     const [filter, setFilter] = useState<EventFilterGroup>(() => createEventFilterGroup());
     const [filterDialogOpen, setFilterDialogOpen] = useState(false);
     const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -500,7 +507,7 @@ export default function EventTable({
         setFilter(next);
         setFilterDialogOpen(false);
         setPaginationModel(previous => ({...previous, page: 0}));
-        setPageLoadedTime(new Date().toISOString());
+        setFilterEpoch(previous => previous + 1);
         clearSelection();
     };
 
