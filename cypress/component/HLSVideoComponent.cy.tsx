@@ -275,6 +275,7 @@ describe("live HLS video", () => {
         mountPlayer("live/lane-01/index.m3u8", undefined, node, delayedLoader);
 
         cy.get('[data-testid="live-video-preparing"]').should("exist");
+        cy.wrap(null).should(() => expect(resolveLoader).to.be.a("function"));
         cy.tick(45_000);
         cy.get('[data-testid="live-video-error"]').should("exist");
         cy.then(() => resolveLoader({default: FakeHls as any}));

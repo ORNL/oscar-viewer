@@ -1,4 +1,5 @@
 import {discoverLanesIncrementally} from "../../src/lib/data/oscar/LaneDiscovery";
+import {sameLaneMapSnapshot} from "../../src/app/contexts/DataSourceContext";
 
 function laneEntry(node: any) {
     return {
@@ -94,5 +95,19 @@ describe("incremental lane discovery", () => {
         expect(result.laneMap.size).to.equal(0);
         expect(node.fetchDataStreams).not.to.have.been.called;
         expect(node.fetchLaneControlStreams).not.to.have.been.called;
+    });
+
+    it("detects identical lane map snapshots by key and entry reference", () => {
+        const entryA = {laneName: "lane1"};
+        const entryB = {laneName: "lane2"};
+        const first = new Map([["lane1", entryA], ["lane2", entryB]]);
+        const cloned = new Map(first);
+        const replaced = new Map([["lane1", entryA], ["lane2", {laneName: "lane2"}]]);
+
+        expect(sameLaneMapSnapshot(null, first)).to.equal(false);
+        expect(sameLaneMapSnapshot(null, new Map())).to.equal(false);
+        expect(sameLaneMapSnapshot(first, cloned)).to.equal(true);
+        expect(sameLaneMapSnapshot(first, replaced)).to.equal(false);
+        expect(sameLaneMapSnapshot(first, new Map([["lane1", entryA]]))).to.equal(false);
     });
 });

@@ -27,6 +27,21 @@ const DataSourceContext = createContext<IDataSourceContext | undefined>(undefine
 
 export {DataSourceContext};
 
+export function sameLaneMapSnapshot<T>(
+    left: ReadonlyMap<string, T> | null | undefined,
+    right: ReadonlyMap<string, T>,
+): boolean {
+    if (!left || left.size !== right.size)
+        return false;
+
+    for (const [key, value] of right.entries()) {
+        if (!left.has(key) || left.get(key) !== value)
+            return false;
+    }
+
+    return true;
+}
+
 
 export default function DataSourceProvider({children}: { children: ReactNode }) {
 
@@ -71,6 +86,7 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
 
     const testSysFetch = async (viewKey: string | null) => {
         const generation = ++discoveryGenerationRef.current;
+        let publishedLaneMap: Map<string, LaneMapEntry> | null = null;
         setLaneMapReady(false);
         setReadyLaneNames(new Set());
         laneMapRef.current = new Map();
@@ -80,6 +96,7 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
             if (generation !== discoveryGenerationRef.current)
                 return;
 
+            publishedLaneMap = laneMap;
             laneMapRef.current = laneMap;
             setReadyLaneNames(new Set(laneMap.keys()));
             dispatch(setLaneMap(laneMap));
@@ -91,10 +108,13 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
         result.failures.forEach(({node, reason}) =>
             console.error(`Failed to initialize lane data for ${node.name}:`, reason));
 
-        // Publish the final snapshot even when every node returned no lanes.
-        laneMapRef.current = result.laneMap;
-        setReadyLaneNames(new Set(result.laneMap.keys()));
-        dispatch(setLaneMap(result.laneMap));
+        // Publish the final snapshot when incremental discovery did not already publish it
+        // (for example, when every node returned no lanes).
+        if (!sameLaneMapSnapshot(publishedLaneMap, result.laneMap)) {
+            laneMapRef.current = result.laneMap;
+            setReadyLaneNames(new Set(result.laneMap.keys()));
+            dispatch(setLaneMap(result.laneMap));
+        }
         setViewError(viewKey && result.laneMap.size === 0 ? "empty" : null);
         setLaneMapReady(true);
     }
