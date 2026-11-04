@@ -72,6 +72,43 @@ function normalizeAdjudicationTimestamp(rawTime?: string): string {
     return trimmed;
 }
 
+function splitAttachmentSegments(rawPath: string): string[] {
+    const clean = String(rawPath ?? "").trim().split(/[?#]/, 1)[0] ?? "";
+    return clean.split(/[\\/]+/).filter(Boolean);
+}
+
+export function formatAdjudicationAttachmentLabel(rawPath: string): string {
+    const trimmed = String(rawPath ?? "").trim();
+    if (!trimmed) return "";
+    const segments = splitAttachmentSegments(trimmed);
+    return segments[segments.length - 1] ?? trimmed;
+}
+
+export function formatAdjudicationAttachmentLabels(paths: readonly string[]): string[] {
+    const baseLabels = paths.map((path) => formatAdjudicationAttachmentLabel(path));
+    const hrefSetByBase = new Map<string, Set<string>>();
+    paths.forEach((rawPath, index) => {
+        const base = baseLabels[index] ?? "";
+        const normalizedHref = String(rawPath ?? "").trim();
+        let seen = hrefSetByBase.get(base);
+        if (!seen) {
+            seen = new Set<string>();
+            hrefSetByBase.set(base, seen);
+        }
+        seen.add(normalizedHref);
+    });
+
+    return paths.map((rawPath, index) => {
+        const base = baseLabels[index] ?? "";
+        if ((hrefSetByBase.get(base)?.size ?? 0) <= 1) return base;
+        const segments = splitAttachmentSegments(rawPath);
+        if (segments.length >= 2) {
+            return `${segments[segments.length - 2]}/${segments[segments.length - 1]}`;
+        }
+        return String(rawPath ?? "").trim() || base;
+    });
+}
+
 export function adjudicationLogKey(entry: AdjudicationData): string {
     const isotopes = Array.isArray(entry.isotopes)
         ? entry.isotopes.join(",")
@@ -253,6 +290,7 @@ export default function AdjudicationLog(props: {
             renderCell: (params) => {
                 const paths: string[] = Array.isArray(params.value) ? params.value : [];
                 if (paths.length === 0) return null;
+                const labels = formatAdjudicationAttachmentLabels(paths);
                 return (
                     <span>
                         {paths.map((path, index) =>
@@ -266,9 +304,9 @@ export default function AdjudicationLog(props: {
                                         rel="noopener noreferrer"
                                         style={{ color: '#1976d2', textDecoration: 'underline' }}
                                     >
-                                        {path.split("\\")[1]}
+                                        {labels[index]}
                                     </a>
-                                ) : path}
+                                ) : labels[index]}
                             </React.Fragment>
                         )}
                     </span>

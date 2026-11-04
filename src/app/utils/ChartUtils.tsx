@@ -212,12 +212,12 @@ export async function getObservations(startTime: any, endTime: any, datastream: 
 
     let lastestGammaBackground: number;
 
-    let res = await datastream.searchObservations(new ObservationFilter({resultTime: `${startTime}/${endTime}`}), 1);
+    let res = await datastream.searchObservations(new ObservationFilter({phenomenonTime: `${startTime}/${endTime}`}), 1);
 
     let newObs = await res.nextPage();
 
-    newObs.map((ob: any) =>{
-        const lastGB = ob.result.latestGammaBackground;
+    (newObs ?? []).map((ob: any) =>{
+        const lastGB = ob?.result?.latestGammaBackground;
 
         if(lastGB != null)
             lastestGammaBackground = lastGB;
