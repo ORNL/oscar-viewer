@@ -74,6 +74,15 @@ import {
     resolveRealtimeEventForNotification,
     type RealtimeEventHandler,
 } from "@/lib/data/oscar/RealtimeEventNotification";
+import {
+    deduplicateEvents,
+    EventQueryPlan,
+    fetchCollectionDataWithSignal,
+    isAbortRequestError,
+    useAbortableEventQueries,
+} from "@/lib/data/oscar/EventTableRequests";
+
+export {fetchCollectionDataWithSignal, isAbortRequestError};
 
 interface TableProps {
     tableMode: "eventlog" | "alarmtable" | "lanelog";
@@ -86,12 +95,7 @@ interface TableProps {
     setEvents?: unknown;
 }
 
-interface QueryPlan {
-    key: string;
-    node: LaneMapEntry["parentNode"];
-    datastreamIds: string[];
-    filter: string;
-}
+type QueryPlan = EventQueryPlan;
 
 const PAGE_SIZE = 15;
 const BULK_FETCH_SIZE = 250;
@@ -103,12 +107,6 @@ const EVENT_PRIORITY_FILTERS = [
     "gammaAlarm=true AND neutronAlarm=false",
     "gammaAlarm=false AND neutronAlarm=false",
 ];
-
-const deduplicateEvents = (events: EventTableData[]): EventTableData[] => {
-    const result = new Map<string, EventTableData>();
-    events.forEach(event => result.set(eventSelectionKey(event), event));
-    return Array.from(result.values());
-};
 
 export default function EventTable({
     tableMode,
@@ -125,9 +123,6 @@ export default function EventTable({
     const locale = getIntlLocale(language);
 
     const stableLaneMap = useMemo(() => convertToMap(laneMap), [laneMap]);
-    const [rows, setRows] = useState<EventTableData[]>([]);
-    const [rowCount, setRowCount] = useState(0);
-    const [loading, setLoading] = useState(false);
     const [paginationModel, setPaginationModel] = useState({page: 0, pageSize: PAGE_SIZE});
     const [filterEpoch, setFilterEpoch] = useState(0);
     // Stamp the REST snapshot upper bound when discovered lanes hydrate (or when filters
@@ -141,15 +136,12 @@ export default function EventTable({
     const [filterDialogOpen, setFilterDialogOpen] = useState(false);
     const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
     const [bulkSelectionError, setBulkSelectionError] = useState(false);
-    const [countQueryError, setCountQueryError] = useState(false);
-    const [pageQueryError, setPageQueryError] = useState(false);
     const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
     const [allFilteredSelected, setAllFilteredSelected] = useState(false);
     const [allFilteredTotal, setAllFilteredTotal] = useState(0);
     const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
     const [postSelectionKeys, setPostSelectionKeys] = useState<Set<string>>(new Set());
     const allFilteredCutoffRef = useRef<string | null>(null);
-    const currentPageRef = useRef(0);
     const eventCacheRef = useRef<Map<string, EventTableData>>(new Map());
     const selectedRowIdRef = useRef(selectedRowId);
     const realtimeResolutionJobsRef = useRef<Set<{
@@ -158,8 +150,6 @@ export default function EventTable({
         timeout: number;
     }>>(new Set());
     const failedBulkRef = useRef<EventTableData[]>([]);
-    const countRequestRef = useRef(0);
-    const pageRequestRef = useRef(0);
 
     const nodeOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name))).sort(), [stableLaneMap]);
     const laneOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.laneName))).sort(), [stableLaneMap]);
@@ -260,6 +250,53 @@ export default function EventTable({
         return event;
     }, []);
 
+    const fetchPlanRows = useCallback(async (
+        plan: QueryPlan,
+        limit: number,
+        offset: number,
+        cutoff = pageLoadedTime,
+        signal?: AbortSignal,
+    ) => {
+        const observationFilter = new ObservationFilter({
+            dataStream: plan.datastreamIds,
+            resultTime: `../${cutoff}`,
+            filter: plan.filter ? encodeURIComponent(plan.filter) : undefined,
+            order: "desc",
+        });
+        const api: typeof Observations = await plan.node.getObservationsApi();
+        const collection = await api.searchObservations(observationFilter, limit, offset);
+        if (signal?.aborted) {
+            throw new DOMException("Aborted", "AbortError");
+        }
+        const observations = await fetchCollectionDataWithSignal(collection, signal);
+        return observations.flatMap((observation: any) => {
+            const lane = findLaneByDataStreamId(observation.properties["datastream@id"]);
+            return lane ? [eventFromObservation(observation, lane, false)] : [];
+        });
+    }, [eventFromObservation, findLaneByDataStreamId, pageLoadedTime]);
+
+    const {
+        rows,
+        setRows,
+        rowCount,
+        setRowCount,
+        loading,
+        setLoading,
+        countQueryError,
+        pageQueryError,
+        currentPageRef,
+        fetchPlanCount,
+        refreshCounts,
+        fetchPage,
+    } = useAbortableEventQueries({
+        queryPlans,
+        pageQueryPlans,
+        page: paginationModel.page,
+        pageSize: PAGE_SIZE,
+        pageLoadedTime,
+        fetchPlanRows,
+    });
+
     const replaceRealtimeEventIdentity = useCallback((original: EventTableData, resolved: EventTableData) => {
         if (!resolved.occupancyObsId || resolved === original) return;
 
@@ -285,7 +322,7 @@ export default function EventTable({
             dispatch(setEventPreview({isOpen: true, eventData: resolved}));
             dispatch(setSelectedEvent(resolved));
         }
-    }, [dispatch]);
+    }, [dispatch, setRows]);
 
     const resolveIdentityAndNotify = useCallback((event: EventTableData, lane: LaneMapEntry) => {
         if (event.status === "None") return;
@@ -321,108 +358,6 @@ export default function EventTable({
                 realtimeResolutionJobsRef.current.delete(job);
             });
     }, [replaceRealtimeEventIdentity, sendNotification]);
-
-    const fetchPlanRows = useCallback(async (plan: QueryPlan, limit: number, offset: number, cutoff = pageLoadedTime) => {
-        const observationFilter = new ObservationFilter({
-            dataStream: plan.datastreamIds,
-            resultTime: `../${cutoff}`,
-            filter: plan.filter ? encodeURIComponent(plan.filter) : undefined,
-            order: "desc",
-        });
-        const api: typeof Observations = await plan.node.getObservationsApi();
-        const collection = await api.searchObservations(observationFilter, limit, offset);
-        const observations = await collection.fetchData();
-        return observations.flatMap((observation: any) => {
-            const lane = findLaneByDataStreamId(observation.properties["datastream@id"]);
-            return lane ? [eventFromObservation(observation, lane, false)] : [];
-        });
-    }, [eventFromObservation, findLaneByDataStreamId, pageLoadedTime]);
-
-    const fetchPlanCount = useCallback(async (plan: QueryPlan, cutoff = pageLoadedTime, strict = false): Promise<number> => {
-        const params = new URLSearchParams({
-            resultTime: `../${cutoff}`,
-            format: "application/om+json",
-            dataStream: plan.datastreamIds.join(","),
-        });
-        if (plan.filter) params.set("filter", plan.filter);
-        try {
-            const response = await fetch(`${plan.node.getConnectedSystemsEndpoint(false)}/observations/count?${params}`, {
-                headers: {...plan.node.getBasicAuthHeader(), "Content-Type": "sml+json"},
-                credentials: "include",
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return Number((await response.json()).count) || 0;
-        } catch (error) {
-            console.error("Error fetching filtered event count", error);
-            if (strict) throw error;
-            return 0;
-        }
-    }, [pageLoadedTime]);
-
-    const refreshCounts = useCallback(async () => {
-        const requestId = ++countRequestRef.current;
-        if (queryPlans.length === 0) {
-            setRowCount(0);
-            setCountQueryError(false);
-            return;
-        }
-        try {
-            const counts = await runWithConcurrency(queryPlans, 6, plan => fetchPlanCount(plan, pageLoadedTime, true));
-            if (requestId !== countRequestRef.current) return;
-            setRowCount(counts.reduce((sum, count) => sum + count, 0));
-            setCountQueryError(false);
-        } catch (error) {
-            if (requestId !== countRequestRef.current) return;
-            console.error("Error fetching filtered event counts", error);
-            setCountQueryError(true);
-        }
-    }, [queryPlans, fetchPlanCount, pageLoadedTime]);
-
-    const fetchPage = useCallback(async (page: number) => {
-        const requestId = ++pageRequestRef.current;
-        if (pageQueryPlans.length === 0) {
-            setRows([]);
-            setLoading(false);
-            setPageQueryError(false);
-            return;
-        }
-        setLoading(true);
-        try {
-            if (pageQueryPlans.length === 1) {
-                const pageRows = await fetchPlanRows(pageQueryPlans[0], PAGE_SIZE, page * PAGE_SIZE);
-                if (requestId !== pageRequestRef.current) return;
-                setRows(deduplicateEvents(pageRows));
-                currentPageRef.current = page;
-                setPageQueryError(false);
-                return;
-            }
-            const required = (page + 1) * PAGE_SIZE;
-            const results = await runWithConcurrency(pageQueryPlans, 6, plan => fetchPlanRows(plan, required, 0));
-            if (requestId !== pageRequestRef.current) return;
-            const merged = deduplicateEvents(results.flat())
-                .sort(sortEventsByAlarmPriority);
-            setRows(merged.slice(page * PAGE_SIZE, required));
-            currentPageRef.current = page;
-            setPageQueryError(false);
-        } catch (error) {
-            if (requestId !== pageRequestRef.current) return;
-            console.error("Error fetching filtered events", error);
-            setRows([]);
-            setPageQueryError(true);
-        } finally {
-            if (requestId === pageRequestRef.current) setLoading(false);
-        }
-    }, [pageQueryPlans, fetchPlanRows]);
-
-    useEffect(() => {
-        refreshCounts();
-        fetchPage(0);
-    }, [refreshCounts, fetchPage]);
-
-    useEffect(() => {
-        if (paginationModel.page > 0) fetchPage(paginationModel.page);
-        currentPageRef.current = paginationModel.page;
-    }, [paginationModel.page, fetchPage]);
 
     const rowPassesLocalFilters = useCallback((event: EventTableData, lane: LaneMapEntry): boolean => {
         if (tableMode === "alarmtable" && (event.status === "None" || event.adjudicatedIds?.length > 0)) return false;

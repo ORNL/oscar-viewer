@@ -245,7 +245,7 @@ describe("AlarmTransferImport live camera scanner", () => {
         cy.get('[data-testid="alarm-qr-camera-status"]').should("contain.text", "Scanning");
         cy.then(() => rerender(<div/>));
         cy.get(".scan-region-highlight").should("not.exist");
-        cy.then(() => {
+        cy.wrap(null).should(() => {
             expect(harness.instances[1].destroy).to.have.been.calledOnce;
             expect(harness.instances[1].trackStop).to.have.been.calledOnce;
         });
