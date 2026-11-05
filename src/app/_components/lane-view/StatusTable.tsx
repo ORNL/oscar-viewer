@@ -32,6 +32,9 @@ import {useLanguage} from '@/app/contexts/LanguageContext';
 import {getDataGridLocaleText, getIntlLocale} from '@/app/utils/LocaleUtils';
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
 
+const STATUS_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const STATUS_FAULT_FILTER = "tamperStatus=true OR alarmState='Fault - Neutron High' OR alarmState='Fault - Gamma High' OR alarmState='Fault - Gamma Low'";
+
 interface StatusTableProps {
     currentLane: string,
     entry: LaneMapEntry
@@ -50,7 +53,11 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
     const [data, setData] = useState<AlarmTableData[]>([]);
 
     const [currentPage, setCurrentPage] = useState(0);
-    const [pageLoadedTime] = useState(() => new Date().toISOString());
+    const [statusTimeRange] = useState(() => {
+        const end = new Date();
+        const start = new Date(end.getTime() - STATUS_HISTORY_WINDOW_MS);
+        return `${start.toISOString()}/${end.toISOString()}`;
+    });
 
 
     const columns: GridColDef<AlarmTableData>[] = [
@@ -91,10 +98,10 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
     async function fetchTotalCount(node: INode, datastreamIds: string[]) {
         let endpoint = node.getConnectedSystemsEndpoint(false);
         const queryParams = new URLSearchParams({
-            // resultTime: `../${pageLoadedTime}`, I think it is safe to fetch count of all here
+            resultTime: statusTimeRange,
             format: "application/om+json",
             dataStream: `${datastreamIds.join(",")}`,
-            filter: `tamperStatus=true OR alarmState='Fault - Neutron High' OR alarmState='Fault - Gamma High' OR alarmState='Fault - Gamma Low'`
+            filter: STATUS_FAULT_FILTER
         });
         let fullUrl = endpoint + "/observations/count?" + queryParams;
 
@@ -170,22 +177,24 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
 
     useEffect(() => {
         const fetchAllCounts = async () => {
-
-            let total: number = 0;
-
-            const selectedNode = nodes.find((node: INode) => entry.parentNode.id === node.id);
+            const selectedNode = entry ? nodes.find((node: INode) => entry.parentNode.id === node.id) : undefined;
+            if (!selectedNode) {
+                setRowCount(0);
+                return;
+            }
 
             const datastreamIds = getDatastreamIds(selectedNode);
+            if (datastreamIds.length === 0) {
+                setRowCount(0);
+                return;
+            }
 
             const count = await fetchTotalCount(selectedNode, datastreamIds);
-
-            total += count;
-
-            setRowCount(total);
+            setRowCount(count);
         }
 
         fetchAllCounts();
-    }, [nodes, entry]);
+    }, [nodes, entry, getDatastreamIds, statusTimeRange]);
 
 
 
@@ -199,7 +208,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
 
             const allRows: AlarmTableData[] = [];
 
-            const node = nodes.find((node: INode) => entry.parentNode.id === node.id);
+            const node = entry ? nodes.find((node: INode) => entry.parentNode.id === node.id) : undefined;
 
             if (!node) return;
 
@@ -208,8 +217,8 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
 
             const observationFilter = new ObservationFilter({
                 dataStream: datastreamIds,
-                resultTime: `../${pageLoadedTime}`,
-                filter: "tamperStatus=true",
+                resultTime: statusTimeRange,
+                filter: STATUS_FAULT_FILTER,
                 order: 'desc'
             });
 

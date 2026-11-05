@@ -376,7 +376,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     )
 
     return (
-        <Box sx={{display: 'flex'}}>
+        <Box sx={{display: 'flex', minInlineSize: 0, maxInlineSize: '100%'}}>
             <CssBaseline/>
             <AppBar
                 position="fixed"
@@ -403,8 +403,8 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     >
                         <MenuIcon/>
                     </IconButton>
-                    <Stack direction={"row"} width={"100%"} alignItems={"center"} justifyContent={"space-between"}>
-                        <Typography variant="h6" noWrap component="div">
+                    <Stack direction="row" sx={{flex: '1 1 0%', minInlineSize: 0, gap: 1}} alignItems="center" justifyContent="space-between">
+                        <Typography variant="h6" noWrap component="div" sx={{minInlineSize: 0, flexShrink: 1}}>
                             {t('appTitle')}
                         </Typography>
                         {activeViewKey && (
@@ -413,9 +413,10 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 color="primary"
                                 variant="outlined"
                                 size="small"
+                                sx={{flexShrink: 0}}
                             />
                         )}
-                        <Stack direction="row" alignItems="center" spacing={1}>
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{flexShrink: 0}}>
                             {authenticatedUsername && (
                                 <Typography variant="body2" noWrap sx={{maxWidth: {xs: 110, sm: 240}, overflow: 'hidden', textOverflow: 'ellipsis'}}>
                                     {t('signedInAs', {username: authenticatedUsername})}
@@ -532,24 +533,19 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             </Box>
             <Box
                 component="main"
-                sx={(theme) => {
-                    // On desktop, shrink by drawerWidth if open
-                    const desktopWidth = drawerOpen ? `calc(100% - ${drawerWidth}px)` : '100%';
-                    return {
-                        height: '100%',
-                        width: {
-                            xs: '100%',
-                            lg: desktopWidth,
-                        },
-                        transition: theme.transitions.create(['margin-left', 'width'], {
-                            easing: theme.transitions.easing.sharp,
-                            duration: theme.transitions.duration.standard,
-                        }),
-                    };
-                }}
+                sx={(theme) => ({
+                    height: '100%',
+                    flex: '1 1 0%',
+                    minInlineSize: 0,
+                    overflowX: 'clip',
+                    transition: theme.transitions.create(['margin-left'], {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.standard,
+                    }),
+                })}
             >
                 <DrawerHeader/>
-                <Box sx={{ m: 2, mr: 0 }}>
+                <Box sx={{ p: 2, minInlineSize: 0, boxSizing: 'border-box' }}>
                     {viewError && (
                         <Alert severity="error" sx={{mb: 2}}>
                             {viewError === "invalid"
