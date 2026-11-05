@@ -10,6 +10,8 @@ import {
 } from "../../src/lib/data/oscar/EventFilter";
 import {runWithConcurrency} from "../../src/lib/data/oscar/BulkAdjudication";
 import {sortEventsByAlarmPriority} from "../../src/lib/data/oscar/TableHelpers";
+import {parseCustomCodes, resolveAdjudicationCode} from "../../src/lib/data/oscar/adjudication/CustomAdjudicationCodes";
+import {parseAdjudicationFeedbackWithEmlMetadata} from "../../src/lib/data/oscar/adjudication/EmlMetadata";
 
 describe("nested event filters", () => {
     it("uses inclusive comparisons as the primary controls for numeric event fields", () => {
@@ -304,5 +306,74 @@ describe("alarm priority ordering", () => {
             "CustomIsotopeAlarm@2026-10-30T19:39:00.000Z",
             "None@2026-10-30T19:40:00.000Z",
         ]);
+    });
+});
+
+describe("EML Non-Threat event filtering and metadata parsing", () => {
+    const metadata = {nodeId: "node-1", nodeName: "Local", laneId: "lane1"};
+    const emlEvent = {adjudicatedIds: ["eml-non-threat", "02fa1"]} as any;
+    const manualEvent = {adjudicatedIds: ["02fb9"]} as any;
+    const openEvent = {adjudicatedIds: []} as any;
+
+    it("compiles EML Non-Threat equals, notEquals, contains, and isAnyOf rules consistently with live matching", () => {
+        const equalsEml: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "r1", field: "adjudicatedIds", operator: "equals", value: "EML Non-Threat"}],
+        };
+        expect(compileEventFilterForLane(equalsEml, metadata))
+            .to.equal("adjudicatedIdsCount>0 AND adjudicatedIds='eml-non-threat'");
+        expect(eventMatchesFilter(equalsEml, emlEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(equalsEml, manualEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(equalsEml, openEvent, metadata)).to.equal(false);
+
+        const notEml: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "r2", field: "adjudicatedIds", operator: "notEquals", value: "EML Non-Threat"}],
+        };
+        expect(compileEventFilterForLane(notEml, metadata))
+            .to.equal("(adjudicatedIdsCount=0 OR adjudicatedIds!='eml-non-threat')");
+        expect(eventMatchesFilter(notEml, emlEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(notEml, manualEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(notEml, openEvent, metadata)).to.equal(true);
+
+        const containsNo: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "r3", field: "adjudicatedIds", operator: "contains", value: "no"}],
+        };
+        expect(compileEventFilterForLane(containsNo, metadata)).to.equal("adjudicatedIdsCount=0");
+        expect(eventMatchesFilter(containsNo, openEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(containsNo, emlEvent, metadata)).to.equal(false);
+
+        const containsEml: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "r4", field: "adjudicatedIds", operator: "contains", value: "eml"}],
+        };
+        expect(compileEventFilterForLane(containsEml, metadata))
+            .to.equal("adjudicatedIdsCount>0 AND adjudicatedIds='eml-non-threat'");
+        expect(eventMatchesFilter(containsEml, emlEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(containsEml, manualEvent, metadata)).to.equal(false);
+    });
+
+    it("parses embedded EML_METADATA feedback and reserves code 9999 for automated EML disposition", () => {
+        const rawFeedback = "Automated EML Non-Threat release (RELEASE p=0.982, source=NORM)\n" +
+            'EML_METADATA:{"disposition":"EML Non-Threat","dispositionCode":9999,"result":"RELEASE","releaseProbability":0.982,"overallSourceType":"NORM"}';
+        const parsed = parseAdjudicationFeedbackWithEmlMetadata(rawFeedback);
+        expect(parsed.summaryText).to.equal("Automated EML Non-Threat release (RELEASE p=0.982, source=NORM)");
+        expect(parsed.emlMetadata?.dispositionCode).to.equal(9999);
+        expect(parsed.emlMetadata?.overallSourceType).to.equal("NORM");
+
+        expect(resolveAdjudicationCode(9999, []).group).to.equal("Automated");
+        expect(parseCustomCodes([
+            {code: 9999, label: "Attempted override"},
+            {code: 101, label: "Site innocent"},
+        ])).to.deep.equal([{code: 101, label: "Site innocent", group: "Custom"}]);
     });
 });

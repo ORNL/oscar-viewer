@@ -27,6 +27,7 @@ import {
     type SharedConnectionLease,
 } from "@/lib/data/oscar/LaneCollection";
 import {EventTableData, sortEventsByAlarmPriority} from "@/lib/data/oscar/TableHelpers";
+import {hasEmlNonThreatMarker} from "@/lib/data/oscar/adjudication/EmlMetadata";
 import {isOccupancyDataStream, isThresholdDataStream} from "@/lib/data/oscar/Utilities";
 import {convertToMap} from "@/app/utils/Utils";
 import {OCCUPANCY_PILLAR_DEF} from "@/lib/data/Constants";
@@ -325,7 +326,7 @@ export default function EventTable({
     }, [dispatch, setRows]);
 
     const resolveIdentityAndNotify = useCallback((event: EventTableData, lane: LaneMapEntry) => {
-        if (event.status === "None") return;
+        if (event.status === "None" || (event.adjudicatedIds?.length ?? 0) > 0) return;
 
         // Alarm delivery is immediate. Until the durable observation exists,
         // the honest action opens Events; a successful resolution replaces
@@ -345,6 +346,7 @@ export default function EventTable({
                 if (job.cancelledByCleanup) return;
                 if (!resolved.occupancyObsId || resolved === event) return;
                 replaceRealtimeEventIdentity(event, resolved);
+                if ((resolved.adjudicatedIds?.length ?? 0) > 0) return;
                 await fallbackDelivery;
                 if (job.cancelledByCleanup) return;
                 await sendNotification(resolved, lane.parentNode.id);
@@ -606,8 +608,10 @@ export default function EventTable({
                 ),
         },
         {
-            field: "adjudicatedIds", headerName: t("adjudicated"), minWidth: 110, flex: 1,
-            valueFormatter: (value: any) => value?.length > 0 ? t("yes") : t("no"),
+            field: "adjudicatedIds", headerName: t("adjudicated"), minWidth: 130, flex: 1.1,
+            valueFormatter: (value: any) => hasEmlNonThreatMarker(value)
+                ? t("emlNonThreat")
+                : (value?.length > 0 ? t("yes") : t("no")),
         },
         {
             field: "Menu", headerName: "", type: "actions", minWidth: 50,

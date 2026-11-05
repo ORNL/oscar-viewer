@@ -513,5 +513,20 @@
   "dailyFileOccupancy": "Έξοδος ημερήσιου αρχείου",
   "rpmMessage": "Μήνυμα RPM: {message}",
   "customAdjudicationCodeLabel": "Κωδικός {code}: {label}",
-  "customAdjudicationCodeFallback": "Κωδικός {code}"
+  "customAdjudicationCodeFallback": "Κωδικός {code}",
+  "emlNonThreat": "EML μη απειλή",
+  "adjudicationCode.9999": "Κωδ. 9999: EML μη απειλή",
+  "adjudicationGroup.Automated": "Αυτόματο",
+  "emlAnalysisTitle": "Ανάλυση EML",
+  "emlDecisionRelease": "ΑΠΟΔΕΣΜΕΥΣΗ",
+  "emlDecisionInvestigate": "ΔΙΕΡΕΥΝΗΣΗ",
+  "emlAutoAdjudicatedBadge": "Αυτόμ.: EML μη απειλή",
+  "emlReleaseProb": "Πιθαν. αποδέσμευσης",
+  "emlInvestigateProb": "Πιθαν. διερεύνησης",
+  "emlPrimaryThreshold": "Κύριο κατώφλι",
+  "emlOverallSource": "Ταξινόμηση πηγής",
+  "emlSourceProbabilities": "NORM {norm} · Μη εκπέμπον {nonEmitting} · Απειλή {threat}",
+  "emlModelAndVersion": "Μοντέλο EML",
+  "emlVehicleMetrics": "Προφίλ οχήματος",
+  "emlVehicleProfileValue": "Κατ. {vehicleClass} · {length} m"
 }

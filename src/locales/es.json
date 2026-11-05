@@ -513,5 +513,20 @@
   "dailyFileOccupancy": "Salida de archivo diario",
   "rpmMessage": "Mensaje RPM: {message}",
   "customAdjudicationCodeLabel": "Código {code}: {label}",
-  "customAdjudicationCodeFallback": "Código {code}"
+  "customAdjudicationCodeFallback": "Código {code}",
+  "emlNonThreat": "EML sin amenaza",
+  "adjudicationCode.9999": "Código 9999: EML sin amenaza",
+  "adjudicationGroup.Automated": "Automático",
+  "emlAnalysisTitle": "Análisis EML",
+  "emlDecisionRelease": "LIBERAR",
+  "emlDecisionInvestigate": "INVESTIGAR",
+  "emlAutoAdjudicatedBadge": "Auto: EML sin amenaza",
+  "emlReleaseProb": "Prob. de liberación",
+  "emlInvestigateProb": "Prob. de investigación",
+  "emlPrimaryThreshold": "Umbral primario",
+  "emlOverallSource": "Clasificación de fuente",
+  "emlSourceProbabilities": "NORM {norm} · Sin emisión {nonEmitting} · Amenaza {threat}",
+  "emlModelAndVersion": "Modelo clasificador",
+  "emlVehicleMetrics": "Perfil de vehículo",
+  "emlVehicleProfileValue": "Clase {vehicleClass} · {length} m"
 }

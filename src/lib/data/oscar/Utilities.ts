@@ -159,6 +159,22 @@ export function isWebIdAnalysisDataStream(datastream: typeof DataStream): boolea
     return includesDefinition(getObservedDefinitions(datastream), WEB_ID_DEF);
 }
 
+export function isEmlAnalysisDataStream(datastream: typeof DataStream): boolean {
+    const definitions = getObservedDefinitions(datastream);
+    const outputName = String(datastream?.properties?.outputName ?? "").toLowerCase();
+    return outputName === "emlanalysis"
+        || includesDefinition(definitions, "EMLAnalysis")
+        || includesDefinition(definitions, "EMLResult");
+}
+
+export function isEmlContextualDataStream(datastream: typeof DataStream): boolean {
+    const definitions = getObservedDefinitions(datastream);
+    const outputName = String(datastream?.properties?.outputName ?? "").toLowerCase();
+    return outputName === "emlcontextual"
+        || includesDefinition(definitions, "EMLContext")
+        || includesDefinition(definitions, "EMLVersionID");
+}
+
 export function isHLSVideoControlStream(controlStream: typeof ControlStream): boolean {
     return includesDefinition(getControlledDefinitions(controlStream), HLS_VIDEO_DEF);
 }
