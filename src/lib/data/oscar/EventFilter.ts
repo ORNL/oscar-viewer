@@ -1,4 +1,6 @@
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
+import {EML_NON_THREAT_MARKER} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
+import {hasEmlNonThreatMarker} from "@/lib/data/oscar/adjudication/EmlMetadata";
 
 export type EventFilterLogic = "and" | "or";
 export type EventFilterField =
@@ -200,14 +202,54 @@ const compileRule = (rule: EventFilterRule, metadata: EventFilterMetadata): Comp
         if (rule.operator === "isNotEmpty")
             return {kind: "expression", value: "adjudicatedIdsCount>0"};
 
-        const matchingLabels = ["Yes", "No"]
-            .filter(label => compareString(label, rule.operator, rule.value));
-        if (matchingLabels.length === 0) return FALSE;
-        if (matchingLabels.length === 2) return TRUE;
-        return {
-            kind: "expression",
-            value: matchingLabels[0] === "Yes" ? "adjudicatedIdsCount>0" : "adjudicatedIdsCount=0",
+        const emlExpr = `adjudicatedIdsCount>0 AND adjudicatedIds=${quote(EML_NON_THREAT_MARKER)}`;
+        const nonEmlExpr = `(adjudicatedIdsCount=0 OR adjudicatedIds!=${quote(EML_NON_THREAT_MARKER)})`;
+        const isEmlToken = (raw: unknown): boolean => {
+            const normalized = String(raw ?? "").trim().toLocaleLowerCase();
+            return normalized === "eml non-threat" || normalized === EML_NON_THREAT_MARKER;
         };
+
+        if (rule.operator === "notEquals") {
+            const excluded = Array.isArray(rule.value) ? rule.value[0] : rule.value;
+            if (isEmlToken(excluded))
+                return {kind: "expression", value: nonEmlExpr};
+            const norm = String(excluded ?? "").trim().toLocaleLowerCase();
+            if (norm === "yes") return {kind: "expression", value: "adjudicatedIdsCount=0"};
+            if (norm === "no") return {kind: "expression", value: "adjudicatedIdsCount>0"};
+            return TRUE;
+        }
+
+        if (rule.operator === "contains") {
+            const needle = String(Array.isArray(rule.value) ? rule.value[0] ?? "" : rule.value)
+                .trim()
+                .toLocaleLowerCase();
+            const yesMatch = "yes".includes(needle);
+            const noMatch = "no".includes(needle);
+            const emlMatch = needle.length >= 3 && (
+                "eml non-threat".includes(needle) ||
+                EML_NON_THREAT_MARKER.includes(needle)
+            );
+            if (yesMatch && noMatch) return TRUE;
+            if (yesMatch) return {kind: "expression", value: "adjudicatedIdsCount>0"};
+            if (noMatch && !emlMatch) return {kind: "expression", value: "adjudicatedIdsCount=0"};
+            if (emlMatch && !noMatch) return {kind: "expression", value: emlExpr};
+            if (noMatch && emlMatch) return {kind: "expression", value: `(adjudicatedIdsCount=0) OR (${emlExpr})`};
+            return FALSE;
+        }
+
+        const rawList = Array.isArray(rule.value) ? rule.value : [rule.value];
+        const wantsYes = rawList.some(item => String(item).trim().toLocaleLowerCase() === "yes");
+        const wantsNo = rawList.some(item => String(item).trim().toLocaleLowerCase() === "no");
+        const wantsEml = rawList.some(isEmlToken);
+
+        if (wantsYes && wantsNo) return TRUE;
+        if (wantsYes) return {kind: "expression", value: "adjudicatedIdsCount>0"};
+        if (wantsNo && wantsEml) {
+            return {kind: "expression", value: `(adjudicatedIdsCount=0) OR (${emlExpr})`};
+        }
+        if (wantsNo) return {kind: "expression", value: "adjudicatedIdsCount=0"};
+        if (wantsEml) return {kind: "expression", value: emlExpr};
+        return FALSE;
     }
 
     const property = rule.field;
@@ -287,10 +329,46 @@ const evaluateRule = (rule: EventFilterRule, event: EventTableData, metadata: Ev
     if (rule.field === "status") return compareString(event.status ?? "", rule.operator, rule.value);
     if (rule.field === "adjudicatedIds") {
         const hasAdjudication = (event.adjudicatedIds?.length ?? 0) > 0;
+        const isEmlNonThreat = hasEmlNonThreatMarker(event.adjudicatedIds);
         if (rule.operator === "isEmpty") return !hasAdjudication;
         if (rule.operator === "isNotEmpty") return hasAdjudication;
-        const label = event.adjudicatedIds?.length > 0 ? "Yes" : "No";
-        return compareString(label, rule.operator, rule.value);
+
+        const isEmlToken = (raw: unknown): boolean => {
+            const normalized = String(raw ?? "").trim().toLocaleLowerCase();
+            return normalized === "eml non-threat" || normalized === EML_NON_THREAT_MARKER;
+        };
+
+        if (rule.operator === "notEquals") {
+            const excluded = Array.isArray(rule.value) ? rule.value[0] : rule.value;
+            if (isEmlToken(excluded)) return !isEmlNonThreat;
+            const norm = String(excluded ?? "").trim().toLocaleLowerCase();
+            if (norm === "yes") return !hasAdjudication;
+            if (norm === "no") return hasAdjudication;
+            return true;
+        }
+
+        if (rule.operator === "contains") {
+            const needle = String(Array.isArray(rule.value) ? rule.value[0] ?? "" : rule.value)
+                .trim()
+                .toLocaleLowerCase();
+            const yesMatch = "yes".includes(needle);
+            const noMatch = "no".includes(needle);
+            const emlMatch = needle.length >= 3 && (
+                "eml non-threat".includes(needle) ||
+                EML_NON_THREAT_MARKER.includes(needle)
+            );
+            return (yesMatch && hasAdjudication)
+                || (noMatch && !hasAdjudication)
+                || (emlMatch && isEmlNonThreat);
+        }
+
+        const rawList = Array.isArray(rule.value) ? rule.value : [rule.value];
+        const wantsYes = rawList.some(item => String(item).trim().toLocaleLowerCase() === "yes");
+        const wantsNo = rawList.some(item => String(item).trim().toLocaleLowerCase() === "no");
+        const wantsEml = rawList.some(isEmlToken);
+        return (wantsYes && hasAdjudication)
+            || (wantsNo && !hasAdjudication)
+            || (wantsEml && isEmlNonThreat);
     }
     if (rule.field === "startTime" || rule.field === "endTime") {
         const actual = new Date(event[rule.field]).getTime();

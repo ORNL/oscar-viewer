@@ -135,6 +135,7 @@ export default function NestedEventFilterDialog({open, filter, nodeOptions, lane
         if (rule.field === "adjudicatedIds") options = [
             {value: "Yes", label: t("yes")},
             {value: "No", label: t("no")},
+            {value: "EML Non-Threat", label: t("emlNonThreat")},
         ];
 
         if (options.length > 0 && ["equals", "notEquals", "isAnyOf"].includes(rule.operator)) {

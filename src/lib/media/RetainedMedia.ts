@@ -135,9 +135,12 @@ function boolean(value: unknown, field: string): boolean {
     return value;
 }
 
+const EXTENDED_SIGNED_YEAR_ISO_RE =
+    /^[+-]\d{6,10}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?Z$/;
+
 function instant(value: unknown, field: string): string {
     const result = text(value, field, 128);
-    if (!Number.isFinite(Date.parse(result)))
+    if (!Number.isFinite(Date.parse(result)) && !EXTENDED_SIGNED_YEAR_ISO_RE.test(result))
         throw invalid(`${field} must be an ISO timestamp`);
     return result;
 }

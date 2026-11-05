@@ -8,9 +8,11 @@ All notable changes to this project will be documented in this file.
 - Event Details now queries the authenticated event-scoped retained-media API by occupancy UUID and displays exactly five labeled JPEG evidence frames per camera with source ordinals and video timestamps.
 - Added keyboard-accessible per-camera galleries, isolated missing/corrupt-frame handling, localized loading and error feedback, and focused API/fallback/rendering regression tests.
 - Added strict catalog-transfer, per-frame, and event-wide byte, dimension, and decoded-pixel budgets. Response bodies are stopped at their streaming limits even when `Content-Length` is absent or incorrect.
+- Added **EML Non-Threat** automated adjudication support across the Viewer (`en`, `es`, `fr`, `el`): non-threat EML occupancies (`eml-non-threat` / disposition code `9999`) are suppressed from Dashboard alarm notifications, queryable in the Event Log (`Adjudicated = EML Non-Threat`), and rendered in Event Details with an **EML Automated Analysis** summary card (verdict, release/investigate probabilities, model, collimation, lane width, fallback state, and per-source scores) plus formatted `EML_METADATA` feedback in the Adjudication Log.
 
 ### Changed
 
+- Retained-media manifest validation now accepts Java `Instant.MAX` (`+1000000000-12-31T23:59:59.999999999Z`) provisional `rollbackDeleteAfter` timestamps emitted before the 24-hour MP4 rollback grace clock begins, while continuing to reject malformed signed-year timestamps.
 - Event Details adjudication logs now refresh deterministically after adjudication submission and deduplicate historical and live MQTT entries by observation ID and timestamp.
 - National Statistics refresh now follows its durable command status through `PENDING` to terminal
   completion, keeps the controls busy for the complete operation, and fetches the exact observation

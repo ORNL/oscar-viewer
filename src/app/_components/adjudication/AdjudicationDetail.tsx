@@ -26,6 +26,7 @@ import {
 } from "@mui/material";
 import React, {ChangeEvent, useContext, useEffect, useRef, useState} from "react";
 import AdjudicationLog from "./AdjudicationLog"
+import EmlAnalysisCard from "./EmlAnalysisCard";
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
 import {AdjudicationCode, AdjudicationCodes} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
@@ -110,6 +111,7 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
     const [colorStatus, setColorStatus] = useState('');
     const [openSnack, setOpenSnack] = useState(false);
     const [shouldFetchLogs, setShouldFetchLogs] = useState<boolean>(false);
+    const [loggedAdjudications, setLoggedAdjudications] = useState<AdjudicationData[]>([]);
     const [webIdResults, setWebIdResults] = useState<WebIdAnalysisResult[]>([]);
     const [selectedWebIdResultId, setSelectedWebIdResultId] = useState<string[]>([]);
     const [isSubmittingWebId, setIsSubmittingWebId] = useState(false);
@@ -701,6 +703,13 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
                             onWebIdResults={handleWebIdResults}
                         />
                     </Grid>
+                    {/*EML Analysis*/}
+                    <Grid item xs={12}>
+                        <EmlAnalysisCard
+                            event={props.event}
+                            adjudications={loggedAdjudications}
+                        />
+                    </Grid>
                     {/*Adj Log*/}
                     <Grid item xs={12}>
                         <AdjudicationLog
@@ -708,6 +717,7 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
                             node={laneMapRef.current.get(props.event.laneId)?.parentNode}
                             shouldFetch={shouldFetchLogs}
                             onFetchComplete={onFetchComplete}
+                            onAdjudicationsChange={setLoggedAdjudications}
                         />
                     </Grid>
                 </Grid>

@@ -9,6 +9,9 @@ export interface AdjudicationCode {
     group: string;
 }
 
+export const EML_NON_THREAT_CODE = 9999;
+export const EML_NON_THREAT_MARKER = "eml-non-threat";
+
 export class AdjudicationCodes {
     static codes: AdjudicationCode[] = [
         {code: 0, label: "", group: ""},
@@ -22,7 +25,8 @@ export class AdjudicationCodes {
         {code: 8, label: "Code 8: Other", group: "False Alarm"},
         {code: 9, label: "Code 9: Authorized Test, Maintenance, or Training Activity", group: "Test/Maintenance"},
         {code: 10, label: "Code 10: Unauthorized Activity", group: "Tamper/Fault"},
-        {code: 11, label: "Code 11: Other", group: "Other"}
+        {code: 11, label: "Code 11: Other", group: "Other"},
+        {code: EML_NON_THREAT_CODE, label: "Code 9999: EML Non-Threat", group: "Automated"},
     ]
 
     constructor() {

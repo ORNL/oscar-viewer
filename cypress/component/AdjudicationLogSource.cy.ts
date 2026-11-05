@@ -332,4 +332,66 @@ describe("adjudication log source discovery", () => {
             expect(entries[0].feedback).to.equal("Fallback note");
         });
     });
+
+    it("skips synthetic eml-non-threat and bulk-adjudicated markers when resolving per-command statuses", () => {
+        const requestedUrls: string[] = [];
+        const searchStatus = cy.stub();
+        const fetchStub = cy.stub().callsFake(async (url: string) => {
+            requestedUrls.push(url);
+            if (url.endsWith("/observations/obs-eml-9")) {
+                return new Response(JSON.stringify({
+                    id: "obs-eml-9",
+                    result: {occupancyCount: 9, adjudicatedIds: ["eml-non-threat", "cmd-eml-9"]},
+                }), {status: 200});
+            }
+            if (url.includes("/commands/cmd-eml-9/status?")) {
+                return new Response(JSON.stringify({
+                    items: [{
+                        id: "status-eml-9",
+                        "command@id": "cmd-eml-9",
+                        reportTime: "2026-11-05T12:00:00Z",
+                        statusCode: "COMPLETED",
+                        results: [{
+                            data: {
+                                occupancyObsId: "obs-eml-9",
+                                adjudicationCode: 9999,
+                                feedback: 'Automated EML Non-Threat release\nEML_METADATA:{"result":"RELEASE"}',
+                                isotopes: [],
+                                secondaryInspectionStatus: "NONE",
+                                vehicleId: "",
+                                filePaths: [],
+                                username: "EML",
+                            },
+                        }],
+                    }],
+                }), {status: 200});
+            }
+            return new Response("Not Found", {status: 404});
+        });
+
+        const source = {
+            lane: {
+                parentNode: {
+                    getConnectedSystemsEndpoint: () => "https://oscar.example.test/sensorhub/api",
+                    getBasicAuthHeader: () => ({}),
+                },
+            },
+            controlStream: {properties: {id: "cs-lane1"}, searchStatus},
+        } as any;
+
+        cy.wrap(fetchOccupancyAdjudicationStatuses({
+            event: {occupancyObsId: "obs-eml-9", occupancyCount: "9", adjudicatedIds: ["eml-non-threat", "bulk-adjudicated"]},
+            source,
+            fetchImpl: fetchStub as any,
+        })).then((entries: any[]) => {
+            expect(entries).to.have.length(1);
+            expect(entries[0].adjudicationCode.code).to.equal(9999);
+            expect(entries[0].username).to.equal("EML");
+            expect(requestedUrls).to.deep.equal([
+                "https://oscar.example.test/sensorhub/api/observations/obs-eml-9",
+                "https://oscar.example.test/sensorhub/api/controlstreams/cs-lane1/commands/cmd-eml-9/status?statusCode=COMPLETED&format=application/json&offset=0&limit=100",
+            ]);
+            expect(searchStatus).not.to.have.been.called;
+        });
+    });
 });

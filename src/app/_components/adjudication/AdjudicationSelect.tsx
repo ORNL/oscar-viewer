@@ -21,7 +21,8 @@ export default function AdjudicationSelect(props: {
 }) {
     const {t} = useLanguage();
     const {codes: customCodes, failed, loading, refresh} = useCustomAdjudicationCodes(props.nodes ?? []);
-    const choices = [...AdjudicationCodes.codes, ...customCodes];
+    const manualBuiltInCodes = AdjudicationCodes.codes.filter(code => code.group !== "Automated");
+    const choices = [...manualBuiltInCodes, ...customCodes];
     const [style, setStyle] = useState(colorCodes.other.color); // Adjudicated button style based on selected value
 
     useEffect(() => {

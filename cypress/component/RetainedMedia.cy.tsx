@@ -379,4 +379,28 @@ describe("retained event media", () => {
             .find("video source")
             .should("exist");
     });
+
+    it("accepts Java Instant.MAX provisional rollbackDeleteAfter while rejecting malformed signed years", () => {
+        const provisionalPayload = responseFixture("PRESERVED_FOR_ROLLBACK");
+        provisionalPayload.mediaSets[0].manifest.source.rollbackDeleteAfter =
+            "+1000000000-12-31T23:59:59.999999999Z";
+        const okFetch = (() => Promise.resolve(responseJson(provisionalPayload))) as RetainedMediaFetch;
+
+        return fetchRetainedEventMedia(EVENT_ID, node, okFetch).then(result => {
+            expect(result?.mediaSets[0].manifest.source.rollbackDeleteAfter)
+                .to.equal("+1000000000-12-31T23:59:59.999999999Z");
+
+            const badPayload = responseFixture();
+            badPayload.mediaSets[0].manifest.source.rollbackDeleteAfter =
+                "+1000000000-13-45T99:00:00Z";
+            const badFetch = (() => Promise.resolve(responseJson(badPayload))) as RetainedMediaFetch;
+            return fetchRetainedEventMedia(EVENT_ID, node, badFetch).then(
+                () => { throw new Error("Expected invalid signed-year calendar fields to be rejected"); },
+                error => {
+                    expect(error).to.be.instanceOf(RetainedMediaError);
+                    expect((error as RetainedMediaError).code).to.equal("invalid-response");
+                },
+            );
+        });
+    });
 });

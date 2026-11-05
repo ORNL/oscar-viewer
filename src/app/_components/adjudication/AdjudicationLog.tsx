@@ -9,9 +9,13 @@ import { Box, Stack, Typography} from "@mui/material";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
 import {isAdjudicationControlStream} from "@/lib/data/oscar/Utilities";
 import ControlStream from "osh-js/source/core/consysapi/controlstream/ControlStream";
-import {AdjudicationCodes} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
+import {AdjudicationCodes, EML_NON_THREAT_CODE} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
 import {useCustomAdjudicationCodes} from "@/app/hooks/useCustomAdjudicationCodes";
 import {resolveAdjudicationCode} from "@/lib/data/oscar/adjudication/CustomAdjudicationCodes";
+import {
+    isSyntheticAdjudicationMarker,
+    parseAdjudicationFeedbackWithEmlMetadata,
+} from "@/lib/data/oscar/adjudication/EmlMetadata";
 import ControlStreamFilter from "osh-js/source/core/consysapi/controlstream/ControlStreamFilter";
 import { Dialog, DialogTitle, DialogContent } from "@mui/material";
 import {useLanguage} from "@/app/contexts/LanguageContext";
@@ -257,7 +261,7 @@ export async function fetchOccupancyAdjudicationStatuses(options: {
                     const commandIds = Array.from(new Set(
                         combinedIds
                             .map((value: unknown) => String(value ?? "").trim())
-                            .filter((value: string) => value.length > 0),
+                            .filter((value: string) => value.length > 0 && !isSyntheticAdjudicationMarker(value)),
                     ));
                     if (commandIds.length === 0) {
                         return [];
@@ -365,6 +369,7 @@ export default function AdjudicationLog(props: {
     node: INode;
     shouldFetch?: boolean;
     onFetchComplete?: () => void;
+    onAdjudicationsChange?: (entries: AdjudicationData[]) => void;
 }) {
     const { language, t } = useLanguage();
     const locale = getIntlLocale(language);
@@ -415,6 +420,8 @@ export default function AdjudicationLog(props: {
             flex: 1.5,
             valueGetter: (value, row) => {
                 const code = row.adjudicationCode.code;
+                if (code === EML_NON_THREAT_CODE)
+                    return t(`adjudicationCode.${EML_NON_THREAT_CODE}`);
                 if (code <= 11)
                     return t(`adjudicationCode.${code}`);
                 const custom = customCodes.find(item => item.code === code);
@@ -430,20 +437,23 @@ export default function AdjudicationLog(props: {
             flex: 1,
             type: 'string',
             renderCell: (params) => {
-                const fullText = params.value ?? "";
+                const {summaryText, emlMetadata} = parseAdjudicationFeedbackWithEmlMetadata(params.value);
                 const maxLength = 50;
 
-                const truncated = fullText.length > maxLength
-                    ? fullText.substring(0, maxLength) + "..."
-                    : fullText;
+                const truncated = summaryText.length > maxLength
+                    ? summaryText.substring(0, maxLength) + "..."
+                    : summaryText;
+                const dialogText = emlMetadata
+                    ? `${summaryText}\n\n${JSON.stringify(emlMetadata, null, 2)}`
+                    : summaryText;
 
                 return (
                     <div style={{ whiteSpace: "normal", wordWrap: "break-word" }}>
                         {truncated}
-                        {fullText.length > maxLength && (
+                        {(summaryText.length > maxLength || emlMetadata !== null) && (
                             <button
                                 style={{ color: "#1976d2", border: "none", background: "none", cursor: "pointer" }}
-                                onClick={() => setFeedbackDialog({ open: true, text: fullText })}
+                                onClick={() => setFeedbackDialog({ open: true, text: dialogText })}
                             >
                                 {t('readMore')}
                             </button>
@@ -646,9 +656,10 @@ export default function AdjudicationLog(props: {
     }, [laneMapRef, props.event]);
 
     useEffect(() => {
-        let filteredLog = adjLog.filter((adjData) => adjData?.occupancyObsId ==  props.event.occupancyObsId);
-        setFilteredLog(filteredLog);
-    }, [adjLog, props.event.occupancyObsId]);
+        const nextFiltered = adjLog.filter((adjData) => adjData?.occupancyObsId == props.event.occupancyObsId);
+        setFilteredLog(nextFiltered);
+        props.onAdjudicationsChange?.(nextFiltered);
+    }, [adjLog, props.event.occupancyObsId, props.onAdjudicationsChange]);
 
 
     return (
