@@ -101,7 +101,7 @@ export default function HealthPage() {
     const summary = useMemo(() => summarizeLaneHealth(laneRows), [laneRows]);
 
     return (
-        <Stack spacing={2} sx={{pr: 2, pb: 2}}>
+        <Stack spacing={2} sx={{pb: 2, minInlineSize: 0}}>
             <Stack direction={{xs: "column", md: "row"}} justifyContent="space-between" alignItems={{xs: "stretch", md: "center"}} spacing={2}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
                     <MonitorHeartRounded color="primary" sx={{fontSize: 36}}/>
@@ -146,7 +146,7 @@ export default function HealthPage() {
             ) : laneRows.length === 0 ? (
                 <Alert severity="info">{t("noLanesAvailable")}</Alert>
             ) : (
-                <TableContainer component={Paper} variant="outlined">
+                <TableContainer component={Paper} variant="outlined" sx={{maxInlineSize: "100%", overflowX: "auto"}}>
                     <Table aria-label={t("stateOfHealth")} sx={{minWidth: 1050}}>
                         <TableHead>
                             <TableRow sx={{"& th": {whiteSpace: "nowrap"}}}>

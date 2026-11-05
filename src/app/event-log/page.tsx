@@ -12,8 +12,8 @@ export default function EventLogPage() {
     const laneMap = useSelector((state: RootState) => selectLaneMap(state))
 
     return (
-        <Grid container spacing={2} width={"100%"}>
-            <Grid item xs={12}>
+        <Grid container spacing={2} sx={{ minInlineSize: 0 }}>
+            <Grid item xs={12} sx={{ minInlineSize: 0 }}>
                 <Stack
                     direction={{xs: "column", md: "row"}}
                     spacing={2}
@@ -27,7 +27,7 @@ export default function EventLogPage() {
                 </Stack>
             </Grid>
 
-            <Grid item xs={12} sx={{ gap: 2, minWidth: 0 }}>
+            <Grid item xs={12} sx={{ gap: 2, minInlineSize: 0 }}>
                 <Paper variant='outlined' sx={{ padding: 0 }}>
                     <EventTable tableMode={"eventlog"} viewLane viewAdjudicated laneMap={laneMap}/>
                 </Paper>
