@@ -116,7 +116,7 @@ export default function AdjudicationSelect(props: {
                 {customCodes.length > 0 && <ListSubheader>{t("customDispositionCodes")}</ListSubheader>}
                 {customCodes.map(code => (
                     <MenuItem key={code.code} value={String(code.code)} sx={colorCodes.other}>
-                        {"Code " + code.code + ": " + code.label}
+                        {t("customAdjudicationCodeLabel", {code: code.code, label: code.label})}
                     </MenuItem>
                 ))}
             </Select>

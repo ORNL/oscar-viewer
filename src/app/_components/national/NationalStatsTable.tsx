@@ -33,7 +33,7 @@ export default function StatTable(selectedTimeRangeCounts: {selectedTimeRangeCou
             valueFormatter: (value) => {
                 return typeof value === 'number' ? value : 0;
             },
-            minWidth: 150,
+            minWidth: 165,
             flex: 1,
         },
         {
@@ -42,8 +42,8 @@ export default function StatTable(selectedTimeRangeCounts: {selectedTimeRangeCou
             valueFormatter: (value) => {
                 return typeof value === 'number' ? value : 0;
             },
-            minWidth: 150,
-            flex: 1,
+            minWidth: 195,
+            flex: 1.2,
         },
         {
             field: 'numOccupancies',
@@ -95,6 +95,7 @@ export default function StatTable(selectedTimeRangeCounts: {selectedTimeRangeCou
     return (
         <Box sx={{height: 800, width: '100%', overflowX: 'auto'}}>
             <DataGrid
+                key={language}
                 localeText={getDataGridLocaleText(language)}
                 rows={selectedTimeRangeCounts.selectedTimeRangeCounts ?? []}
                 columns={columns}
@@ -111,7 +112,7 @@ export default function StatTable(selectedTimeRangeCounts: {selectedTimeRangeCou
                 autosizeOptions={{
                     expand: true,
                     includeOutliers: true,
-                    includeHeaders: false,
+                    includeHeaders: true,
                 }}
                 sx={{
                     border: "none",

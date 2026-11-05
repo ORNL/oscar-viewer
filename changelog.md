@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - The reviewed MQTT MessagePort source is pinned directly to the immutable upstream `ORNL/osh-js` commit and lockfile integrity hash, removing the personal packaging-fork dependency from clean builds.
 - Status of Health and Dashboard snapshots now request at most 10 streams per batch, retain two global workers and a 10-second deadline, and recover independently when one batch stalls. This keeps browser and server work bounded against large accumulated observation histories.
 - Live HLS playback in Lane Details now attaches per-viewer session headers (`X-OSCAR-HLS-Viewer` and `X-OSCAR-HLS-Viewer-State`) with periodic heartbeat and immediate unload/navigation release so multiple operators can view the same lane concurrently without interrupting each other, while stripping redundant `videos/` bucket prefixes from returned `streamPath` values.
+- Localized occupancy alarm status values in `EventTable` and `AlarmTransferImport`, custom disposition code prefixes in `AdjudicationSelect` and `AdjudicationLog`, and Status of Health timestamps across English, Spanish, French, and Greek; refined domain terminology (`διέλευση`, `αξιολόγηση`, singular `Ανιχνευτής`, `Adjugé`, `fallos`) and sized table headers and navigation drawers so labels fit cleanly without clipping.
 
 ## 3.10.0
 

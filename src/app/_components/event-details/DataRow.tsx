@@ -4,7 +4,7 @@ import {Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow}
 import {styled} from "@mui/material/styles";
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
 import {useLanguage} from '@/app/contexts/LanguageContext';
-import {getIntlLocale} from '@/app/utils/LocaleUtils';
+import {formatOccupancyStatus, getIntlLocale} from '@/app/utils/LocaleUtils';
 import EventIdentity from "@/app/_components/event-details/EventIdentity";
 import type {EventIdentityResolutionState} from "@/app/_components/event-details/EventIdentity";
 
@@ -31,13 +31,7 @@ export default function DataRow({
 }: DataRowProps) {
     const {language, t} = useLanguage();
     const formatDate = (value?: string) => value ? new Date(value).toLocaleString(getIntlLocale(language)) : '';
-    const formatStatus = (value?: string) => {
-        if (value === 'Gamma & Neutron') return t('gammaAndNeutron');
-        if (value === 'Gamma') return t('gamma');
-        if (value === 'Neutron') return t('neutron');
-        if (value === 'None') return t('none');
-        return value || t('unknown');
-    };
+    const formatStatus = (value?: string) => formatOccupancyStatus(value, t, 'unknown');
     const formatInspection = (value?: string) => value ? t(`secondaryInspection.${value.toLowerCase()}`) : '';
     return (
         <Stack>
@@ -51,7 +45,7 @@ export default function DataRow({
                 <Table sx={{minWidth: 650}} aria-label={t('eventDetails')}>
                 <TableHead>
                     <TableRow
-                        sx={{'&:last-child td, &:last-child th': {border: 0, textAlign: "center"}}}>
+                        sx={{'&:last-child td, &:last-child th': {border: 0, textAlign: "center", whiteSpace: "nowrap"}}}>
                         <TableCell>{t('secondaryInspection')}</TableCell>
                         <TableCell>{t('laneId')}</TableCell>
                         <TableCell>{t('occupancyId')}</TableCell>

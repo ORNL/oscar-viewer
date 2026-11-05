@@ -382,7 +382,7 @@ export default function AdjudicationLog(props: {
         {
             field: 'occupancyCount',
             headerName: t('occupancyId'),
-            minWidth: 100,
+            minWidth: 115,
             flex: 1,
             type: 'string',
         },
@@ -418,7 +418,9 @@ export default function AdjudicationLog(props: {
                 if (code <= 11)
                     return t(`adjudicationCode.${code}`);
                 const custom = customCodes.find(item => item.code === code);
-                return custom ? `Code ${code}: ${custom.label}` : `Code ${code}`;
+                return custom
+                    ? t("customAdjudicationCodeLabel", {code, label: custom.label})
+                    : t("customAdjudicationCodeFallback", {code});
             }
         },
         {
@@ -463,7 +465,7 @@ export default function AdjudicationLog(props: {
         {
             field: 'filePaths',
             headerName: t('filePaths'),
-            minWidth: 100,
+            minWidth: 140,
             flex: 1,
             renderCell: (params) => {
                 const paths: string[] = Array.isArray(params.value) ? params.value : [];
@@ -494,15 +496,15 @@ export default function AdjudicationLog(props: {
         {
             field: 'secondaryInspectionStatus',
             headerName: t('secondaryInspection'),
-            minWidth: 120,
-            flex: 1,
+            minWidth: 185,
+            flex: 1.2,
             valueFormatter: (value) => value ? t(`secondaryInspection.${String(value).toLowerCase()}`) : '',
         },
         {
             field: 'vehicleId',
             headerName: t('vehicleId'),
-            minWidth: 80,
-            flex: 0.8,
+            minWidth: 115,
+            flex: 0.9,
             valueGetter: (value) => {
                 if (value === "") return t('unknown');
                 else return value;

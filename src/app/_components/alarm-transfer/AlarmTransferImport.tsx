@@ -30,7 +30,7 @@ import {
 } from "@/lib/data/oscar/AlarmQrTransfer";
 import AlarmTransferCharts from "@/app/_components/alarm-transfer/AlarmTransferCharts";
 import {useLanguage} from "@/app/contexts/LanguageContext";
-import {getIntlLocale} from "@/app/utils/LocaleUtils";
+import {formatOccupancyStatus, getIntlLocale} from "@/app/utils/LocaleUtils";
 
 type ScannerState = "idle" | "starting" | "scanning" | "validating" | "error";
 
@@ -463,7 +463,7 @@ export default function AlarmTransferImport({
                             <Grid item xs={6} md={3}><b>{t("sourceNode")}</b><br/>{payload.source.nodeName ?? payload.source.nodeId}</Grid>
                             <Grid item xs={6} md={3}><b>{t("laneId")}</b><br/>{payload.source.laneId}</Grid>
                             <Grid item xs={6} md={3}><b>{t("occupancyId")}</b><br/>{payload.event.occupancyId}</Grid>
-                            <Grid item xs={6} md={3}><b>{t("status")}</b><br/>{payload.event.status}</Grid>
+                            <Grid item xs={6} md={3}><b>{t("status")}</b><br/>{formatOccupancyStatus(payload.event.status, t, "unknown")}</Grid>
                             <Grid item xs={12}>
                                 <b>{t("occupancyUuid")}</b><br/>
                                 <span data-testid="alarm-transfer-import-uuid" style={{overflowWrap: "anywhere"}}>
