@@ -44,8 +44,8 @@ import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
 
-const drawerWidth = 240;
-const drawerWidthMobile = 200;
+const drawerWidth = 276;
+const drawerWidthMobile = 236;
 
 const openedMixin = (theme: Theme): CSSObject => ({
     width: drawerWidth,
@@ -332,13 +332,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 <ListItemIcon
                                     sx={{
                                         minWidth: 0,
-                                        mr: drawerOpen ? 3 : 'auto',
+                                        mr: drawerOpen ? 2 : 'auto',
                                         justifyContent: 'center',
                                     }}
                                 >
                                     {item.icon}
                                 </ListItemIcon>
-                                <ListItemText primary={item.title} sx={{opacity: drawerOpen ? 1 : 0}}/>
+                                <ListItemText primary={item.title} sx={{opacity: drawerOpen ? 1 : 0, display: drawerOpen ? 'block' : 'none'}}/>
                             </ListItemButton>
                         </ListItem>
                     </Link>
@@ -359,13 +359,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 <ListItemIcon
                                     sx={{
                                         minWidth: 0,
-                                        mr: drawerOpen ? 3 : 'auto',
+                                        mr: drawerOpen ? 2 : 'auto',
                                         justifyContent: 'center',
                                     }}
                                 >
                                     {item.icon}
                                 </ListItemIcon>
-                                <ListItemText primary={item.title} sx={{opacity: drawerOpen ? 1 : 0}}/>
+                                <ListItemText primary={item.title} sx={{opacity: drawerOpen ? 1 : 0, display: drawerOpen ? 'block' : 'none'}}/>
                             </ListItemButton>
                         </ListItem>
                     </Link>

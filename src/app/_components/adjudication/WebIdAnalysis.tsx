@@ -87,7 +87,7 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'confidence',
             headerName: t('confidence'),
-            minWidth: 90,
+            minWidth: 105,
             flex: 0.8,
             valueGetter: (value, row) => row.isotopes?.map((i: IWebIdIsotope) => i.confidence).join(', '),
             renderCell: renderStringCell(t('confidence')),
@@ -95,7 +95,7 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'confidenceStr',
             headerName: t('confidenceString'),
-            minWidth: 120,
+            minWidth: 155,
             flex: 1,
             valueGetter: (value, row) => row.isotopes?.map((i: IWebIdIsotope) => i.confidenceStr).join(', '),
             renderCell: renderStringCell(t('confidenceString')),
@@ -103,7 +103,7 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'countRate',
             headerName: t('countRate'),
-            minWidth: 90,
+            minWidth: 130,
             flex: 0.8,
             valueGetter: (value, row) => row.isotopes?.map((i: IWebIdIsotope) => i.countRate).join(', '),
             renderCell: renderStringCell(t('countRate')),
@@ -111,7 +111,7 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'isotopeString',
             headerName: t('isotopeString'),
-            minWidth: 100,
+            minWidth: 145,
             flex: 1,
             type: 'string',
             renderCell: renderStringCell(t('isotopeString')),
@@ -119,22 +119,22 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'numIsotopes',
             headerName: t('isotopeCount'),
-            minWidth: 80,
-            flex: 0.6,
+            minWidth: 115,
+            flex: 0.7,
             type: 'number',
         },
         {
             field: 'numAnalysisWarning',
             headerName: t('warningCount'),
-            minWidth: 80,
-            flex: 0.6,
+            minWidth: 120,
+            flex: 0.7,
             type: 'string',
             renderCell: renderStringCell(t('warningCount')),
         },
         {
             field: 'analysisWarning',
             headerName: t('analysisWarning'),
-            minWidth: 120,
+            minWidth: 155,
             flex: 1,
             type: 'string',
             renderCell: renderStringCell(t('analysisWarning')),
@@ -142,14 +142,14 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'chiSquare',
             headerName: t('chiSquare'),
-            minWidth: 90,
+            minWidth: 120,
             flex: 0.7,
             type: 'number',
         },
         {
             field: 'detectorResponseFunction',
             headerName: t('drf'),
-            minWidth: 80,
+            minWidth: 95,
             flex: 0.6,
             type: 'string',
             renderCell: renderStringCell(t('drf')),
@@ -157,7 +157,7 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'errorMessage',
             headerName: t('errorMessage'),
-            minWidth: 100,
+            minWidth: 140,
             flex: 1,
             type: 'string',
             renderCell: renderStringCell(t('errorMessage')),
@@ -165,8 +165,8 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         {
             field: 'estimatedDose',
             headerName: t('estimatedDose'),
-            minWidth: 80,
-            flex: 0.6,
+            minWidth: 115,
+            flex: 0.7,
             type: 'number',
         }
     ];

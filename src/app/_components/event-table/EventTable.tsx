@@ -45,7 +45,7 @@ import {
 } from "@/lib/state/EventDataSlice";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import {NotificationService, NotificationTemplates} from "../notifications/NotificationService";
-import {getDataGridLocaleText, getIntlLocale} from "@/app/utils/LocaleUtils";
+import {formatOccupancyStatus, getDataGridLocaleText, getIntlLocale} from "@/app/utils/LocaleUtils";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import CustomToolbar from "@/app/_components/CustomToolbar";
 import NestedEventFilterDialog from "@/app/_components/event-table/NestedEventFilterDialog";
@@ -594,10 +594,11 @@ export default function EventTable({
             valueGetter: value => new Date(value),
             valueFormatter: value => new Date(value).toLocaleString(locale),
         },
-        {field: "maxGamma", headerName: t("maxGamma"), minWidth: 150, flex: 1.2},
-        {field: "maxNeutron", headerName: t("maxNeutron"), minWidth: 150, flex: 1.2},
+        {field: "maxGamma", headerName: t("maxGamma"), minWidth: 165, flex: 1.2},
+        {field: "maxNeutron", headerName: t("maxNeutron"), minWidth: 165, flex: 1.2},
         {
-            field: "status", headerName: t("status"), minWidth: 135, flex: 1.2,
+            field: "status", headerName: t("status"), minWidth: 140, flex: 1.2,
+            valueFormatter: (value: string) => formatOccupancyStatus(value, t),
             sortComparator: (_left, _right, leftCellParams, rightCellParams) =>
                 sortEventsByAlarmPriority(
                     leftCellParams.api.getRow(leftCellParams.id),

@@ -28,6 +28,7 @@ import {
 } from "@mui/icons-material";
 
 import {useLanguage} from "@/app/contexts/LanguageContext";
+import {getIntlLocale} from "@/app/utils/LocaleUtils";
 import {
     deriveLaneHealthRows,
     formatHealthDuration,
@@ -84,7 +85,7 @@ function FaultIndicator({label, state, faultText, clearText, unknownText}: {
 }
 
 export default function HealthPage() {
-    const {t} = useLanguage();
+    const {language, t} = useLanguage();
     const {lanes, isLoading, thresholdMinutes, setThresholdMinutes} = useLaneHealth();
     const [now, setNow] = useState(Date.now());
 
@@ -148,7 +149,7 @@ export default function HealthPage() {
                 <TableContainer component={Paper} variant="outlined">
                     <Table aria-label={t("stateOfHealth")} sx={{minWidth: 1050}}>
                         <TableHead>
-                            <TableRow>
+                            <TableRow sx={{"& th": {whiteSpace: "nowrap"}}}>
                                 <TableCell>{t("lane")}</TableCell>
                                 <TableCell>{t("connections")}</TableCell>
                                 <TableCell>{t("faultStatus")}</TableCell>
@@ -228,7 +229,7 @@ export default function HealthPage() {
                                     </TableCell>
                                     <TableCell sx={{verticalAlign: "top", whiteSpace: "nowrap"}}>
                                         <Typography variant="body2" color="text.secondary">
-                                            {lane.lastUpdatedAt ? new Date(lane.lastUpdatedAt).toLocaleTimeString() : t("waitingForTelemetry")}
+                                            {lane.lastUpdatedAt ? new Date(lane.lastUpdatedAt).toLocaleTimeString(getIntlLocale(language)) : t("waitingForTelemetry")}
                                         </Typography>
                                     </TableCell>
                                 </TableRow>
