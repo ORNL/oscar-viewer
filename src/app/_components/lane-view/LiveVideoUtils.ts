@@ -1,7 +1,15 @@
 import {INode} from "@/lib/data/osh/Node";
+import {runAbortableWithTimeout} from "@/app/_components/lane-view/VideoStreamUtils";
+
+export const HLS_VIEWER_ID_HEADER = "X-OSCAR-HLS-Viewer";
+export const HLS_VIEWER_STATE_HEADER = "X-OSCAR-HLS-Viewer-State";
 
 type LiveVideoNode = Pick<INode,
     "address" | "port" | "isSecure" | "isDefaultNode" | "oshPathRoot" | "bucketsEndpoint">;
+
+type HlsViewerNode = LiveVideoNode & {
+    getBasicAuthHeader?: () => { Authorization?: string };
+};
 
 function normalizeConfiguredPath(path: string, fallback: string): string {
     const normalized = normalizeResourcePath(path || fallback);
@@ -98,4 +106,50 @@ export function buildLiveVideoUrl(videoSource: string, node: LiveVideoNode): str
 
     const protocol = node.isSecure ? "https" : "http";
     return `${protocol}://${node.address}:${node.port}${relativeUrl}`;
+}
+
+export function createHlsViewerId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    return `viewer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export async function sendHlsViewerState(
+    videoSource: string | null | undefined,
+    node: HlsViewerNode | null | undefined,
+    viewerId: string | null | undefined,
+    state: "closing" | "heartbeat",
+    timeoutMs = 2_000,
+): Promise<void> {
+    if (!videoSource || !node || !viewerId || typeof fetch !== "function") {
+        return;
+    }
+
+    const url = buildLiveVideoUrl(videoSource, node);
+    const headers: Record<string, string> = {
+        "Cache-Control": "no-cache",
+        [HLS_VIEWER_ID_HEADER]: viewerId,
+        [HLS_VIEWER_STATE_HEADER]: state,
+    };
+    const authHeader = node.getBasicAuthHeader?.()?.Authorization;
+    if (authHeader) {
+        headers.Authorization = authHeader;
+    }
+
+    const controller = new AbortController();
+    try {
+        await runAbortableWithTimeout(controller, timeoutMs, (signal) =>
+            fetch(url, {
+                method: "GET",
+                headers,
+                credentials: "include",
+                cache: "no-store",
+                keepalive: state === "closing",
+                signal,
+            }),
+        );
+    } catch {
+        // Best-effort lease update; server-side TTL and command sequencing remain authoritative.
+    }
 }

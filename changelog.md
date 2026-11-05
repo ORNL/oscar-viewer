@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - During the retained-media rollback grace period, the original hot MP4 remains playable beneath the five-frame evidence gallery. Only each camera's selected JPEG is fetched initially, at most three frame requests run concurrently, loaded frames are reused in memory, and object URLs are revoked on navigation.
 - The reviewed MQTT MessagePort source is pinned directly to the immutable upstream `ORNL/osh-js` commit and lockfile integrity hash, removing the personal packaging-fork dependency from clean builds.
 - Status of Health and Dashboard snapshots now request at most 10 streams per batch, retain two global workers and a 10-second deadline, and recover independently when one batch stalls. This keeps browser and server work bounded against large accumulated observation histories.
+- Live HLS playback in Lane Details now attaches per-viewer session headers (`X-OSCAR-HLS-Viewer` and `X-OSCAR-HLS-Viewer-State`) with periodic heartbeat and immediate unload/navigation release so multiple operators can view the same lane concurrently without interrupting each other, while stripping redundant `videos/` bucket prefixes from returned `streamPath` values.
 
 ## 3.10.0
 
