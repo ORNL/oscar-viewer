@@ -13,6 +13,10 @@ import {
     runAbortableWithTimeout,
     stopStreamAfterStartSettles,
 } from "@/app/_components/lane-view/VideoStreamUtils";
+import {
+    createHlsViewerId,
+    sendHlsViewerState,
+} from "@/app/_components/lane-view/LiveVideoUtils";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 
 const VIDEO_COMMAND_TIMEOUT_MS = 10_000;
@@ -24,6 +28,7 @@ export default function VideoMedia({ currentLane}: { currentLane: string}) {
     const laneReady = Boolean(currentLane && readyLaneNames.has(currentLane));
 
     const [videoSource, setVideoSource] = useState<string | null>(null);
+    const [viewerId, setViewerId] = useState<string>(() => createHlsViewerId());
     const [videoStreams, setVideoStreams] = useState<typeof ControlStream[]>([]);
     const [currentPage, setCurrentPage] = useState(0);
     const [laneEntry, setLaneEntry] = useState<LaneMapEntry | null>(null);
@@ -67,11 +72,17 @@ export default function VideoMedia({ currentLane}: { currentLane: string}) {
         let startTask: Promise<void> = Promise.resolve();
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
         let startAttempts = 0;
+        let activeStreamPath: string | null = null;
+        const generationViewerId = createHlsViewerId();
+        setViewerId(generationViewerId);
         const maxStartAttempts = 30;
         const streamId = currentStream.properties.id;
         const node = laneEntry.parentNode;
 
         const stopStream = async () => {
+            if (activeStreamPath) {
+                await sendHlsViewerState(activeStreamPath, node, generationViewerId, "closing");
+            }
             const controller = new AbortController();
             try {
                 await runAbortableWithTimeout(
@@ -135,6 +146,9 @@ export default function VideoMedia({ currentLane}: { currentLane: string}) {
                 }
 
                 const streamPath = responseJson?.results?.[0]?.data?.streamPath;
+                if (typeof streamPath === "string" && streamPath.length > 0) {
+                    activeStreamPath = streamPath;
+                }
 
                 // Cleanup owns the single stop for a cancelled generation and
                 // waits for this task before sending it.
@@ -270,6 +284,7 @@ export default function VideoMedia({ currentLane}: { currentLane: string}) {
                     <HLSVideoComponent
                         videoSource={videoSource}
                         selectedNode={laneEntry.parentNode}
+                        viewerId={viewerId}
                         onRetry={retryStreamStart}
                     />
                 )}

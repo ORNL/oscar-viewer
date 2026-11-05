@@ -5,13 +5,18 @@ import {INode} from "@/lib/data/osh/Node";
 import {Box, Button, CircularProgress, Typography} from "@mui/material";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import {attemptMediaPlayback} from "@/lib/media/MediaPlayback";
-import {buildLiveVideoUrl} from "@/app/_components/lane-view/LiveVideoUtils";
+import {
+    buildLiveVideoUrl,
+    HLS_VIEWER_ID_HEADER,
+    sendHlsViewerState,
+} from "@/app/_components/lane-view/LiveVideoUtils";
 
 const MAX_NETWORK_RETRIES = 40;
 const MAX_MEDIA_RECOVERY_ATTEMPTS = 3;
 const NETWORK_RETRY_DELAY_MS = 750;
 const MEDIA_RECOVERY_DELAY_MS = 250;
 const PREPARATION_TIMEOUT_MS = 45_000;
+const NATIVE_VIEWER_HEARTBEAT_MS = 4_000;
 
 type PlaybackState = "preparing" | "playing" | "error";
 
@@ -44,11 +49,14 @@ const loadHlsLibrary = () => import("hls.js") as Promise<unknown> as Promise<Hls
 export default function HLSVideoComponent({
     videoSource,
     selectedNode,
+    viewerId,
     hlsLoader = loadHlsLibrary,
     onRetry,
 }: {
     videoSource: string,
     selectedNode: INode,
+    /** Per-viewer lease identifier used to keep shared streams alive across operators. */
+    viewerId?: string,
     /** Dependency injection used by focused component tests. */
     hlsLoader?: () => Promise<HlsLibrary>,
     /** Requests one fresh server-side stream after a terminal playback error. */
@@ -113,6 +121,7 @@ export default function HLSVideoComponent({
         let networkRetryTimer: ReturnType<typeof setTimeout> | null = null;
         let mediaRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
         let preparationTimer: ReturnType<typeof setTimeout> | null = null;
+        let nativeHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
         let networkRetries = 0;
         let mediaRecoveryAttempts = 0;
         let awaitingUserPlayback = false;
@@ -139,6 +148,10 @@ export default function HLSVideoComponent({
             clearRetryTimers();
             clearTimer(preparationTimer);
             preparationTimer = null;
+            if (nativeHeartbeatInterval) {
+                clearInterval(nativeHeartbeatInterval);
+                nativeHeartbeatInterval = null;
+            }
             setAutoplayBlocked(false);
             hls?.stopLoad();
             video.pause();
@@ -247,6 +260,8 @@ export default function HLSVideoComponent({
                         const authHeader = selectedNode.getBasicAuthHeader().Authorization;
                         if (authHeader)
                             xhr.setRequestHeader("Authorization", authHeader);
+                        if (viewerId)
+                            xhr.setRequestHeader(HLS_VIEWER_ID_HEADER, viewerId);
                         xhr.setRequestHeader("Cache-Control", "no-cache");
                         xhr.withCredentials = true;
                     } else {
@@ -309,6 +324,14 @@ export default function HLSVideoComponent({
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegURL')) {
                 usingNativePlayback = true;
+                if (viewerId) {
+                    void sendHlsViewerState(videoSource, selectedNode, viewerId, "heartbeat");
+                    nativeHeartbeatInterval = setInterval(() => {
+                        if (!cancelled && !terminal) {
+                            void sendHlsViewerState(videoSource, selectedNode, viewerId, "heartbeat");
+                        }
+                    }, NATIVE_VIEWER_HEARTBEAT_MS);
+                }
                 const loadNativeSource = () => {
                     if (cancelled || terminal)
                         return;
@@ -348,6 +371,10 @@ export default function HLSVideoComponent({
                 autoplayBlockedHandlerRef.current = null;
             clearRetryTimers();
             clearTimer(preparationTimer);
+            if (nativeHeartbeatInterval) {
+                clearInterval(nativeHeartbeatInterval);
+                nativeHeartbeatInterval = null;
+            }
             video.removeEventListener("playing", handlePlaying);
             video.removeEventListener("waiting", handleWaiting);
             if (nativeLoadedMetadata)
@@ -360,7 +387,7 @@ export default function HLSVideoComponent({
             video.load();
         }
 
-    }, [videoSource, selectedNode, retryGeneration, hlsLoader, startPlayback]);
+    }, [videoSource, selectedNode, viewerId, retryGeneration, hlsLoader, startPlayback]);
 
     return (
         <Box sx={{position: "relative", width: "100%"}}>

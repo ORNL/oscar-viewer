@@ -1,6 +1,11 @@
 import React from "react";
 import HLSVideoComponent from "../../src/app/_components/lane-view/HLSVideoComponent";
-import {buildLiveVideoUrl} from "../../src/app/_components/lane-view/LiveVideoUtils";
+import {
+    buildLiveVideoUrl,
+    HLS_VIEWER_ID_HEADER,
+    HLS_VIEWER_STATE_HEADER,
+    sendHlsViewerState,
+} from "../../src/app/_components/lane-view/LiveVideoUtils";
 import {LanguageProvider} from "../../src/app/contexts/LanguageContext";
 
 type Listener = (event: string, data?: any) => void;
@@ -58,12 +63,14 @@ function mountPlayer(
     onRetry?: () => void,
     selectedNode = node,
     loader = hlsLoader,
+    viewerId?: string,
 ) {
     return cy.mount(
         <LanguageProvider>
             <HLSVideoComponent
                 videoSource={videoSource}
                 selectedNode={selectedNode}
+                viewerId={viewerId}
                 hlsLoader={loader}
                 onRetry={onRetry}
             />
@@ -314,12 +321,12 @@ describe("live HLS video", () => {
         });
     });
 
-    it("withholds node credentials from cross-origin HLS subresources", () => {
+    it("withholds node credentials and viewer lease headers from cross-origin HLS subresources", () => {
         const authenticatedNode = {
             ...node,
             getBasicAuthHeader: cy.stub().returns({Authorization: "Basic secret"}),
         };
-        mountPlayer("live/lane-01/index.m3u8", undefined, authenticatedNode);
+        mountPlayer("live/lane-01/index.m3u8", undefined, authenticatedNode, hlsLoader, "viewer-shared-1");
 
         currentHls().then((hls) => {
             const xhrSetup = hls.config.xhrSetup as (xhr: any, url: string) => void;
@@ -327,6 +334,8 @@ describe("live HLS video", () => {
             xhrSetup(sameOriginXhr, `${window.location.origin}/sensorhub/video-files/live0.ts`);
             expect(sameOriginXhr.setRequestHeader)
                 .to.have.been.calledWith("Authorization", "Basic secret");
+            expect(sameOriginXhr.setRequestHeader)
+                .to.have.been.calledWith(HLS_VIEWER_ID_HEADER, "viewer-shared-1");
             expect(sameOriginXhr.withCredentials).to.equal(true);
 
             const hostileXhr = {setRequestHeader: cy.stub(), withCredentials: true};
@@ -334,6 +343,24 @@ describe("live HLS video", () => {
             expect(hostileXhr.setRequestHeader).not.to.have.been.called;
             expect(hostileXhr.withCredentials).to.equal(false);
         });
+    });
+
+    it("releases a viewer lease with same-origin headers before stream stop", () => {
+        const fetchStub = cy.stub(window, "fetch").resolves(new Response(null, {status: 204}));
+        const authenticatedNode = {
+            ...node,
+            getBasicAuthHeader: () => ({Authorization: "Basic secret"}),
+        };
+
+        cy.wrap(sendHlsViewerState("live/lane-01/index.m3u8", authenticatedNode, "viewer-42", "closing"))
+            .then(() => {
+                expect(fetchStub).to.have.been.calledOnce;
+                const [url, init] = fetchStub.firstCall.args;
+                expect(url).to.equal("/sensorhub/video-files/live/lane-01/index.m3u8");
+                expect(init.headers[HLS_VIEWER_ID_HEADER]).to.equal("viewer-42");
+                expect(init.headers[HLS_VIEWER_STATE_HEADER]).to.equal("closing");
+                expect(init.headers.Authorization).to.equal("Basic secret");
+            });
     });
 
     it("constructs configured and same-origin-safe playlist URLs", () => {
