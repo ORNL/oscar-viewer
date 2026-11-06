@@ -27,7 +27,15 @@ import {
     type SharedConnectionLease,
 } from "@/lib/data/oscar/LaneCollection";
 import {EventTableData, sortEventsByAlarmPriority} from "@/lib/data/oscar/TableHelpers";
-import {hasEmlNonThreatMarker} from "@/lib/data/oscar/adjudication/EmlMetadata";
+import {
+    adjudicationCodeMarker,
+    AdjudicationCodes,
+} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
+import {
+    extractLatestAdjudicationCode,
+    hasEmlNonThreatMarker,
+} from "@/lib/data/oscar/adjudication/EmlMetadata";
+import {useCustomAdjudicationCodes} from "@/app/hooks/useCustomAdjudicationCodes";
 import {isOccupancyDataStream, isThresholdDataStream} from "@/lib/data/oscar/Utilities";
 import {convertToMap} from "@/app/utils/Utils";
 import {OCCUPANCY_PILLAR_DEF} from "@/lib/data/Constants";
@@ -154,6 +162,45 @@ export default function EventTable({
 
     const nodeOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name))).sort(), [stableLaneMap]);
     const laneOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.laneName))).sort(), [stableLaneMap]);
+
+    const customCodeNodes = useMemo(() => {
+        if (!viewAdjudicated && !filterDialogOpen) return [];
+        const unique = new Map<string, any>();
+        for (const lane of stableLaneMap.values()) {
+            const node = lane.parentNode as any;
+            if (
+                node?.id &&
+                typeof node.getConnectedSystemsEndpoint === "function" &&
+                typeof node.fetchDataStreamWithObservedProperty === "function" &&
+                typeof node.createRealtimeObservationSource === "function"
+            ) {
+                unique.set(node.id, node);
+            }
+        }
+        return Array.from(unique.values());
+    }, [filterDialogOpen, stableLaneMap, viewAdjudicated]);
+    const {codes: customAdjudicationCodes} = useCustomAdjudicationCodes(customCodeNodes, {mode: "union"});
+
+    const formatAdjudicationCodeLabel = useCallback((code: number): string => {
+        const builtIn = AdjudicationCodes.codes.find(entry => entry.code === code && entry.code > 0);
+        if (builtIn) return t(`adjudicationCode.${builtIn.code}`);
+        const custom = customAdjudicationCodes.find(entry => entry.code === code);
+        if (custom) return t("customAdjudicationCodeLabel", {code: custom.code, label: custom.label});
+        return t("customAdjudicationCodeLabel", {code, label: `${code}`});
+    }, [customAdjudicationCodes, t]);
+
+    const adjudicationCodeOptions = useMemo(() => [
+        ...AdjudicationCodes.codes
+            .filter(entry => entry.code > 0)
+            .map(entry => ({
+                value: String(entry.code),
+                label: t(`adjudicationCode.${entry.code}`),
+            })),
+        ...customAdjudicationCodes.map(entry => ({
+            value: String(entry.code),
+            label: t("customAdjudicationCodeLabel", {code: entry.code, label: entry.label}),
+        })),
+    ], [customAdjudicationCodes, t]);
 
     const baseServerFilter = useMemo(() => {
         if (tableMode === "alarmtable")
@@ -564,7 +611,12 @@ export default function EventTable({
             setRowCount(previous => Math.max(0, previous - successful.length));
         } else {
             setRows(previous => previous.map(event => {
-                if (successfulKeys.has(eventSelectionKey(event))) event.adjudicatedIds = ["bulk-adjudicated"];
+                if (successfulKeys.has(eventSelectionKey(event))) {
+                    event.adjudicatedIds = [
+                        "bulk-adjudicated",
+                        adjudicationCodeMarker(values.adjudicationCode.code),
+                    ];
+                }
                 return event;
             }));
         }
@@ -614,13 +666,18 @@ export default function EventTable({
                 : (value?.length > 0 ? t("yes") : t("no")),
         },
         {
+            field: "adjudicationCode", headerName: t("adjudicationCode"), minWidth: 210, flex: 1.5,
+            valueGetter: (_value, row) => extractLatestAdjudicationCode(row.adjudicatedIds),
+            valueFormatter: (value: number | null) => value === null || value === undefined ? "—" : formatAdjudicationCodeLabel(value),
+        },
+        {
             field: "Menu", headerName: "", type: "actions", minWidth: 50,
             getActions: params => [<GridActionsCellItem key="details" icon={<VisibilityRoundedIcon />} label={t("details")} onClick={() => previewEvent(params.row, true)} showInMenu />],
         },
-    ], [locale, t]);
+    ], [formatAdjudicationCodeLabel, locale, t]);
 
     const getColumnList = () => columns
-        .filter(column => viewAdjudicated || column.field !== "adjudicatedIds")
+        .filter(column => viewAdjudicated || (column.field !== "adjudicatedIds" && column.field !== "adjudicationCode"))
         .map(column => column.field);
 
     const retryEventQueries = () => {
@@ -684,7 +741,7 @@ export default function EventTable({
                 }}
                 initialState={{
                     sorting: {sortModel: [{field: "status", sort: "asc"}]},
-                    columns: {columnVisibilityModel: {adjudicatedIds: viewAdjudicated}},
+                    columns: {columnVisibilityModel: {adjudicatedIds: viewAdjudicated, adjudicationCode: false}},
                 }}
                 getCellClassName={(params: GridCellParams<any, any, string>) => {
                     if (params.value === "Gamma") return "highlightGamma";
@@ -706,6 +763,7 @@ export default function EventTable({
                 filter={filter}
                 nodeOptions={nodeOptions}
                 laneOptions={laneOptions}
+                adjudicationCodeOptions={adjudicationCodeOptions}
                 t={t}
                 onClose={() => setFilterDialogOpen(false)}
                 onApply={applyFilter}

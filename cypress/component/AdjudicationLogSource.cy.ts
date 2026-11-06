@@ -333,7 +333,7 @@ describe("adjudication log source discovery", () => {
         });
     });
 
-    it("skips synthetic eml-non-threat and bulk-adjudicated markers when resolving per-command statuses", () => {
+    it("skips synthetic eml-non-threat, code:*, and bulk-adjudicated markers when resolving per-command statuses", () => {
         const requestedUrls: string[] = [];
         const searchStatus = cy.stub();
         const fetchStub = cy.stub().callsFake(async (url: string) => {
@@ -341,7 +341,7 @@ describe("adjudication log source discovery", () => {
             if (url.endsWith("/observations/obs-eml-9")) {
                 return new Response(JSON.stringify({
                     id: "obs-eml-9",
-                    result: {occupancyCount: 9, adjudicatedIds: ["eml-non-threat", "cmd-eml-9"]},
+                    result: {occupancyCount: 9, adjudicatedIds: ["eml-non-threat", "cmd-eml-9", "code:9999"]},
                 }), {status: 200});
             }
             if (url.includes("/commands/cmd-eml-9/status?")) {
@@ -380,7 +380,11 @@ describe("adjudication log source discovery", () => {
         } as any;
 
         cy.wrap(fetchOccupancyAdjudicationStatuses({
-            event: {occupancyObsId: "obs-eml-9", occupancyCount: "9", adjudicatedIds: ["eml-non-threat", "bulk-adjudicated"]},
+            event: {
+                occupancyObsId: "obs-eml-9",
+                occupancyCount: "9",
+                adjudicatedIds: ["eml-non-threat", "bulk-adjudicated", "code:9999", "code:4"],
+            },
             source,
             fetchImpl: fetchStub as any,
         })).then((entries: any[]) => {

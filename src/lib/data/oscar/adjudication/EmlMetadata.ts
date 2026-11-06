@@ -1,4 +1,8 @@
-import {EML_NON_THREAT_CODE, EML_NON_THREAT_MARKER} from "./models/AdjudicationConstants";
+import {
+    ADJUDICATION_CODE_MARKER_PREFIX,
+    EML_NON_THREAT_CODE,
+    EML_NON_THREAT_MARKER,
+} from "./models/AdjudicationConstants";
 
 export const EML_METADATA_PREFIX = "EML_METADATA:";
 
@@ -37,9 +41,29 @@ export function hasEmlNonThreatMarker(adjudicatedIds?: readonly unknown[] | null
     return adjudicatedIds.some(value => String(value ?? "").trim() === EML_NON_THREAT_MARKER);
 }
 
+export function parseAdjudicationCodeMarker(value: unknown): number | null {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed.startsWith(ADJUDICATION_CODE_MARKER_PREFIX)) return null;
+    const digits = trimmed.slice(ADJUDICATION_CODE_MARKER_PREFIX.length);
+    if (!/^\d+$/.test(digits)) return null;
+    const parsed = Number(digits);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export function extractLatestAdjudicationCode(adjudicatedIds?: readonly unknown[] | null): number | null {
+    if (!Array.isArray(adjudicatedIds) || adjudicatedIds.length === 0) return null;
+    for (let index = adjudicatedIds.length - 1; index >= 0; index -= 1) {
+        const code = parseAdjudicationCodeMarker(adjudicatedIds[index]);
+        if (code !== null) return code;
+    }
+    return hasEmlNonThreatMarker(adjudicatedIds) ? EML_NON_THREAT_CODE : null;
+}
+
 export function isSyntheticAdjudicationMarker(id: string): boolean {
     const trimmed = String(id ?? "").trim();
-    return trimmed === EML_NON_THREAT_MARKER || trimmed === "bulk-adjudicated";
+    return trimmed === EML_NON_THREAT_MARKER
+        || trimmed === "bulk-adjudicated"
+        || parseAdjudicationCodeMarker(trimmed) !== null;
 }
 
 export function parseAdjudicationFeedbackWithEmlMetadata(rawFeedback: unknown): {

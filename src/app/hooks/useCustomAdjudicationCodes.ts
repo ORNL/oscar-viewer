@@ -5,14 +5,23 @@ import ObservationFilter from "osh-js/source/core/consysapi/observation/Observat
 import {EventType} from "osh-js/source/core/event/EventType";
 import {INode} from "@/lib/data/osh/Node";
 import {AdjudicationCode} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
-import {commonCustomCodes, findCustomCodesStream, parseCustomCodes} from "@/lib/data/oscar/adjudication/CustomAdjudicationCodes";
+import {
+    commonCustomCodes,
+    findCustomCodesStream,
+    parseCustomCodes,
+    unionCustomCodes,
+} from "@/lib/data/oscar/adjudication/CustomAdjudicationCodes";
 
-export function useCustomAdjudicationCodes(nodes: INode[]) {
+export function useCustomAdjudicationCodes(
+    nodes: INode[],
+    options?: {mode?: "intersection" | "union"},
+) {
+    const mode = options?.mode ?? "intersection";
     const [result, setResult] = useState({key: "", codes: [] as AdjudicationCode[], failed: false, loading: true, missing: false});
     const [revision, setRevision] = useState(0);
     const currentNodes = useRef(nodes);
     currentNodes.current = nodes;
-    const key = JSON.stringify(nodes.map(node => [node.id, node.getConnectedSystemsEndpoint(false)]));
+    const key = JSON.stringify([mode, ...nodes.map(node => [node.id, node.getConnectedSystemsEndpoint(false)])]);
 
     useEffect(() => {
         let active = true;
@@ -22,10 +31,11 @@ export function useCustomAdjudicationCodes(nodes: INode[]) {
         const settled = new Set<string>();
         const failed = new Set<string>();
         const missing = new Set<string>();
+        const combineCodes = mode === "union" ? unionCustomCodes : commonCustomCodes;
         const publish = () => {
             if (active) setResult({
                 key,
-                codes: commonCustomCodes(uniqueNodes.map(node => choices.get(node.id) ?? [])),
+                codes: combineCodes(uniqueNodes.map(node => choices.get(node.id) ?? [])),
                 loading: settled.size < uniqueNodes.length,
                 failed: failed.size > 0,
                 missing: missing.size > 0,

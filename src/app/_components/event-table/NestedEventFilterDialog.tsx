@@ -33,6 +33,7 @@ import {
     eventFilterFieldType,
     operatorsForEventFilterField,
 } from "@/lib/data/oscar/EventFilter";
+import {AdjudicationCodes} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
 
 const MAX_DEPTH = 3;
 const MAX_RULES = 20;
@@ -45,6 +46,7 @@ interface Props {
     filter: EventFilterGroup;
     nodeOptions: string[];
     laneOptions: string[];
+    adjudicationCodeOptions?: Array<{value: string; label: string}>;
     t: (key: string, values?: Record<string, unknown>) => string;
     onClose: () => void;
     onApply: (filter: EventFilterGroup) => void;
@@ -60,6 +62,7 @@ const fieldKeys: Record<EventFilterField, string> = {
     maxNeutron: "maxNeutron",
     status: "status",
     adjudicatedIds: "adjudicated",
+    adjudicationCode: "adjudicationCode",
 };
 
 const operatorKeys: Record<EventFilterOperator, string> = {
@@ -104,12 +107,32 @@ function appendChild(root: EventFilterGroup, parentId: string, child: EventFilte
     return visit(root);
 }
 
-export default function NestedEventFilterDialog({open, filter, nodeOptions, laneOptions, t, onClose, onApply}: Props) {
+export default function NestedEventFilterDialog({
+    open,
+    filter,
+    nodeOptions,
+    laneOptions,
+    adjudicationCodeOptions,
+    t,
+    onClose,
+    onApply,
+}: Props) {
     const [draft, setDraft] = useState<EventFilterGroup>(() => cloneEventFilter(filter));
 
     useEffect(() => {
         if (open) setDraft(cloneEventFilter(filter));
     }, [open, filter]);
+
+    const resolvedAdjudicationCodeOptions = useMemo(() => (
+        adjudicationCodeOptions && adjudicationCodeOptions.length > 0
+            ? adjudicationCodeOptions
+            : AdjudicationCodes.codes
+                .filter(entry => entry.code > 0)
+                .map(entry => ({
+                    value: String(entry.code),
+                    label: t(`adjudicationCode.${entry.code}`),
+                }))
+    ), [adjudicationCodeOptions, t]);
 
     const activeRuleCount = useMemo(() => countEventFilterRules(draft), [draft]);
     const totalRuleCount = useMemo(() => countAllRules(draft), [draft]);
@@ -137,13 +160,18 @@ export default function NestedEventFilterDialog({open, filter, nodeOptions, lane
             {value: "No", label: t("no")},
             {value: "EML Non-Threat", label: t("emlNonThreat")},
         ];
+        if (rule.field === "adjudicationCode") options = resolvedAdjudicationCodeOptions;
 
         if (options.length > 0 && ["equals", "notEquals", "isAnyOf"].includes(rule.operator)) {
             const value = isMultiple ? (Array.isArray(rule.value) ? rule.value : [String(rule.value)].filter(Boolean)) : String(Array.isArray(rule.value) ? rule.value[0] ?? "" : rule.value);
+            const valueLabelId = `event-filter-value-label-${rule.id}`;
+            const valueSelectId = `event-filter-value-${rule.id}`;
             return (
                 <FormControl size="small" sx={{minWidth: 180, flex: 1}}>
-                    <InputLabel>{t("filterValue")}</InputLabel>
+                    <InputLabel id={valueLabelId}>{t("filterValue")}</InputLabel>
                     <Select
+                        id={valueSelectId}
+                        labelId={valueLabelId}
                         multiple={isMultiple}
                         label={t("filterValue")}
                         value={value}
@@ -156,6 +184,9 @@ export default function NestedEventFilterDialog({open, filter, nodeOptions, lane
         }
 
         const inputType = type === "number" ? "number" : type === "date" ? "datetime-local" : "text";
+        const nonProseInputProps = inputType === "text"
+            ? {autoCorrect: "off", autoCapitalize: "off", spellCheck: false}
+            : undefined;
         const valueLabel = rule.operator === "between"
             ? t("filterFrom")
             : rule.operator === "greaterThanOrEqual"
@@ -166,22 +197,26 @@ export default function NestedEventFilterDialog({open, filter, nodeOptions, lane
         return (
             <>
                 <TextField
+                    id={`event-filter-input-${rule.id}`}
                     size="small"
                     type={inputType}
                     label={valueLabel}
                     value={Array.isArray(rule.value) ? rule.value[0] ?? "" : rule.value}
                     onChange={event => updateRule(rule, {value: event.target.value})}
                     InputLabelProps={type === "date" ? {shrink: true} : undefined}
+                    inputProps={nonProseInputProps}
                     sx={{minWidth: 170, flex: 1}}
                 />
                 {rule.operator === "between" && (
                     <TextField
+                        id={`event-filter-input-to-${rule.id}`}
                         size="small"
                         type={inputType}
                         label={t("filterTo")}
                         value={rule.value2 ?? ""}
                         onChange={event => updateRule(rule, {value2: event.target.value})}
                         InputLabelProps={type === "date" ? {shrink: true} : undefined}
+                        inputProps={nonProseInputProps}
                         sx={{minWidth: 170, flex: 1}}
                     />
                 )}
@@ -191,11 +226,15 @@ export default function NestedEventFilterDialog({open, filter, nodeOptions, lane
 
     const renderNode = (node: EventFilterNode, depth: number, isRoot = false): React.ReactNode => {
         if (node.kind === "rule") {
+            const fieldLabelId = `event-filter-field-label-${node.id}`;
+            const operatorLabelId = `event-filter-operator-label-${node.id}`;
             return (
                 <Stack key={node.id} direction={{xs: "column", md: "row"}} spacing={1} alignItems={{md: "center"}}>
                     <FormControl size="small" sx={{minWidth: 170}}>
-                        <InputLabel>{t("filterField")}</InputLabel>
+                        <InputLabel id={fieldLabelId}>{t("filterField")}</InputLabel>
                         <Select
+                            id={`event-filter-field-${node.id}`}
+                            labelId={fieldLabelId}
                             label={t("filterField")}
                             value={node.field}
                             onChange={event => {
@@ -209,8 +248,10 @@ export default function NestedEventFilterDialog({open, filter, nodeOptions, lane
                         </Select>
                     </FormControl>
                     <FormControl size="small" sx={{minWidth: 190}}>
-                        <InputLabel>{t("filterOperator")}</InputLabel>
+                        <InputLabel id={operatorLabelId}>{t("filterOperator")}</InputLabel>
                         <Select
+                            id={`event-filter-operator-${node.id}`}
+                            labelId={operatorLabelId}
                             label={t("filterOperator")}
                             value={node.operator}
                             onChange={event => {
