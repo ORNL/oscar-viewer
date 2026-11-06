@@ -11,6 +11,15 @@ export interface AdjudicationCode {
 
 export const EML_NON_THREAT_CODE = 9999;
 export const EML_NON_THREAT_MARKER = "eml-non-threat";
+export const ADJUDICATION_CODE_MARKER_PREFIX = "code:";
+
+export function adjudicationCodeMarker(code: number): string {
+    const normalized = Math.trunc(code);
+    if (!Number.isFinite(normalized) || normalized < 0) {
+        throw new Error(`Invalid adjudication code: ${code}`);
+    }
+    return `${ADJUDICATION_CODE_MARKER_PREFIX}${normalized}`;
+}
 
 export class AdjudicationCodes {
     static codes: AdjudicationCode[] = [

@@ -25,6 +25,19 @@ export function commonCustomCodes(nodeCodes: AdjudicationCode[][]): Adjudication
         codes.some(candidate => candidate.code === code.code && candidate.label === code.label)));
 }
 
+/** Offer every configured custom code across visible nodes when filtering Event Log rows. */
+export function unionCustomCodes(nodeCodes: AdjudicationCode[][]): AdjudicationCode[] {
+    const merged = new Map<number, AdjudicationCode>();
+    for (const codes of nodeCodes) {
+        for (const entry of codes) {
+            if (!merged.has(entry.code)) {
+                merged.set(entry.code, entry);
+            }
+        }
+    }
+    return [...merged.values()].sort((left, right) => left.code - right.code);
+}
+
 export function resolveAdjudicationCode(code: number, customCodes: AdjudicationCode[]): AdjudicationCode {
     return AdjudicationCodes.codes.find(entry => entry.code === code)
         ?? customCodes.find(entry => entry.code === code)

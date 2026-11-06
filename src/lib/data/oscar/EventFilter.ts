@@ -1,6 +1,14 @@
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
-import {EML_NON_THREAT_MARKER} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
-import {hasEmlNonThreatMarker} from "@/lib/data/oscar/adjudication/EmlMetadata";
+import {
+    adjudicationCodeMarker,
+    EML_NON_THREAT_CODE,
+    EML_NON_THREAT_MARKER,
+} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
+import {
+    extractLatestAdjudicationCode,
+    hasEmlNonThreatMarker,
+    parseAdjudicationCodeMarker,
+} from "@/lib/data/oscar/adjudication/EmlMetadata";
 
 export type EventFilterLogic = "and" | "or";
 export type EventFilterField =
@@ -12,7 +20,8 @@ export type EventFilterField =
     | "maxGamma"
     | "maxNeutron"
     | "status"
-    | "adjudicatedIds";
+    | "adjudicatedIds"
+    | "adjudicationCode";
 export type EventFilterOperator =
     | "equals"
     | "notEquals"
@@ -69,12 +78,12 @@ export const createEventFilterRule = (field: EventFilterField = "status"): Event
     kind: "rule",
     id: createEventFilterId(),
     field,
-    operator: field === "status" || field === "adjudicatedIds"
+    operator: field === "status" || field === "adjudicatedIds" || field === "adjudicationCode"
         ? "isAnyOf"
         : eventFilterFieldType(field) === "number"
             ? "greaterThanOrEqual"
             : "equals",
-    value: field === "status" || field === "adjudicatedIds" ? [] : "",
+    value: field === "status" || field === "adjudicatedIds" || field === "adjudicationCode" ? [] : "",
 });
 
 export const createEventFilterGroup = (logic: EventFilterLogic = "and"): EventFilterGroup => ({
@@ -107,19 +116,35 @@ export const eventFilterFieldType = (field: EventFilterField): "metadata" | "str
     if (field === "node" || field === "laneId") return "metadata";
     if (field === "occupancyCount" || field === "maxGamma" || field === "maxNeutron") return "number";
     if (field === "startTime" || field === "endTime") return "date";
-    if (field === "status" || field === "adjudicatedIds") return "enum";
+    if (field === "status" || field === "adjudicatedIds" || field === "adjudicationCode") return "enum";
     return "string";
 };
 
 export const operatorsForEventFilterField = (field: EventFilterField): EventFilterOperator[] => {
     if (field === "adjudicatedIds")
         return ["equals", "notEquals", "contains", "isAnyOf", "isEmpty", "isNotEmpty"];
+    if (field === "adjudicationCode")
+        return ["equals", "notEquals", "isAnyOf", "isEmpty", "isNotEmpty"];
     const type = eventFilterFieldType(field);
     if (type === "metadata") return ["equals", "notEquals", "contains", "startsWith", "isAnyOf"];
     if (type === "number") return ["greaterThanOrEqual", "lessThanOrEqual", "between", "equals"];
     if (type === "date") return ["greaterThan", "lessThan", "between"];
     if (type === "enum") return ["equals", "notEquals", "isAnyOf"];
     return ["equals", "notEquals", "contains", "startsWith", "isEmpty", "isNotEmpty"];
+};
+
+const normalizeAdjudicationCodeToken = (raw: unknown): number | null => {
+    const markerCode = parseAdjudicationCodeMarker(raw);
+    if (markerCode !== null) return markerCode;
+    const trimmed = String(raw ?? "").trim();
+    if (!trimmed) return null;
+    const lower = trimmed.toLocaleLowerCase();
+    if (lower === EML_NON_THREAT_MARKER || lower === "eml non-threat") {
+        return EML_NON_THREAT_CODE;
+    }
+    if (!/^\d+$/.test(trimmed)) return null;
+    const parsed = Number(trimmed);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 };
 
 const quote = (value: unknown): string => `'${String(value).split("'").join("''")}'`;
@@ -252,6 +277,43 @@ const compileRule = (rule: EventFilterRule, metadata: EventFilterMetadata): Comp
         return FALSE;
     }
 
+    if (rule.field === "adjudicationCode") {
+        if (rule.operator === "isEmpty")
+            return {kind: "expression", value: "adjudicatedIdsCount=0"};
+        if (rule.operator === "isNotEmpty")
+            return {kind: "expression", value: "adjudicatedIdsCount>0"};
+
+        if (rule.operator === "notEquals") {
+            const excluded = normalizeAdjudicationCodeToken(Array.isArray(rule.value) ? rule.value[0] : rule.value);
+            if (excluded === null) return TRUE;
+            return {
+                kind: "expression",
+                value: `(adjudicatedIdsCount=0 OR adjudicatedIds!=${quote(adjudicationCodeMarker(excluded))})`,
+            };
+        }
+
+        const rawList = Array.isArray(rule.value) ? rule.value : [rule.value];
+        const codes = Array.from(new Set(
+            rawList
+                .map(normalizeAdjudicationCodeToken)
+                .filter((code): code is number => code !== null),
+        ));
+        if (codes.length === 0) return FALSE;
+        if (codes.length === 1) {
+            return {
+                kind: "expression",
+                value: `adjudicatedIdsCount>0 AND adjudicatedIds=${quote(adjudicationCodeMarker(codes[0]))}`,
+            };
+        }
+        const disjuncts = codes
+            .map(code => `(adjudicatedIds=${quote(adjudicationCodeMarker(code))})`)
+            .join(" OR ");
+        return {
+            kind: "expression",
+            value: `adjudicatedIdsCount>0 AND (${disjuncts})`,
+        };
+    }
+
     const property = rule.field;
     const rawValue = Array.isArray(rule.value) ? rule.value[0] : rule.value;
     const fieldType = eventFilterFieldType(rule.field);
@@ -369,6 +431,23 @@ const evaluateRule = (rule: EventFilterRule, event: EventTableData, metadata: Ev
         return (wantsYes && hasAdjudication)
             || (wantsNo && !hasAdjudication)
             || (wantsEml && isEmlNonThreat);
+    }
+    if (rule.field === "adjudicationCode") {
+        const hasAdjudication = (event.adjudicatedIds?.length ?? 0) > 0;
+        if (rule.operator === "isEmpty") return !hasAdjudication;
+        if (rule.operator === "isNotEmpty") return hasAdjudication;
+
+        const latestCode = extractLatestAdjudicationCode(event.adjudicatedIds);
+        if (rule.operator === "notEquals") {
+            const excluded = normalizeAdjudicationCodeToken(Array.isArray(rule.value) ? rule.value[0] : rule.value);
+            return excluded === null ? true : latestCode !== excluded;
+        }
+
+        const rawList = Array.isArray(rule.value) ? rule.value : [rule.value];
+        const codes = rawList
+            .map(normalizeAdjudicationCodeToken)
+            .filter((code): code is number => code !== null);
+        return latestCode !== null && codes.includes(latestCode);
     }
     if (rule.field === "startTime" || rule.field === "endTime") {
         const actual = new Date(event[rule.field]).getTime();

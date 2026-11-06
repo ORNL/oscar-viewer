@@ -10,8 +10,16 @@ import {
 } from "../../src/lib/data/oscar/EventFilter";
 import {runWithConcurrency} from "../../src/lib/data/oscar/BulkAdjudication";
 import {sortEventsByAlarmPriority} from "../../src/lib/data/oscar/TableHelpers";
-import {parseCustomCodes, resolveAdjudicationCode} from "../../src/lib/data/oscar/adjudication/CustomAdjudicationCodes";
-import {parseAdjudicationFeedbackWithEmlMetadata} from "../../src/lib/data/oscar/adjudication/EmlMetadata";
+import {
+    parseCustomCodes,
+    resolveAdjudicationCode,
+    unionCustomCodes,
+} from "../../src/lib/data/oscar/adjudication/CustomAdjudicationCodes";
+import {
+    extractLatestAdjudicationCode,
+    parseAdjudicationCodeMarker,
+    parseAdjudicationFeedbackWithEmlMetadata,
+} from "../../src/lib/data/oscar/adjudication/EmlMetadata";
 
 describe("nested event filters", () => {
     it("uses inclusive comparisons as the primary controls for numeric event fields", () => {
@@ -375,5 +383,101 @@ describe("EML Non-Threat event filtering and metadata parsing", () => {
             {code: 9999, label: "Attempted override"},
             {code: 101, label: "Site innocent"},
         ])).to.deep.equal([{code: 101, label: "Site innocent", group: "Custom"}]);
+    });
+});
+
+describe("Adjudication Code Event Log filtering and custom code union", () => {
+    const metadata = {nodeId: "node-1", nodeName: "Local", laneId: "lane1"};
+    const normEvent = {adjudicatedIds: ["02fb9", "code:4"]} as any;
+    const customEvent = {adjudicatedIds: ["02fc1", "code:105"]} as any;
+    const emlMarkedEvent = {adjudicatedIds: ["eml-non-threat", "02fa1", "code:9999"]} as any;
+    const emlLegacyEvent = {adjudicatedIds: ["eml-non-threat"]} as any;
+    const overriddenEmlEvent = {adjudicatedIds: ["eml-non-threat", "02fa1", "02fd3", "code:1"]} as any;
+    const openEvent = {adjudicatedIds: []} as any;
+
+    it("compiles adjudicationCode equals, notEquals, isAnyOf, isEmpty, and isNotEmpty with exact live parity", () => {
+        expect(operatorsForEventFilterField("adjudicationCode")).to.deep.equal([
+            "equals",
+            "notEquals",
+            "isAnyOf",
+            "isEmpty",
+            "isNotEmpty",
+        ]);
+        expect(createEventFilterRule("adjudicationCode").operator).to.equal("isAnyOf");
+        expect(createEventFilterRule("adjudicationCode").value).to.deep.equal([]);
+
+        expect(parseAdjudicationCodeMarker("code:4")).to.equal(4);
+        expect(parseAdjudicationCodeMarker("eml-non-threat")).to.equal(null);
+        expect(extractLatestAdjudicationCode(["eml-non-threat", "02fa1", "02fd3", "code:1"])).to.equal(1);
+        expect(extractLatestAdjudicationCode(["eml-non-threat"])).to.equal(9999);
+
+        const equalsNorm: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "c1", field: "adjudicationCode", operator: "equals", value: "4"}],
+        };
+        expect(compileEventFilterForLane(equalsNorm, metadata))
+            .to.equal("adjudicatedIdsCount>0 AND adjudicatedIds='code:4'");
+        expect(eventMatchesFilter(equalsNorm, normEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(equalsNorm, customEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(equalsNorm, openEvent, metadata)).to.equal(false);
+
+        const anyOfCodes: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "c2", field: "adjudicationCode", operator: "isAnyOf", value: ["4", "105", "9999"]}],
+        };
+        expect(compileEventFilterForLane(anyOfCodes, metadata)).to.equal(
+            "adjudicatedIdsCount>0 AND ((adjudicatedIds='code:4') OR (adjudicatedIds='code:105') OR (adjudicatedIds='code:9999'))",
+        );
+        expect(eventMatchesFilter(anyOfCodes, normEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(anyOfCodes, customEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(anyOfCodes, emlMarkedEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(anyOfCodes, emlLegacyEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(anyOfCodes, overriddenEmlEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(anyOfCodes, openEvent, metadata)).to.equal(false);
+
+        const notEmlCode: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "c3", field: "adjudicationCode", operator: "notEquals", value: "9999"}],
+        };
+        expect(compileEventFilterForLane(notEmlCode, metadata))
+            .to.equal("(adjudicatedIdsCount=0 OR adjudicatedIds!='code:9999')");
+        expect(eventMatchesFilter(notEmlCode, emlMarkedEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(notEmlCode, emlLegacyEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(notEmlCode, overriddenEmlEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(notEmlCode, normEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(notEmlCode, openEvent, metadata)).to.equal(true);
+
+        const emptyCode: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "c4", field: "adjudicationCode", operator: "isEmpty", value: ""}],
+        };
+        const nonEmptyCode: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "c5", field: "adjudicationCode", operator: "isNotEmpty", value: ""}],
+        };
+        expect(compileEventFilterForLane(emptyCode, metadata)).to.equal("adjudicatedIdsCount=0");
+        expect(compileEventFilterForLane(nonEmptyCode, metadata)).to.equal("adjudicatedIdsCount>0");
+        expect(eventMatchesFilter(emptyCode, openEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(emptyCode, normEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(nonEmptyCode, openEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(nonEmptyCode, normEvent, metadata)).to.equal(true);
+    });
+
+    it("unions configured custom disposition codes across nodes in ascending numeric order", () => {
+        const merged = unionCustomCodes([
+            [{code: 205, label: "Site B", group: "Custom"}, {code: 101, label: "Site A", group: "Custom"}],
+            [{code: 101, label: "Site A", group: "Custom"}, {code: 150, label: "Site Mid", group: "Custom"}],
+        ]);
+        expect(merged.map(entry => entry.code)).to.deep.equal([101, 150, 205]);
     });
 });
