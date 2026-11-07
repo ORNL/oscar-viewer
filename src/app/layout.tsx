@@ -8,25 +8,43 @@ import type { Metadata, Viewport } from "next";
 export const metadata: Metadata = {
     title: "OSCAR Viewer",
     description: "OpenSensorHub OSCAR Viewer Application",
-    manifest: "/manifest.json",
     appleWebApp: {
         capable: true,
         statusBarStyle: "default",
         title: "OSCAR Viewer",
     },
     icons: {
-        icon: {
-            url: '/icons/icon-96x96.png',
-            type: 'image/png'
-        },
-        shortcut: {
-            url: '/icons/icon-96x96.png',
-            type: 'image/png',
-        },
-        apple: {
-            url: '/icons/icon-96x96.png',
-            type: 'image/png',
-        },
+        icon: [
+            {
+                url: '/icons/icon-192x192.png',
+                sizes: '192x192',
+                type: 'image/png',
+            },
+            {
+                url: '/icons/icon-512x512.png',
+                sizes: '512x512',
+                type: 'image/png',
+            },
+            {
+                url: '/icons/icon-96x96.png',
+                sizes: '96x96',
+                type: 'image/png',
+            },
+        ],
+        shortcut: [
+            {
+                url: '/icons/icon-192x192.png',
+                sizes: '192x192',
+                type: 'image/png',
+            },
+        ],
+        apple: [
+            {
+                url: '/icons/icon-192x192.png',
+                sizes: '192x192',
+                type: 'image/png',
+            },
+        ],
     }
 };
 
@@ -43,6 +61,9 @@ export default function RootLayout({children}: {
 
     return (
         <html lang="en">
+        <head>
+            <link rel="manifest" href="/manifest.json" crossOrigin="use-credentials" />
+        </head>
         <body>
         <Providers>
             <StoreProvider>

@@ -145,6 +145,11 @@ describe("operational view scoping", () => {
                 laneUIDs: ["urn:osh:system:lane:lane1", "urn:osh:system:lane:lane2"],
                 error: null,
             });
+        expect(resolveReportScope("NODE", "ADJUDICATION_DETAILS", "", [], catalog))
+            .to.deep.equal({
+                laneUIDs: ["urn:osh:system:lane:lane1", "urn:osh:system:lane:lane2"],
+                error: null,
+            });
     });
 
     it("recognizes statistics controls with the optional lane scope field", () => {
