@@ -279,6 +279,7 @@
   "generateReport": "Generate Report",
   "generatingReport": "Generating Report...",
   "generatedReport": "Generated Report",
+  "downloadReportPdf": "Open / Download PDF",
   "generateReportPrompt": "Please generate a report to view and download it here.",
   "nodeAddressExists": "A node with address {address}:{port} already exists.",
   "nodeNameExists": "A node named \"{name}\" already exists.",

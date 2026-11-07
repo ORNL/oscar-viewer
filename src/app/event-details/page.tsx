@@ -366,16 +366,16 @@ export default function EventDetailsPage() {
                 {/* HEADER */}
                 <Grid item container xs={12} spacing={2} justifyContent={"space-between"}>
                     <Grid item container spacing={2} xs alignItems={"center"}>
-                        <Grid item>
+                        <Grid item sx={{ displayPrint: 'none' }}>
                             <BackButton/>
                         </Grid>
                         <Grid item>
-                            <Typography variant="h4">
+                            <Typography variant="h4" sx={{ textWrap: 'balance' }}>
                                 { t('eventDetails') }
                             </Typography>
                         </Grid>
                     </Grid>
-                    {eventData && <Grid item xs={12} sm={"auto"}>
+                    {eventData && <Grid item xs={12} sm={"auto"} sx={{ displayPrint: 'none' }}>
                         <Stack direction={{xs: "column", sm: "row"}} spacing={1}>
                             {laneEntry && <ShareOccupancyButton key={`${eventData.id}:share`} event={eventData} lane={laneEntry}/>}
                             {laneEntry && <AlarmQrExportButton event={eventData} lane={laneEntry}/>}
@@ -448,7 +448,7 @@ export default function EventDetailsPage() {
                     <>
                         {/* EVENT PREVIEW */}
                         <Grid item xs={12}>
-                            <Paper variant='outlined'>
+                            <Paper variant='outlined' sx={{ '@media print': { breakInside: 'avoid' } }}>
                                 <DataRow
                                     eventData={eventData}
                                     nodeId={laneEntry.parentNode.id}
@@ -461,7 +461,7 @@ export default function EventDetailsPage() {
                         </Grid>
 
                         {/* EVENT MEDIA */}
-                        <Grid item xs={12}>
+                        <Grid item xs={12} sx={{ '@media print': { breakInside: 'avoid' } }}>
                             {dataSourceError ? (
                                 <Alert severity="error">{t('eventDataLoadFailed')}</Alert>
                             ) : datasourcesReady && loadedEvent === eventData ? (
@@ -483,13 +483,13 @@ export default function EventDetailsPage() {
                         {/* MISC TABLE */}
                         <Grid item container xs={12} spacing={2}>
                             <Grid item xs={12} md={6}>
-                                <Paper variant='outlined' sx={{ height: '100%'}}>
+                                <Paper variant='outlined' sx={{ height: '100%', '@media print': { height: 'auto', breakInside: 'avoid' } }}>
                                     <MiscTable key={eventData.id} eventData={eventData} currentTime={eventData.startTime}/>
                                 </Paper>
                             </Grid>
 
                             <Grid item xs={12} md={6}>
-                                <Paper variant='outlined' sx={{ height: '100%'}}>
+                                <Paper variant='outlined' sx={{ height: '100%', '@media print': { height: 'auto', breakInside: 'avoid' } }}>
                                     <DailyFileTable event={eventData}/>
                                 </Paper>
                             </Grid>

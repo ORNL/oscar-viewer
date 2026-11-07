@@ -724,7 +724,13 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
             </Paper>
 
             {/*Evidence Collection*/}
-            <Paper variant='outlined' sx={{ p: 2 }}>
+            <Paper
+                variant='outlined'
+                sx={{
+                    p: 2,
+                    displayPrint: (uploadedFiles.length > 0 || scannedData.length > 0) ? 'block' : 'none',
+                }}
+            >
                 <Grid container spacing={2} sx={{ width: '100%' }}>
 
                     <Grid item xs={12}>
@@ -1016,7 +1022,7 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
                             </Stack>
                         </Box>
                     </Dialog>
-                    <Grid item container xs={12} spacing={2} alignItems="center">
+                    <Grid item container xs={12} spacing={2} alignItems="center" sx={{ displayPrint: 'none' }}>
                         <Grid item xs={"auto"}>
                             <Stack direction="row" spacing={2} alignItems="center">
                                 <Button
@@ -1081,7 +1087,7 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
                 </Grid>
             </Paper>
             {/*Adjudication FORM*/}
-            <Paper variant='outlined' sx={{ p: 2 }}>
+            <Paper variant='outlined' sx={{ p: 2, displayPrint: 'none' }}>
                 <Grid container spacing={2} sx={{ width: '100%' }}>
                     <Grid item container xs={12} spacing={2}>
                         <Grid item xs={12}>

@@ -386,7 +386,8 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     backgroundColor: "background.default",
                     color: "text.primary",
                     borderBottom: "solid",
-                    borderColor: "action.selected"
+                    borderColor: "action.selected",
+                    displayPrint: "none",
                 }}
                 isDesktop={isDesktop}
             >
@@ -512,13 +513,14 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             </Menu>
             {isDesktop ? (
                 /* Render permanent variant for DESKTOP */
-                <Drawer variant="permanent" open={drawerOpen}>
+                <Drawer variant="permanent" open={drawerOpen} sx={{ displayPrint: 'none' }}>
                     {drawerContent}
                 </Drawer>
             ) : (
                 /* Render temporary variant for MOBILE and TABLET */
                 <MuiDrawer variant="temporary" open={drawerOpen} onClose={handleDrawerClose}
                     sx={{
+                        displayPrint: 'none',
                         '& .MuiDrawer-paper': {
                         width: drawerWidthMobile,
                         },
@@ -538,14 +540,18 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     flex: '1 1 0%',
                     minInlineSize: 0,
                     overflowX: 'clip',
+                    '@media print': {
+                        overflow: 'visible',
+                        height: 'auto',
+                    },
                     transition: theme.transitions.create(['margin-left'], {
                         easing: theme.transitions.easing.sharp,
                         duration: theme.transitions.duration.standard,
                     }),
                 })}
             >
-                <DrawerHeader/>
-                <Box sx={{ p: 2, minInlineSize: 0, boxSizing: 'border-box' }}>
+                <DrawerHeader sx={{ displayPrint: 'none' }}/>
+                <Box sx={{ p: 2, minInlineSize: 0, boxSizing: 'border-box', '@media print': { p: 0 } }}>
                     {viewError && (
                         <Alert severity="error" sx={{mb: 2}}>
                             {viewError === "invalid"
