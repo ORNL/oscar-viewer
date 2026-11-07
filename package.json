@@ -5,7 +5,7 @@
   "scripts": {
     "prebuild": "npm run validate:dependencies && npm run validate:locales && node scripts/clean-build-output.js",
     "build": "next build --webpack",
-    "postbuild": "node scripts/verify-mqtt-bundle.js",
+    "postbuild": "node scripts/verify-mqtt-bundle.js && node scripts/verify-pwa-manifest.js",
     "audit:dependencies": "npm audit --audit-level=low",
     "validate:dependencies": "node scripts/verify-dependencies.js",
     "validate:locales": "node scripts/validate-locales.js",
