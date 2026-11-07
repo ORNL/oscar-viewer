@@ -56,14 +56,26 @@ export default function MiscTable({
     }, [eventData, currentTime, laneMapRef]);
 
     return (
-        <Box sx={{height: 300, width: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="h5">
+        <Box sx={{
+            height: 300,
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            minInlineSize: 0,
+            '@media print': { height: 'auto', overflow: 'visible' },
+        }}>
+            <Typography variant="h5" sx={{ p: 1, pb: 0, textWrap: 'balance' }}>
                 {t('occupancyOverview')}
             </Typography>
-            <TableContainer>
+            <TableContainer
+                role="region"
+                aria-label={t('eventMeasurements')}
+                tabIndex={0}
+                sx={{ maxInlineSize: '100%', '@media print': { overflow: 'visible' } }}
+            >
                 <Table
                     aria-label={t('eventMeasurements')}
-                    sx={{ minWidth: 500 }}
+                    sx={{ minWidth: { xs: 0, sm: 500 }, '@media print': { minWidth: 0 } }}
                 >
                     <TableBody>
                         <TableRow>

@@ -213,14 +213,12 @@ export default function ReportGeneratorView(){
                                 setOpenSnack(true);
                                 setIsGenerating(false);
                                 setCommandStatus(null);
-                                resetForm();
                             } else if (statusCode === 'FAILED') {
                                 setSnackMessage(t('reportGenerationFailed'));
                                 setSeverity("error");
                                 setOpenSnack(true);
                                 setIsGenerating(false);
                                 setCommandStatus(null);
-                                resetForm();
                             } else if (statusCode) {
                                 setCommandStatus(statusCode);
                             }
@@ -253,7 +251,6 @@ export default function ReportGeneratorView(){
             setOpenSnack(true);
             if (!isStreamingStatus) {
                 setIsGenerating(false);
-                resetForm();
             }
         }
     }
@@ -350,7 +347,7 @@ export default function ReportGeneratorView(){
         <Box>
             <Grid container spacing={4}>
                 <Grid item xs={12} md={5}>
-                    <Typography variant="h5" align="center" gutterBottom>
+                    <Typography variant="h5" align="center" gutterBottom sx={{ textWrap: 'balance' }}>
                         {t('generateAReport')}
                     </Typography>
 
@@ -404,16 +401,30 @@ export default function ReportGeneratorView(){
                         )}
 
 
-                        <Button
-                            variant="contained"
-                            size="large"
-                            fullWidth
-                            startIcon={<Download/>}
-                            onClick={handleGenerateReport}
-                            disabled={isGenerating || isLoadingOperationalViews || !selectedReportType || !selectedTimeRange || !selectedNode || Boolean(viewError) || (Boolean(activeViewKey) && !laneMapReady)}
-                        >
-                            {isGenerating ? t('generatingReport') : t('generateReport')}
-                        </Button>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                            <Button
+                                variant="contained"
+                                size="large"
+                                fullWidth
+                                startIcon={<Download/>}
+                                onClick={handleGenerateReport}
+                                disabled={isGenerating || isLoadingOperationalViews || !selectedReportType || !selectedTimeRange || !selectedNode || Boolean(viewError) || (Boolean(activeViewKey) && !laneMapReady)}
+                            >
+                                {isGenerating ? t('generatingReport') : t('generateReport')}
+                            </Button>
+
+                            {selectedNode && (
+                                <Button
+                                    variant="outlined"
+                                    size="large"
+                                    onClick={resetForm}
+                                    disabled={isGenerating}
+                                    sx={{ flexShrink: 0 }}
+                                >
+                                    {t('reset')}
+                                </Button>
+                            )}
+                        </Stack>
 
                         {commandStatus && (
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 1 }}>
@@ -429,13 +440,43 @@ export default function ReportGeneratorView(){
 
                 <Grid item xs={12} md={7}>
                     <Paper elevation={3} sx={{ padding: 2, height: "100%" }}>
-                        <Typography variant="h5" align="center" gutterBottom>
-                            {t('generatedReport')}
-                        </Typography>
+                        <Stack
+                            direction={{ xs: "column", sm: "row" }}
+                            spacing={1}
+                            alignItems="center"
+                            justifyContent="space-between"
+                            sx={{ mb: 1.5, minInlineSize: 0 }}
+                        >
+                            <Typography variant="h5" sx={{ textWrap: 'balance', minInlineSize: 0 }}>
+                                {t('generatedReport')}
+                            </Typography>
+                            {generatedURL && (
+                                <Button
+                                    component="a"
+                                    href={generatedURL}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<Download/>}
+                                    data-testid="download-generated-report"
+                                    sx={{ flexShrink: 0 }}
+                                >
+                                    {t('downloadReportPdf')}
+                                </Button>
+                            )}
+                        </Stack>
 
                         {generatedURL ? (
-                                <Box sx={{ height: "800px", border: "1px solid #ccc", borderRadius: 2, overflow: "hidden"}}>
-                                    <iframe width="100%" height="100%" src={generatedURL} style={{ border: "none"}} />
+                                <Box sx={{ height: "800px", border: "1px solid", borderColor: "divider", borderRadius: 2, overflow: "clip"}}>
+                                    <iframe
+                                        title={t('generatedReport')}
+                                        width="100%"
+                                        height="100%"
+                                        src={generatedURL}
+                                        style={{ border: "none", display: "block" }}
+                                    />
                                 </Box>
                             ) :
                             <Box

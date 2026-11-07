@@ -137,13 +137,21 @@ export default function DailyFileTable(props: { event: EventTableData; fetchImpl
     }
 
     return(
-        <Box sx={{height: 300, width: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="h5">
+        <Box sx={{
+            height: 300,
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            minInlineSize: 0,
+            '@media print': { height: 'auto', overflow: 'visible' },
+        }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1, pt: 0.5 }}>
+                <Typography variant="h5" sx={{ textWrap: 'balance' }}>
                     {t('dailyFileOccupancy')}
                 </Typography>
                 <IconButton
                     aria-label="download"
+                    sx={{ displayPrint: 'none' }}
                     onClick={() => {
                         handleDownload()
                     }}
@@ -162,6 +170,10 @@ export default function DailyFileTable(props: { event: EventTableData; fetchImpl
                     boxSizing: 'border-box',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-all',
+                    '@media print': {
+                        height: 'auto',
+                        overflow: 'visible',
+                    },
                 }}
             >
                 {logs.join('\n')}

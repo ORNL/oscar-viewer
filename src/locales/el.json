@@ -279,6 +279,7 @@
   "generateReport": "Δημιουργία αναφοράς",
   "generatingReport": "Δημιουργία αναφοράς...",
   "generatedReport": "Παραχθείσα αναφορά",
+  "downloadReportPdf": "Άνοιγμα / Λήψη PDF",
   "generateReportPrompt": "Δημιουργήστε μια αναφορά για να την προβάλετε και να την κατεβάσετε εδώ.",
   "nodeAddressExists": "Υπάρχει ήδη κόμβος με διεύθυνση {address}:{port}.",
   "nodeNameExists": "Υπάρχει ήδη κόμβος με το όνομα «{name}».",

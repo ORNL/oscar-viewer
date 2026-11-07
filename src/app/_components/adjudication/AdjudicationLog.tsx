@@ -452,6 +452,7 @@ export default function AdjudicationLog(props: {
                         {truncated}
                         {(summaryText.length > maxLength || emlMetadata !== null) && (
                             <button
+                                className="no-print"
                                 style={{ color: "#1976d2", border: "none", background: "none", cursor: "pointer" }}
                                 onClick={() => setFeedbackDialog({ open: true, text: dialogText })}
                             >
@@ -672,6 +673,11 @@ export default function AdjudicationLog(props: {
                     localeText={getDataGridLocaleText(language)}
                     rows={filteredLog}
                     columns={logColumns}
+                    sx={{
+                        '& .MuiDataGrid-footerContainer': {
+                            '@media print': { display: 'none' },
+                        },
+                    }}
                     initialState={{
                         pagination: {
                             paginationModel: {

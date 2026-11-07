@@ -279,6 +279,7 @@
   "generateReport": "Générer le rapport",
   "generatingReport": "Génération du rapport...",
   "generatedReport": "Rapport généré",
+  "downloadReportPdf": "Ouvrir / Télécharger le PDF",
   "generateReportPrompt": "Générez un rapport pour pouvoir l'afficher et le télécharger ici.",
   "nodeAddressExists": "Un nœud utilisant l'adresse {address}:{port} existe déjà.",
   "nodeNameExists": "Un nœud nommé « {name} » existe déjà.",
