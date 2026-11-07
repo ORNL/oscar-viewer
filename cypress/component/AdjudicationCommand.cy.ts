@@ -19,18 +19,27 @@ describe("adjudication command", () => {
         expect(JSON.parse(command).parameters.vehicleId).to.equal("TRUCK-204");
     });
 
-    it("encodes Adjudication Details output formats using the 5-field SWE report command schema", () => {
-        expect(resolveEffectiveReportCommandType("ADJUDICATION_DETAILS", "PDF")).to.equal("ADJUDICATION_DETAILS");
-        expect(resolveEffectiveReportCommandType("ADJUDICATION_DETAILS", "CSV")).to.equal("ADJUDICATION_DETAILS_CSV");
-        expect(resolveEffectiveReportCommandType("ADJUDICATION_DETAILS", "JSON")).to.equal("ADJUDICATION_DETAILS_JSON");
-        expect(resolveEffectiveReportCommandType("ADJUDICATION_DETAILS", "XLSX")).to.equal("ADJUDICATION_DETAILS_XLSX");
-        expect(resolveEffectiveReportCommandType("ADJUDICATION", "XLSX")).to.equal("ADJUDICATION");
+    it("encodes PDF, CSV, JSON, and XLSX output formats across all 5 report types using the 5-field SWE report command schema", () => {
+        const reportTypes = [
+            "RDS_SITE",
+            "LANE",
+            "EVENT",
+            "ADJUDICATION",
+            "ADJUDICATION_DETAILS",
+        ];
+
+        for (const type of reportTypes) {
+            expect(resolveEffectiveReportCommandType(type, "PDF")).to.equal(type);
+            expect(resolveEffectiveReportCommandType(type, "CSV")).to.equal(`${type}_CSV`);
+            expect(resolveEffectiveReportCommandType(type, "JSON")).to.equal(`${type}_JSON`);
+            expect(resolveEffectiveReportCommandType(type, "XLSX")).to.equal(`${type}_XLSX`);
+        }
 
         const xlsxPayload = JSON.parse(
             generateReportCommandJSON(
                 "2026-10-01T00:00:00Z",
                 "2026-10-31T00:00:00Z",
-                "ADJUDICATION_DETAILS",
+                "ADJUDICATION",
                 "urn:ornl:oscar:lane:1",
                 null,
                 "XLSX",
@@ -43,6 +52,6 @@ describe("adjudication command", () => {
             "laneUID",
             "eventType",
         ]);
-        expect(xlsxPayload.parameters.reportType).to.equal("ADJUDICATION_DETAILS_XLSX");
+        expect(xlsxPayload.parameters.reportType).to.equal("ADJUDICATION_XLSX");
     });
 });

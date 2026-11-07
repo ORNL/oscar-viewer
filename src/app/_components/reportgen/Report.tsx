@@ -131,14 +131,18 @@ function parseCsvPreview(text: string): ExtractPreviewTable {
     const findIdx = (name: string) => rawHeaders.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
 
     const laneIdx = findIdx("Lane Name") >= 0 ? findIdx("Lane Name") : 0;
-    const seqIdx = findIdx("Sequence #");
+    const seqIdx = findIdx("Record #") >= 0 ? findIdx("Record #") : findIdx("Sequence #");
     const timeIdx = findIdx("Time (UTC)");
-    const codeIdx = findIdx("Adjudication Code");
-    const dispIdx = findIdx("Disposition");
+    const codeIdx = findIdx("Disposition Code") >= 0 ? findIdx("Disposition Code") : findIdx("Adjudication Code");
+    const dispIdx = findIdx("Disposition Label") >= 0 ? findIdx("Disposition Label") : findIdx("Disposition");
     const isoIdx = findIdx("Isotopes");
-    const secIdx = findIdx("Secondary Inspection");
+    const secIdx = findIdx("Secondary Status") >= 0 ? findIdx("Secondary Status") : findIdx("Secondary Inspection");
     const occIdx = findIdx("Occupancy Obs ID");
-    const summaryIdx = findIdx("Summary") >= 0 ? findIdx("Summary") : findIdx("Operator Notes");
+    const summaryIdx = findIdx("Feedback / EML Summary") >= 0
+        ? findIdx("Feedback / EML Summary")
+        : findIdx("Summary") >= 0
+            ? findIdx("Summary")
+            : findIdx("Operator Notes");
 
     if (timeIdx >= 0 && dispIdx >= 0) {
         return {
@@ -155,7 +159,7 @@ function parseCsvPreview(text: string): ExtractPreviewTable {
         };
     }
 
-    const colLimit = Math.min(rawHeaders.length, 7);
+    const colLimit = Math.min(rawHeaders.length, 9);
     return {
         headers: rawHeaders.slice(0, colLimit),
         rows: dataRows.map((r) => r.slice(0, colLimit)),
@@ -164,11 +168,123 @@ function parseCsvPreview(text: string): ExtractPreviewTable {
 
 function parseJsonPreview(text: string): ExtractPreviewTable {
     const parsed = JSON.parse(text);
+    const reportType = typeof parsed?.reportType === "string" ? parsed.reportType.toUpperCase() : "";
+    const eventType = typeof parsed?.eventType === "string" ? parsed.eventType.toUpperCase() : "";
     const records: any[] = Array.isArray(parsed)
         ? parsed
         : Array.isArray(parsed?.records)
             ? parsed.records
             : [];
+    const first = records[0];
+
+    if (reportType === "RDS_SITE" || (first && first.category !== undefined && first.metric !== undefined)) {
+        return {
+            headers: ["Metric / Volume", "Category", "Value / Used", "Unit", "Details"],
+            rows: records.slice(0, MAX_PREVIEW_ROWS).map((rec) => [
+                String(rec?.metric ?? ""),
+                String(rec?.category ?? ""),
+                String(rec?.value ?? ""),
+                String(rec?.unit ?? ""),
+                String(rec?.details ?? ""),
+            ]),
+        };
+    }
+
+    if (reportType === "LANE" || (first && first.totalOccupancies !== undefined && first.laneUid !== undefined)) {
+        return {
+            headers: [
+                "Lane",
+                "Occupancies",
+                "Total Alarms",
+                "Gamma",
+                "Neutron",
+                "G+N",
+                "EML Suppressed",
+                "Alarm Rate (%)",
+                "Faults & Tampers",
+            ],
+            rows: records.slice(0, MAX_PREVIEW_ROWS).map((rec) => [
+                String(rec?.laneName || rec?.laneUid || ""),
+                String(rec?.totalOccupancies ?? 0),
+                String(rec?.totalAlarms ?? 0),
+                String(rec?.gammaAlarm ?? 0),
+                String(rec?.neutronAlarm ?? 0),
+                String(rec?.gammaNeutronAlarm ?? 0),
+                String(rec?.emlSuppressed ?? 0),
+                String(rec?.alarmOccupancyRatePct ?? 0),
+                String(rec?.totalFaultsAndTamper ?? 0),
+            ]),
+        };
+    }
+
+    if (reportType === "ADJUDICATION" || (first && first.codeOrSymbol !== undefined)) {
+        return {
+            headers: ["Lane", "Section", "Code / Isotope", "Label", "Group", "Count", "Percent (%)"],
+            rows: records.slice(0, MAX_PREVIEW_ROWS).map((rec) => [
+                String(rec?.laneName || rec?.laneUid || ""),
+                String(rec?.section ?? ""),
+                String(rec?.codeOrSymbol ?? ""),
+                String(rec?.label ?? ""),
+                String(rec?.group ?? ""),
+                String(rec?.count ?? 0),
+                rec?.percentPct != null ? String(rec.percentPct) : "",
+            ]),
+        };
+    }
+
+    if (reportType === "EVENT" || (first && first.dateUtc !== undefined)) {
+        if (eventType === "SOH" || (first && first.totalSohEvents !== undefined)) {
+            return {
+                headers: ["Date (UTC)", "Gamma High", "Gamma Low", "Neutron High", "Tamper", "Total SOH Events"],
+                rows: records.slice(0, MAX_PREVIEW_ROWS).map((rec) => [
+                    String(rec?.dateUtc ?? ""),
+                    String(rec?.gammaHighFault ?? 0),
+                    String(rec?.gammaLowFault ?? 0),
+                    String(rec?.neutronHighFault ?? 0),
+                    String(rec?.tamper ?? 0),
+                    String(rec?.totalSohEvents ?? 0),
+                ]),
+            };
+        }
+        if (eventType === "ALARMS" && (!first || first.totalOccupancies === undefined)) {
+            return {
+                headers: ["Date (UTC)", "Gamma", "Gamma-Neutron", "Neutron", "EML-Suppressed", "Total Alarms", "EML Alarm Rate (%)"],
+                rows: records.slice(0, MAX_PREVIEW_ROWS).map((rec) => [
+                    String(rec?.dateUtc ?? ""),
+                    String(rec?.gammaAlarm ?? 0),
+                    String(rec?.gammaNeutronAlarm ?? 0),
+                    String(rec?.neutronAlarm ?? 0),
+                    String(rec?.emlSuppressed ?? 0),
+                    String(rec?.totalAlarms ?? 0),
+                    String(rec?.emlAlarmRatePct ?? 0),
+                ]),
+            };
+        }
+        return {
+            headers: [
+                "Date (UTC)",
+                "Gamma",
+                "Gamma-Neutron",
+                "Neutron",
+                "EML-Suppressed",
+                "Total Alarms",
+                "Total Occupancy",
+                "Alarm Rate (%)",
+                "EML Rate (%)",
+            ],
+            rows: records.slice(0, MAX_PREVIEW_ROWS).map((rec) => [
+                String(rec?.dateUtc ?? ""),
+                String(rec?.gammaAlarm ?? 0),
+                String(rec?.gammaNeutronAlarm ?? 0),
+                String(rec?.neutronAlarm ?? 0),
+                String(rec?.emlSuppressed ?? 0),
+                String(rec?.totalAlarms ?? 0),
+                String(rec?.totalOccupancies ?? 0),
+                String(rec?.alarmOccupancyRatePct ?? 0),
+                String(rec?.emlAlarmRatePct ?? 0),
+            ]),
+        };
+    }
 
     return {
         headers: ["Record", "Time (UTC)", "Disposition", "Isotopes", "Secondary", "Occupancy ID", "Summary"],
@@ -364,8 +480,7 @@ export default function ReportGeneratorView() {
                 return;
             }
 
-            const effectiveFormat: ReportOutputFormat =
-                selectedReportType === "ADJUDICATION_DETAILS" ? selectedReportFormat : "PDF";
+            const effectiveFormat: ReportOutputFormat = selectedReportFormat;
 
             const response = await sendCommand(
                 nodeSnapshot,
@@ -550,9 +665,6 @@ export default function ReportGeneratorView() {
 
     const handleReportTypeSelect = (value: string) => {
         setSelectedReportType(value);
-        if (value !== "ADJUDICATION_DETAILS") {
-            setSelectedReportFormat("PDF");
-        }
     };
 
     const handleCloseSnack = (event: React.SyntheticEvent | Event, reason?: SnackbarCloseReason) => {
@@ -669,7 +781,7 @@ export default function ReportGeneratorView() {
 
                                 <ReportTypeSelect onSelect={handleReportTypeSelect} report={selectedReportType} />
 
-                                {selectedReportType === "ADJUDICATION_DETAILS" && (
+                                {Boolean(selectedReportType) && (
                                     <Box
                                         component="fieldset"
                                         sx={{
@@ -999,6 +1111,14 @@ export default function ReportGeneratorView() {
                                             },
                                             "& td:nth-of-type(6)::before": {
                                                 content: 'var(--label-7) ": "',
+                                                fontWeight: 600,
+                                            },
+                                            "& td:nth-of-type(7)::before": {
+                                                content: 'var(--label-8) ": "',
+                                                fontWeight: 600,
+                                            },
+                                            "& td:nth-of-type(8)::before": {
+                                                content: 'var(--label-9) ": "',
                                                 fontWeight: 600,
                                             },
                                         },
