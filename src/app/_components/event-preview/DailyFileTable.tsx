@@ -2,8 +2,16 @@
 
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
+import {
+    DailyFileMessageItem,
+    DailyFileSliceFetch,
+    DEFAULT_DAILY_FILE_SLICE_LIMIT,
+    fetchDailyFileSlice,
+    mergeDailyFileItems,
+    shouldFetchDailyFileSlice,
+} from "@/lib/data/oscar/DailyFileSlice";
 import {Box, Stack, Typography} from "@mui/material";
-import React, {useCallback, useContext, useEffect, useState} from "react";
+import React, {useContext, useEffect, useState} from "react";
 import ObservationFilter from "osh-js/source/core/consysapi/observation/ObservationFilter";
 import {
     isDailyFileDataStream,
@@ -15,65 +23,104 @@ import IconButton from "@mui/material/IconButton";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 
 
-export default function DailyFileTable(props: { event: EventTableData }) {
+export default function DailyFileTable(props: { event: EventTableData; fetchImpl?: DailyFileSliceFetch }) {
     const {t} = useLanguage();
     const [logs, setLogs] = useState<string[]>([]);
 
     const laneMapRef = useContext(DataSourceContext).laneMapRef;
 
-    const fetchMessages = useCallback(async () => {
-        const currentLane = props.event.laneId;
-        const currLaneEntry: LaneMapEntry = laneMapRef.current.get(currentLane);
-        if (!currLaneEntry) {
-            console.warn("Cannot load daily file: lane entry is unavailable:", currentLane);
-            setLogs([]);
-            return;
-        }
+    useEffect(() => {
+        const controller = new AbortController();
+        const {signal} = controller;
 
-        const datastream: typeof DataStream = currLaneEntry.datastreams.find((ds) => isDailyFileDataStream(ds));
-        if (!datastream) {
-            console.warn("No daily file datastream found for this lane");
-            setLogs([]);
-            return;
-        }
-
-        try {
-            const observations = await datastream.searchObservations(new ObservationFilter({
-                resultTime: `${props.event.startTime}/${props.event.endTime}`,
-                order: 'asc',
-            }), 1000);
-            const rows: string[] = [];
-
-            while (observations.hasNext()) {
-                const page = await observations.nextPage();
-
-                rows.push(...page.flatMap((observation: any) => {
-                    const result = observation?.result
-                        ?? observation?.properties?.result
-                        ?? observation?.results?.[0]?.data;
-                    const message = result?.rpmMessage ?? result?.rapiscanMessage ?? result?.aspectMessage;
-                    const timestamp = observation?.resultTime
-                        ?? observation?.properties?.resultTime
-                        ?? observation?.timestamp;
-
-
-                    return message && timestamp
-                        ? [`${message},${timestamp}`]
-                        : [];
-                }));
+        const loadMessages = async () => {
+            const currentLane = props.event.laneId;
+            const currLaneEntry: LaneMapEntry | undefined = laneMapRef.current.get(currentLane);
+            if (!currLaneEntry) {
+                console.warn("Cannot load daily file: lane entry is unavailable:", currentLane);
+                if (!signal.aborted)
+                    setLogs([]);
+                return;
             }
 
-            setLogs(rows);
-        } catch (error) {
-            console.error("Failed to load daily-file messages:", error);
-            setLogs([]);
-        }
+            const datastream: typeof DataStream | undefined = currLaneEntry.datastreams?.find(
+                (ds) => isDailyFileDataStream(ds),
+            );
+            const hotItems: DailyFileMessageItem[] = [];
 
-    }, [props.event, laneMapRef]);
+            if (datastream) {
+                try {
+                    const observations = await datastream.searchObservations(new ObservationFilter({
+                        resultTime: `${props.event.startTime}/${props.event.endTime}`,
+                        order: 'asc',
+                    }), DEFAULT_DAILY_FILE_SLICE_LIMIT);
 
-    useEffect(() => {
-        void fetchMessages();
-    }, [fetchMessages]);
+                    while (!signal.aborted && observations.hasNext()) {
+                        const page = await observations.nextPage();
+                        if (signal.aborted)
+                            return;
+                        for (const observation of page) {
+                            const result = observation?.result
+                                ?? observation?.properties?.result
+                                ?? observation?.results?.[0]?.data;
+                            const message = result?.rpmMessage ?? result?.rapiscanMessage ?? result?.aspectMessage;
+                            const timestamp = observation?.resultTime
+                                ?? observation?.properties?.resultTime
+                                ?? observation?.timestamp;
+                            if (message && timestamp) {
+                                hotItems.push({
+                                    message: String(message),
+                                    timestamp: String(timestamp),
+                                });
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (signal.aborted)
+                        return;
+                    console.warn("Failed to load hot daily-file observations; attempting cold slice fallback:", error);
+                }
+            } else if (!currLaneEntry.parentNode) {
+                console.warn("No daily file datastream found for this lane");
+                if (!signal.aborted)
+                    setLogs([]);
+                return;
+            }
+
+            if (signal.aborted)
+                return;
+
+            let sliceItems: DailyFileMessageItem[] = [];
+            if (currLaneEntry.parentNode && shouldFetchDailyFileSlice(hotItems, props.event.startTime)) {
+                const laneUid = currLaneEntry.laneSystem?.properties?.properties?.uid
+                    ?? currLaneEntry.laneSystem?.properties?.uid;
+                try {
+                    const sliceResponse = await fetchDailyFileSlice({
+                        node: currLaneEntry.parentNode,
+                        laneUid: typeof laneUid === "string" ? laneUid : undefined,
+                        laneName: currentLane,
+                        startTime: props.event.startTime,
+                        endTime: props.event.endTime,
+                        limit: DEFAULT_DAILY_FILE_SLICE_LIMIT,
+                    }, props.fetchImpl, signal);
+                    if (signal.aborted)
+                        return;
+                    sliceItems = sliceResponse?.items ?? [];
+                } catch (error) {
+                    if (signal.aborted)
+                        return;
+                    console.error("Failed to load daily-file slice:", error);
+                }
+            }
+
+            if (!signal.aborted) {
+                setLogs(mergeDailyFileItems(hotItems, sliceItems, DEFAULT_DAILY_FILE_SLICE_LIMIT));
+            }
+        };
+
+        void loadMessages();
+        return () => controller.abort();
+    }, [props.event, props.fetchImpl, laneMapRef]);
 
     function handleDownload(){
         const csvContent = logs.join('\n');
