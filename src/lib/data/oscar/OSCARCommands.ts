@@ -60,6 +60,14 @@ export function generateNationalCommandJSON(startDateTime: string, endDateTime: 
 
 export type ReportOutputFormat = "PDF" | "CSV" | "JSON" | "XLSX";
 
+const MULTI_FORMAT_REPORT_TYPES = new Set([
+    "RDS_SITE",
+    "LANE",
+    "EVENT",
+    "ADJUDICATION",
+    "ADJUDICATION_DETAILS",
+]);
+
 export function resolveEffectiveReportCommandType(
     reportType: string | null | undefined,
     reportFormat?: string | null,
@@ -67,12 +75,13 @@ export function resolveEffectiveReportCommandType(
     if (!reportType) {
         return null;
     }
-    if (reportType === "ADJUDICATION_DETAILS") {
+    const normalizedType = reportType.trim().toUpperCase();
+    if (MULTI_FORMAT_REPORT_TYPES.has(normalizedType)) {
         const fmt = (reportFormat ?? "PDF").trim().toUpperCase();
-        if (fmt === "CSV") return "ADJUDICATION_DETAILS_CSV";
-        if (fmt === "JSON") return "ADJUDICATION_DETAILS_JSON";
-        if (fmt === "XLSX") return "ADJUDICATION_DETAILS_XLSX";
-        return "ADJUDICATION_DETAILS";
+        if (fmt === "CSV") return `${normalizedType}_CSV`;
+        if (fmt === "JSON") return `${normalizedType}_JSON`;
+        if (fmt === "XLSX") return `${normalizedType}_XLSX`;
+        return normalizedType;
     }
     return reportType;
 }
