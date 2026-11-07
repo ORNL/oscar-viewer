@@ -37,7 +37,7 @@ export function resolveReportScope(
     // Site and event reports use the backend's native unscoped query. Lane and
     // adjudication reports require concrete lane identifiers, so "Entire node"
     // expands to every lane discovered for that node.
-    if (["LANE", "ADJUDICATION"].includes(reportType ?? "")) {
+    if (["LANE", "ADJUDICATION", "ADJUDICATION_DETAILS"].includes(reportType ?? "")) {
         const laneUIDs = catalog.lanes.map((lane) => lane.uid);
         return laneUIDs.length > 0
             ? {laneUIDs, error: null}

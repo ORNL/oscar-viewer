@@ -58,25 +58,87 @@ export function generateNationalCommandJSON(startDateTime: string, endDateTime: 
     })
 }
 
+export type ReportOutputFormat = "PDF" | "CSV" | "JSON" | "XLSX";
+
+export function resolveEffectiveReportCommandType(
+    reportType: string | null | undefined,
+    reportFormat?: string | null,
+): string | null {
+    if (!reportType) {
+        return null;
+    }
+    if (reportType === "ADJUDICATION_DETAILS") {
+        const fmt = (reportFormat ?? "PDF").trim().toUpperCase();
+        if (fmt === "CSV") return "ADJUDICATION_DETAILS_CSV";
+        if (fmt === "JSON") return "ADJUDICATION_DETAILS_JSON";
+        if (fmt === "XLSX") return "ADJUDICATION_DETAILS_XLSX";
+        return "ADJUDICATION_DETAILS";
+    }
+    return reportType;
+}
+
+export async function fetchCommandStatuses(
+    node: INode,
+    controlStreamId: string,
+    commandId: string,
+    options: SendCommandOptions = {},
+): Promise<any[]> {
+    const ep =
+        node.getConnectedSystemsEndpoint(false) +
+        `/controlstreams/${encodeURIComponent(controlStreamId)}/commands/${encodeURIComponent(commandId)}/status?f=application%2Fjson`;
+
+    const resp = await fetch(ep, {
+        method: "GET",
+        headers: {
+            ...node.getBasicAuthHeader(),
+            Accept: "application/json",
+        },
+        mode: "cors",
+        credentials: "include",
+        cache: "no-store",
+        signal: options.signal,
+    });
+    if (!resp.ok) {
+        return [];
+    }
+    const payload = await resp.json();
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+    if (Array.isArray(payload?.items)) {
+        return payload.items;
+    }
+    return payload ? [payload] : [];
+}
+
 export class ReportGenerationCommand {
     startDateTime: string;
     endDateTime: string;
     reportType: string;
     laneUID: string;
     eventId: string;
+    reportFormat: string;
 
-    constructor(startDateTime: string, endDateTime: string, reportType: string, laneUID: string, eventId: string) {
+    constructor(
+        startDateTime: string,
+        endDateTime: string,
+        reportType: string,
+        laneUID: string,
+        eventId: string,
+        reportFormat: string = "PDF",
+    ) {
         this.startDateTime = startDateTime;
         this.endDateTime = endDateTime;
         this.reportType = reportType;
         this.laneUID = laneUID;
         this.eventId = eventId;
+        this.reportFormat = reportFormat;
     }
 
     getJsonString() {
         return JSON.stringify({
                 "parameters": {
-                    "reportType": this.reportType,
+                    "reportType": resolveEffectiveReportCommandType(this.reportType, this.reportFormat),
                     "startDateTime": this.startDateTime,
                     "endDateTime": this.endDateTime,
                     "laneUID": this.laneUID,
@@ -86,10 +148,17 @@ export class ReportGenerationCommand {
     }
 }
 
-export function generateReportCommandJSON(startDateTime: string, endDateTime: string, reportType: string, laneUID: string, eventType: string) {
+export function generateReportCommandJSON(
+    startDateTime: string,
+    endDateTime: string,
+    reportType: string | null,
+    laneUID: string | null,
+    eventType: string | null,
+    reportFormat?: string | null,
+) {
     return JSON.stringify({
         "parameters": {
-            "reportType": reportType,
+            "reportType": resolveEffectiveReportCommandType(reportType, reportFormat),
             "startDateTime": startDateTime,
             "endDateTime": endDateTime,
             "laneUID": laneUID ?? "NONE",

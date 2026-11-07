@@ -18,14 +18,18 @@ export const reportTypes = [
         value: "ADJUDICATION",
     },
     {
+        labelKey: "adjudicationDetailsReport",
+        value: "ADJUDICATION_DETAILS",
+    },
+    {
         labelKey: "eventReport",
         value: "EVENT",
     }
 ]
 
 export default function ReportTypeSelect(props: {
-    onSelect: (value: string[] | string) => void,
-    report: string
+    onSelect: (value: string) => void,
+    report: string | null
 }) {
     const {t} = useLanguage();
 
