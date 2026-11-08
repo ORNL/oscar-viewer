@@ -247,6 +247,10 @@ export default function HLSVideoComponent({
 
             const playlistUrl = new URL(src, window.location.href);
             const hlsjsConfig = {
+                liveSyncDurationCount: 1,
+                liveMaxLatencyDurationCount: 3,
+                maxBufferLength: 10,
+                backBufferLength: 4,
                 xhrSetup: function (xhr: XMLHttpRequest, requestUrl: string) {
                     let isPlaylistOrigin = false;
                     try {
