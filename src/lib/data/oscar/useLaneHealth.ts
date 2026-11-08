@@ -43,6 +43,8 @@ export interface LaneHealth {
     faults: FaultHealth;
     occupancyState: OccupancyState;
     occupancyStartedAt: number | null;
+    extendedOccupancyThresholdMinutes?: number;
+    extendedOccupancyFault?: boolean;
     lastUpdatedAt: number | null;
 }
 
@@ -234,6 +236,32 @@ function streamKind(stream: any): StreamKind | null {
     return null;
 }
 
+const LANE_THRESHOLD_KEYWORD_PREFIX = "oscar:extended-occupancy-threshold-min:";
+
+function clampThresholdMinutes(value: unknown, fallback = DEFAULT_OCCUPANCY_THRESHOLD_MINUTES): number {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 1) return fallback;
+    return Math.min(MAX_OCCUPANCY_THRESHOLD_MINUTES, Math.max(1, Math.trunc(numeric)));
+}
+
+function extractLaneThresholdMinutes(lane: LaneMapEntry): number | undefined {
+    for (const system of lane.systems ?? []) {
+        const keywords = system?.properties?.keywords ?? system?.properties?.properties?.keywords;
+        if (!Array.isArray(keywords)) continue;
+        for (const raw of keywords) {
+            if (typeof raw !== "string") continue;
+            const trimmed = raw.trim();
+            if (trimmed.toLowerCase().startsWith(LANE_THRESHOLD_KEYWORD_PREFIX)) {
+                const parsed = Number(trimmed.slice(LANE_THRESHOLD_KEYWORD_PREFIX.length));
+                if (Number.isFinite(parsed) && parsed >= 1) {
+                    return clampThresholdMinutes(parsed);
+                }
+            }
+        }
+    }
+    return undefined;
+}
+
 function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
     const cameraSystems = new Map<string, ComponentHealth>();
 
@@ -258,6 +286,7 @@ function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
             isNeutronDataStream(stream) || isTamperDataStream(stream))
     );
     const rpmSystem = lane.systems.find((system: any) => systemId(system) === streamSystemId(rpmStream));
+    const configuredThreshold = extractLaneThresholdMinutes(lane);
 
     return {
         laneName,
@@ -272,6 +301,8 @@ function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
         faults: faultDefaults(),
         occupancyState: "unknown",
         occupancyStartedAt: null,
+        ...(configuredThreshold !== undefined ? {extendedOccupancyThresholdMinutes: configuredThreshold} : {}),
+        extendedOccupancyFault: false,
         lastUpdatedAt: null,
     };
 }
@@ -289,25 +320,39 @@ export function formatHealthDuration(milliseconds: number): string {
 export function deriveLaneHealthRows(
     lanes: LaneHealth[],
     now: number,
-    thresholdMinutes: number,
+    thresholdMinutes = DEFAULT_OCCUPANCY_THRESHOLD_MINUTES,
 ): LaneHealthRow[] {
-    const thresholdMilliseconds = thresholdMinutes * 60 * 1000;
     return lanes.map((lane) => {
+        const laneThresholdMinutes = clampThresholdMinutes(
+            lane.extendedOccupancyThresholdMinutes ?? thresholdMinutes,
+            DEFAULT_OCCUPANCY_THRESHOLD_MINUTES,
+        );
+        const thresholdMilliseconds = laneThresholdMinutes * 60 * 1000;
         const occupancyDuration = lane.occupancyStartedAt == null ? 0 : Math.max(0, now - lane.occupancyStartedAt);
         const extendedOccupancy: TelemetryState = lane.occupancyState === "unknown"
             ? "unknown"
             : lane.occupancyState === "clear"
                 ? "clear"
-                : lane.occupancyStartedAt == null
-                    ? "unknown"
-                    : occupancyDuration > thresholdMilliseconds ? "active" : "clear";
+                : lane.extendedOccupancyFault === true
+                    ? "active"
+                    : lane.occupancyStartedAt == null
+                        ? "unknown"
+                        : occupancyDuration > thresholdMilliseconds ? "active" : "clear";
         const hasFault = Object.values(lane.faults).includes("active") || extendedOccupancy === "active";
         const hasOfflineComponent = lane.rpm.state === "offline" || lane.cameras.some((camera) => camera.state === "offline");
         const hasUnknownTelemetry = lane.rpm.state === "unknown"
             || lane.cameras.some((camera) => camera.state === "unknown")
             || Object.values(lane.faults).includes("unknown")
             || extendedOccupancy === "unknown";
-        return {...lane, occupancyDuration, extendedOccupancy, hasFault, hasOfflineComponent, hasUnknownTelemetry};
+        return {
+            ...lane,
+            extendedOccupancyThresholdMinutes: laneThresholdMinutes,
+            occupancyDuration,
+            extendedOccupancy,
+            hasFault,
+            hasOfflineComponent,
+            hasUnknownTelemetry,
+        };
     });
 }
 
@@ -322,13 +367,17 @@ export function summarizeLaneHealth(laneRows: LaneHealthRow[]): LaneHealthSummar
 
 export function nextExtendedOccupancyDeadline(
     lanes: LaneHealth[],
-    thresholdMinutes: number,
+    thresholdMinutes = DEFAULT_OCCUPANCY_THRESHOLD_MINUTES,
     now: number,
 ): number | null {
-    const thresholdMilliseconds = thresholdMinutes * 60 * 1000;
     return lanes.reduce<number | null>((earliest, lane) => {
         if (lane.occupancyState !== "occupied" || lane.occupancyStartedAt == null)
             return earliest;
+        const laneThresholdMinutes = clampThresholdMinutes(
+            lane.extendedOccupancyThresholdMinutes ?? thresholdMinutes,
+            DEFAULT_OCCUPANCY_THRESHOLD_MINUTES,
+        );
+        const thresholdMilliseconds = laneThresholdMinutes * 60 * 1000;
         const deadline = lane.occupancyStartedAt + thresholdMilliseconds + 1;
         if (deadline <= now)
             return earliest;
@@ -336,7 +385,7 @@ export function nextExtendedOccupancyDeadline(
     }, null);
 }
 
-export function useLaneHealthClock(lanes: LaneHealth[], thresholdMinutes: number): number {
+export function useLaneHealthClock(lanes: LaneHealth[], thresholdMinutes = DEFAULT_OCCUPANCY_THRESHOLD_MINUTES): number {
     const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
@@ -367,20 +416,16 @@ export function useLaneHealth() {
     const {laneMapRef, laneMapReady} = useContext(DataSourceContext);
     const [lanes, setLanes] = useState<LaneHealth[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [thresholdMinutes, setThresholdMinutesState] = useState(DEFAULT_OCCUPANCY_THRESHOLD_MINUTES);
     const reconcileLatestRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
-    useEffect(() => {
-        const saved = Number(window.localStorage.getItem(OCCUPANCY_THRESHOLD_KEY));
-        if (Number.isFinite(saved) && saved >= 1 && saved <= MAX_OCCUPANCY_THRESHOLD_MINUTES)
-            setThresholdMinutesState(saved);
-    }, []);
-
-    const setThresholdMinutes = useCallback((value: number) => {
-        const next = Math.min(MAX_OCCUPANCY_THRESHOLD_MINUTES, Math.max(1, value || 1));
-        setThresholdMinutesState(next);
-        window.localStorage.setItem(OCCUPANCY_THRESHOLD_KEY, String(next));
-    }, []);
+    const thresholdMinutes = useMemo(() => {
+        for (const lane of lanes) {
+            if (lane.extendedOccupancyThresholdMinutes != null) {
+                return clampThresholdMinutes(lane.extendedOccupancyThresholdMinutes);
+            }
+        }
+        return DEFAULT_OCCUPANCY_THRESHOLD_MINUTES;
+    }, [lanes]);
 
     const refreshLaneHealth = useCallback(
         () => reconcileLatestRef.current(),
@@ -520,12 +565,21 @@ export function useLaneHealth() {
             const occupancyStartedAt = result.isOccupied
                 ? timestampToMilliseconds(result.occupancyStartTime)
                 : null;
+            const reportedThreshold = result?.extendedOccupancyThresholdMinutes != null
+                ? clampThresholdMinutes(result.extendedOccupancyThresholdMinutes)
+                : null;
+            const reportedFault = Boolean(result.isOccupied && (
+                result?.extendedOccupancyFault === true ||
+                result?.alarmState === "Fault - Extended Occupancy"
+            ));
             updateLane(binding.laneName, (lane) => ({
                 ...lane,
                 occupancyState: result.isOccupied ? "occupied" : "clear",
                 occupancyStartedAt: result.isOccupied
                     ? occupancyStartedAt ?? (lane.occupancyState === "occupied" ? lane.occupancyStartedAt : null)
                     : null,
+                ...(reportedThreshold !== null ? {extendedOccupancyThresholdMinutes: reportedThreshold} : {}),
+                extendedOccupancyFault: reportedFault,
                 lastUpdatedAt: Math.max(lane.lastUpdatedAt ?? 0, updatedAt),
             }));
             return true;
@@ -576,9 +630,9 @@ export function useLaneHealth() {
 
             if (binding.kind === "occupancy") {
                 updateLane(binding.laneName, (lane) =>
-                    lane.occupancyState === "unknown" && lane.occupancyStartedAt == null
+                    lane.occupancyState === "unknown" && lane.occupancyStartedAt == null && !lane.extendedOccupancyFault
                         ? lane
-                        : {...lane, occupancyState: "unknown", occupancyStartedAt: null});
+                        : {...lane, occupancyState: "unknown", occupancyStartedAt: null, extendedOccupancyFault: false});
                 return;
             }
 
@@ -792,7 +846,6 @@ export function useLaneHealth() {
         lanes,
         isLoading,
         thresholdMinutes,
-        setThresholdMinutes,
         refreshLaneHealth,
-    }), [lanes, isLoading, thresholdMinutes, setThresholdMinutes, refreshLaneHealth]);
+    }), [lanes, isLoading, thresholdMinutes, refreshLaneHealth]);
 }

@@ -34,8 +34,9 @@ export default function LaneItem(props: {
                         : props.status === ('Fault - Gamma Low') ? 'infoHighlight'
                             : props.status === ('Fault - Neutron High') ? 'infoHighlight'
                                 : props.status === ('Fault - Gamma High') ? 'infoHighlight'
-                                    : props.status === 'Scan' || props.status === 'Background' || props.status==='Online' ? 'successHighlight'
-                                        : 'unknown'
+                                    : props.status === ('Fault - Extended Occupancy') ? 'infoHighlight'
+                                        : props.status === 'Scan' || props.status === 'Background' || props.status==='Online' ? 'successHighlight'
+                                            : 'unknown'
             )
         }}
         >
@@ -47,8 +48,9 @@ export default function LaneItem(props: {
                                 : props.status ==='Fault - Gamma Low' ? 'info'
                                     : props.status === 'Fault - Gamma High' ? 'info'
                                         : props.status === 'Fault - Neutron High' ? 'info'
-                                            : props.status === 'Scan' || props.status === 'Background' || props.status==='Online' ? 'success'
-                                                : 'inherit'
+                                            : props.status === 'Fault - Extended Occupancy' ? 'info'
+                                                : props.status === 'Scan' || props.status === 'Background' || props.status==='Online' ? 'success'
+                                                    : 'inherit'
                     )
                     }
                     sx={{ marginRight: 2}} />

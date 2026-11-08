@@ -758,13 +758,19 @@ describe("Status of Health page", () => {
         cy.wrap(localNode.searchObservations).should("have.callCount", 3);
     });
 
-    it("uses the canonical occupancy start time and persists a user threshold", () => {
+    it("uses the lane-level Admin extended occupancy threshold and server fault state", () => {
         const now = Date.parse("2026-09-24T16:00:00.000Z");
         cy.clock(now);
-        localStorage.setItem("oscar.health.extendedOccupancyMinutes", "2");
-        const occupancy = stream("occupancy-status", "lane-system-1", [OCCUPANCY_STATUS_DEF], [
-            observation({isOccupied: true, occupancyStartTime: (now - 90_000) / 1000}),
-        ], "occupancyStatus");
+        let latestOccupancy = [
+            observation({
+                isOccupied: true,
+                occupancyStartTime: (now - 90_000) / 1000,
+                extendedOccupancyThresholdMinutes: 2,
+                extendedOccupancyFault: false,
+                alarmState: "Clear",
+            }),
+        ];
+        const occupancy = stream("occupancy-status", "lane-system-1", [OCCUPANCY_STATUS_DEF], () => latestOccupancy, "occupancyStatus");
         const gamma = stream("gamma", "rpm-1", [ALARM_DEF, GAMMA_COUNT_DEF], [observation({alarmState: "Scan"})]);
         const laneMap = new Map([["Lane 1", lane("Lane 1", [
             system("rpm-1", "RPM 1", "urn:osh:system:rapiscan:1"),
@@ -772,12 +778,28 @@ describe("Status of Health page", () => {
 
         cy.mount(healthView(laneMap));
 
-        cy.get('input[type="number"]').should(($input) => expect($input.val()).to.equal("2"));
+        cy.get('[data-testid="health-threshold-summary"]').within(() => {
+            cy.contains("Configured per lane in SensorHub Admin");
+            cy.contains("2 min");
+        });
         cy.contains("Extended occupancy: Clear");
         cy.contains("1:30");
-        cy.get('input[type="number"]').type("{selectall}1");
+        cy.contains("Threshold: 2 min");
+
+        cy.then(() => {
+            latestOccupancy = [
+                observation({
+                    isOccupied: true,
+                    occupancyStartTime: (now - 90_000) / 1000,
+                    extendedOccupancyThresholdMinutes: 1,
+                    extendedOccupancyFault: true,
+                    alarmState: "Fault - Extended Occupancy",
+                }, "2026-09-24T16:00:30.000Z"),
+            ];
+        });
+        cy.tick(30_000);
         cy.contains("Extended occupancy: Fault");
-        cy.then(() => expect(localStorage.getItem("oscar.health.extendedOccupancyMinutes")).to.equal("1"));
+        cy.contains("Threshold: 1 min");
     });
 
     it("stops batched refreshes on unmount without touching realtime sources", () => {

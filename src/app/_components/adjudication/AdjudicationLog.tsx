@@ -9,7 +9,11 @@ import { Box, Stack, Typography} from "@mui/material";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
 import {isAdjudicationControlStream} from "@/lib/data/oscar/Utilities";
 import ControlStream from "osh-js/source/core/consysapi/controlstream/ControlStream";
-import {AdjudicationCodes, EML_NON_THREAT_CODE} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
+import {
+    AdjudicationCodes,
+    EML_NON_THREAT_CODE,
+    EXTENDED_OCCUPANCY_GAMMA_CODE,
+} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
 import {useCustomAdjudicationCodes} from "@/app/hooks/useCustomAdjudicationCodes";
 import {resolveAdjudicationCode} from "@/lib/data/oscar/adjudication/CustomAdjudicationCodes";
 import {
@@ -422,6 +426,8 @@ export default function AdjudicationLog(props: {
                 const code = row.adjudicationCode.code;
                 if (code === EML_NON_THREAT_CODE)
                     return t(`adjudicationCode.${EML_NON_THREAT_CODE}`);
+                if (code === EXTENDED_OCCUPANCY_GAMMA_CODE)
+                    return t(`adjudicationCode.${EXTENDED_OCCUPANCY_GAMMA_CODE}`);
                 if (code <= 11)
                     return t(`adjudicationCode.${code}`);
                 const custom = customCodes.find(item => item.code === code);

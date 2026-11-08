@@ -9,6 +9,8 @@ export interface AdjudicationCode {
     group: string;
 }
 
+export const EXTENDED_OCCUPANCY_GAMMA_CODE = 9998;
+export const EXTENDED_OCCUPANCY_GAMMA_MARKER = "extended-occupancy-gamma";
 export const EML_NON_THREAT_CODE = 9999;
 export const EML_NON_THREAT_MARKER = "eml-non-threat";
 export const ADJUDICATION_CODE_MARKER_PREFIX = "code:";
@@ -35,6 +37,7 @@ export class AdjudicationCodes {
         {code: 9, label: "Code 9: Authorized Test, Maintenance, or Training Activity", group: "Test/Maintenance"},
         {code: 10, label: "Code 10: Unauthorized Activity", group: "Tamper/Fault"},
         {code: 11, label: "Code 11: Other", group: "Other"},
+        {code: EXTENDED_OCCUPANCY_GAMMA_CODE, label: "Code 9998: Extended Occupancy Gamma Alarm", group: "Automated"},
         {code: EML_NON_THREAT_CODE, label: "Code 9999: EML Non-Threat", group: "Automated"},
     ]
 

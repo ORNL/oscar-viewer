@@ -18,6 +18,7 @@ import ObservationFilter from "osh-js/source/core/consysapi/observation/Observat
 import {
     isGammaDataStream,
     isNeutronDataStream,
+    isOccupancyStatusDataStream,
     isTamperDataStream
 } from "@/lib/data/oscar/Utilities";
 import {selectNodes} from "@/lib/state/OSHSlice";
@@ -25,7 +26,7 @@ import { INode } from "@/lib/data/osh/Node";
 import Observations from "osh-js/source/core/consysapi/observation/Observations";
 import ConSysApi from "osh-js/source/core/datasource/consysapi/ConSysApi.datasource";
 import DataStream from "osh-js/source/core/sweapi/datastream/DataStream";
-import {ALARM_DEF, TAMPER_STATUS_DEF} from "@/lib/data/Constants";
+import {ALARM_DEF, OCCUPANCY_STATUS_DEF, TAMPER_STATUS_DEF} from "@/lib/data/Constants";
 import {EventType} from "osh-js/source/core/event/EventType";
 import {convertToMap} from "@/app/utils/Utils";
 import {useLanguage} from '@/app/contexts/LanguageContext';
@@ -33,7 +34,7 @@ import {getDataGridLocaleText, getIntlLocale} from '@/app/utils/LocaleUtils';
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
 
 const STATUS_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
-const STATUS_FAULT_FILTER = "tamperStatus=true OR alarmState='Fault - Neutron High' OR alarmState='Fault - Gamma High' OR alarmState='Fault - Gamma Low'";
+const STATUS_FAULT_FILTER = "tamperStatus=true OR alarmState='Fault - Neutron High' OR alarmState='Fault - Gamma High' OR alarmState='Fault - Gamma Low' OR alarmState='Fault - Extended Occupancy'";
 
 interface StatusTableProps {
     currentLane: string,
@@ -136,7 +137,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
         if (isLive) {
             if (obs?.alarmState) {
                 const state = obs.alarmState;
-                if (!["Scan", "Background", "Alarm"].includes(state)) {
+                if (!["Scan", "Background", "Alarm", "Clear"].includes(state)) {
                     newEvent = new AlarmTableData(randomUUID(), currentLane, state, obs.samplingTime);
                 }
             } else if (obs?.tamperStatus) {
@@ -144,7 +145,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
             }
         } else {
             const result = obs?.properties?.result;
-            if (result?.alarmState && !["Scan", "Background", "Alarm"].includes(result.alarmState)) {
+            if (result?.alarmState && !["Scan", "Background", "Alarm", "Clear"].includes(result.alarmState)) {
                 newEvent = new AlarmTableData(randomUUID(), currentLane, result.alarmState, obs.properties.resultTime);
             } else if (result?.tamperStatus) {
                 newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.properties.resultTime);
@@ -164,7 +165,11 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
             return datastreamIds;
 
         const datastreams: typeof DataStream[] = entry.datastreams.filter(
-            (ds: any) => isGammaDataStream(ds) || isNeutronDataStream(ds) || isTamperDataStream(ds)
+            (ds: any) =>
+                isGammaDataStream(ds) ||
+                isNeutronDataStream(ds) ||
+                isTamperDataStream(ds) ||
+                isOccupancyStatusDataStream(ds)
         );
 
         for (const ds of datastreams) {
@@ -403,6 +408,14 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
             }
         }
 
+        const occupancyStatusStream: typeof DataStream = entry.findDataStreamByObsProperty(OCCUPANCY_STATUS_DEF);
+        if (occupancyStatusStream) {
+            const occupancyStatusSource = findRealtimeDataSourceForStream(entry, occupancyStatusStream);
+            if (occupancyStatusSource) {
+                subscribe(occupancyStatusSource, "occupancyStatus");
+            }
+        }
+
         return () => {
             subscriptions.forEach(({source, lease}) => {
                 removeRealtimeEventSubscription(source, handleMessage);
@@ -435,6 +448,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
                     // Assign className for styling to 'Status' column based on value
                     if (params.value.includes("Gamma")) return "highlightGamma";
                     if (params.value.includes('Neutron')) return "highlightNeutron";
+                    else if (params.value.includes("Extended Occupancy")) return "highlightExtendedOccupancy";
                     else if (params.value === "Tamper") return "highlightTamper";
                     else
                         return '';
@@ -449,6 +463,10 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
                     [`.${gridClasses.cell}.highlightNeutron`]: {
                         backgroundColor: "info.main",
                         color: "info.contrastText",
+                    },
+                    [`.${gridClasses.cell}.highlightExtendedOccupancy`]: {
+                        backgroundColor: "warning.main",
+                        color: "warning.contrastText",
                     },
                     [`.${gridClasses.cell}.highlightTamper`]: {
                         backgroundColor: "secondary.main",

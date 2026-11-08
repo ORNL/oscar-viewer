@@ -6,7 +6,6 @@ import {
     Box,
     Chip,
     CircularProgress,
-    InputAdornment,
     Paper,
     Stack,
     Table,
@@ -15,7 +14,6 @@ import {
     TableContainer,
     TableHead,
     TableRow,
-    TextField,
     Tooltip,
     Typography,
 } from "@mui/material";
@@ -30,9 +28,9 @@ import {
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import {getIntlLocale} from "@/app/utils/LocaleUtils";
 import {
+    DEFAULT_OCCUPANCY_THRESHOLD_MINUTES,
     deriveLaneHealthRows,
     formatHealthDuration,
-    MAX_OCCUPANCY_THRESHOLD_MINUTES,
     summarizeLaneHealth,
     useLaneHealth,
     type ComponentHealth,
@@ -86,7 +84,7 @@ function FaultIndicator({label, state, faultText, clearText, unknownText}: {
 
 export default function HealthPage() {
     const {language, t} = useLanguage();
-    const {lanes, isLoading, thresholdMinutes, setThresholdMinutes} = useLaneHealth();
+    const {lanes, isLoading, thresholdMinutes} = useLaneHealth();
     const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
@@ -99,6 +97,18 @@ export default function HealthPage() {
         [lanes, now, thresholdMinutes],
     );
     const summary = useMemo(() => summarizeLaneHealth(laneRows), [laneRows]);
+    const thresholdSummaryLabel = useMemo(() => {
+        const thresholds = Array.from(new Set(
+            laneRows.map((lane) => lane.extendedOccupancyThresholdMinutes ?? DEFAULT_OCCUPANCY_THRESHOLD_MINUTES),
+        )).sort((a, b) => a - b);
+        if (thresholds.length === 0) {
+            return `${DEFAULT_OCCUPANCY_THRESHOLD_MINUTES} ${t("minutes")}`;
+        }
+        if (thresholds.length === 1) {
+            return `${thresholds[0]} ${t("minutes")}`;
+        }
+        return `${thresholds[0]}–${thresholds[thresholds.length - 1]} ${t("minutes")}`;
+    }, [laneRows, t]);
 
     return (
         <Stack spacing={2} sx={{pb: 2, minInlineSize: 0}}>
@@ -110,21 +120,18 @@ export default function HealthPage() {
                         <Typography variant="body2" color="text.secondary">{t("healthDescription")}</Typography>
                     </Box>
                 </Stack>
-                <Paper variant="outlined" sx={{p: 1.5}}>
+                <Paper variant="outlined" sx={{p: 1.5}} data-testid="health-threshold-summary">
                     <Stack direction="row" spacing={1.5} alignItems="center">
                         <Box>
                             <Typography variant="caption" color="text.secondary">{t("extendedOccupancyThreshold")}</Typography>
-                            <Typography variant="body2">{t("savedForThisBrowser")}</Typography>
+                            <Typography variant="body2">{t("configuredInAdminPerLane")}</Typography>
                         </Box>
-                        <TextField
-                            aria-label={t("extendedOccupancyThreshold")}
-                            type="number"
+                        <Chip
                             size="small"
-                            value={thresholdMinutes}
-                            onChange={(event) => setThresholdMinutes(Number(event.target.value))}
-                            inputProps={{min: 1, max: MAX_OCCUPANCY_THRESHOLD_MINUTES, step: 1}}
-                            InputProps={{endAdornment: <InputAdornment position="end">{t("minutes")}</InputAdornment>}}
-                            sx={{width: 145}}
+                            color="primary"
+                            variant="outlined"
+                            label={thresholdSummaryLabel}
+                            sx={{fontWeight: 600}}
                         />
                     </Stack>
                 </Paper>
@@ -212,7 +219,12 @@ export default function HealthPage() {
                                         {lane.occupancyState === "unknown" ? (
                                             <Typography variant="body2" color="text.secondary">{t("waitingForTelemetry")}</Typography>
                                         ) : lane.occupancyState === "clear" ? (
-                                            <Typography variant="body2" color="text.secondary">{t("notOccupied")}</Typography>
+                                            <Stack spacing={0.25}>
+                                                <Typography variant="body2" color="text.secondary">{t("notOccupied")}</Typography>
+                                                <Typography variant="caption" color="text.disabled">
+                                                    {`${t("threshold")}: ${lane.extendedOccupancyThresholdMinutes ?? DEFAULT_OCCUPANCY_THRESHOLD_MINUTES} ${t("minutes")}`}
+                                                </Typography>
+                                            </Stack>
                                         ) : lane.occupancyStartedAt == null ? (
                                             <Stack spacing={0.5}>
                                                 <Typography variant="body2" color="text.secondary">{t("waitingForTelemetry")}</Typography>
@@ -224,6 +236,9 @@ export default function HealthPage() {
                                                     {formatHealthDuration(lane.occupancyDuration)}
                                                 </Typography>
                                                 <Typography variant="caption" color="text.secondary">{t("occupancyInProgress")}</Typography>
+                                                <Typography variant="caption" color="text.disabled">
+                                                    {`${t("threshold")}: ${lane.extendedOccupancyThresholdMinutes ?? DEFAULT_OCCUPANCY_THRESHOLD_MINUTES} ${t("minutes")}`}
+                                                </Typography>
                                             </Stack>
                                         )}
                                     </TableCell>
