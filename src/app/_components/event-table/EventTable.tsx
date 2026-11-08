@@ -629,30 +629,176 @@ export default function EventTable({
         return {success: successful.length, failed: failed.length};
     };
 
+    const renderCompactHeader = useCallback((label: string) => {
+        const unitMatch = label.match(/^(.*?)\s*(\([^)]+\))$/);
+        if (unitMatch) {
+            return (
+                <Box sx={{display: "flex", flexDirection: "column", lineHeight: 1.15, py: 0.25, minWidth: 0}}>
+                    <Box component="span" sx={{fontWeight: 600, fontSize: "0.78rem", whiteSpace: "nowrap"}}>{unitMatch[1]}</Box>
+                    <Box component="span" sx={{fontSize: "0.68rem", color: "text.secondary", fontWeight: 500, whiteSpace: "nowrap"}}>{unitMatch[2]}</Box>
+                </Box>
+            );
+        }
+        return (
+            <Box
+                component="span"
+                sx={{
+                    fontWeight: 600,
+                    fontSize: "0.78rem",
+                    lineHeight: 1.15,
+                    whiteSpace: "normal",
+                    wordBreak: "normal",
+                    overflowWrap: "normal",
+                }}
+            >
+                {label}
+            </Box>
+        );
+    }, []);
+
+    const renderCompactTimestamp = useCallback((rawValue: unknown) => {
+        if (!rawValue) return null;
+        const date = rawValue instanceof Date ? rawValue : new Date(String(rawValue));
+        if (Number.isNaN(date.getTime())) return String(rawValue);
+        return (
+            <Box sx={{display: "flex", flexDirection: "column", justifyContent: "center", py: 0.25, minWidth: 0, fontVariantNumeric: "tabular-nums"}}>
+                <Box component="span" sx={{fontWeight: 500, fontSize: "0.81rem", lineHeight: 1.2, whiteSpace: "nowrap"}}>
+                    {date.toLocaleTimeString(locale)}
+                </Box>
+                <Box component="span" sx={{fontSize: "0.71rem", color: "text.secondary", lineHeight: 1.15, whiteSpace: "nowrap"}}>
+                    {date.toLocaleDateString(locale)}
+                </Box>
+            </Box>
+        );
+    }, [locale]);
+
     const columns = useMemo<GridColDef<EventTableData>[]>(() => [
         {
-            field: "laneId", headerName: t("laneId"), minWidth: 110, flex: 1,
-            renderCell: params => <Box sx={{display: "flex", flexDirection: "column", justifyContent: "center", py: 0.5}}>
-                <span>{params.row.laneId}</span>
-                <span style={{fontSize: "0.8rem", color: "gray"}}>{params.row.parentNode}</span>
-            </Box>,
+            field: "laneId",
+            headerName: t("laneId"),
+            minWidth: 76,
+            flex: 0.7,
+            renderHeader: () => renderCompactHeader(t("laneId")),
+            renderCell: params => (
+                <Box sx={{display: "flex", flexDirection: "column", justifyContent: "center", py: 0.5, minWidth: 0}}>
+                    <Box component="span" sx={{fontWeight: 600, fontSize: "0.83rem", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis"}}>{params.row.laneId}</Box>
+                    <Box component="span" sx={{fontSize: "0.71rem", color: "text.secondary", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis"}}>{params.row.parentNode}</Box>
+                </Box>
+            ),
         },
-        {field: "occupancyCount", headerName: t("occupancyId"), minWidth: 125, flex: 1.2},
         {
-            field: "startTime", headerName: t("startTime"), minWidth: 200, flex: 1.8, type: "dateTime",
+            field: "occupancyCount",
+            headerName: t("occupancyId"),
+            minWidth: 78,
+            flex: 0.58,
+            renderHeader: () => renderCompactHeader(t("occupancyId")),
+            renderCell: params => (
+                <Box component="span" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
+                    {params.value}
+                </Box>
+            ),
+        },
+        {
+            field: "startTime",
+            headerName: t("startTime"),
+            minWidth: 88,
+            flex: 0.78,
+            type: "dateTime",
+            renderHeader: () => renderCompactHeader(t("startTime")),
             valueGetter: value => new Date(value),
             valueFormatter: value => new Date(value).toLocaleString(locale),
+            renderCell: params => renderCompactTimestamp(params.value ?? params.row.startTime),
         },
         {
-            field: "endTime", headerName: t("endTime"), minWidth: 200, flex: 1.8, type: "dateTime",
+            field: "endTime",
+            headerName: t("endTime"),
+            minWidth: 88,
+            flex: 0.78,
+            type: "dateTime",
+            renderHeader: () => renderCompactHeader(t("endTime")),
             valueGetter: value => new Date(value),
             valueFormatter: value => new Date(value).toLocaleString(locale),
+            renderCell: params => renderCompactTimestamp(params.value ?? params.row.endTime),
         },
-        {field: "maxGamma", headerName: t("maxGamma"), minWidth: 165, flex: 1.2},
-        {field: "maxNeutron", headerName: t("maxNeutron"), minWidth: 165, flex: 1.2},
         {
-            field: "status", headerName: t("status"), minWidth: 140, flex: 1.2,
+            field: "maxGamma",
+            headerName: t("maxGamma"),
+            minWidth: 90,
+            flex: 0.68,
+            renderHeader: () => renderCompactHeader(t("maxGamma")),
+            renderCell: params => (
+                <Box component="span" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
+                    {params.value}
+                </Box>
+            ),
+        },
+        {
+            field: "maxNeutron",
+            headerName: t("maxNeutron"),
+            minWidth: 96,
+            flex: 0.72,
+            renderHeader: () => renderCompactHeader(t("maxNeutron")),
+            renderCell: params => (
+                <Box component="span" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
+                    {params.value}
+                </Box>
+            ),
+        },
+        {
+            field: "status",
+            headerName: t("status"),
+            minWidth: 126,
+            flex: 0.98,
+            renderHeader: () => renderCompactHeader(t("status")),
             valueFormatter: (value: string) => formatOccupancyStatus(value, t),
+            renderCell: params => {
+                const rawStatus = String(params.value ?? "None");
+                const isGamma = rawStatus === "Gamma";
+                const isNeutron = rawStatus === "Neutron";
+                const isGammaNeutron = rawStatus === "Gamma & Neutron" || (rawStatus !== "None" && !isGamma && !isNeutron);
+                return (
+                    <Box
+                        component="span"
+                        className="status-pill"
+                        sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            px: 1.15,
+                            py: 0.35,
+                            borderRadius: "999px",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            lineHeight: 1.2,
+                            letterSpacing: "0.01em",
+                            whiteSpace: "nowrap",
+                            maxWidth: "100%",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            ...(isGamma && {
+                                bgcolor: "error.main",
+                                color: "error.contrastText",
+                            }),
+                            ...(isNeutron && {
+                                bgcolor: "info.main",
+                                color: "info.contrastText",
+                            }),
+                            ...(isGammaNeutron && {
+                                bgcolor: "secondary.main",
+                                color: "secondary.contrastText",
+                            }),
+                            ...(!isGamma && !isNeutron && !isGammaNeutron && {
+                                bgcolor: "action.hover",
+                                color: "text.secondary",
+                                border: "1px solid",
+                                borderColor: "divider",
+                            }),
+                        }}
+                    >
+                        {params.formattedValue ?? formatOccupancyStatus(rawStatus, t)}
+                    </Box>
+                );
+            },
             sortComparator: (_left, _right, leftCellParams, rightCellParams) =>
                 sortEventsByAlarmPriority(
                     leftCellParams.api.getRow(leftCellParams.id),
@@ -660,21 +806,56 @@ export default function EventTable({
                 ),
         },
         {
-            field: "adjudicatedIds", headerName: t("adjudicated"), minWidth: 130, flex: 1.1,
+            field: "adjudicatedIds",
+            headerName: t("adjudicated"),
+            minWidth: 86,
+            flex: 0.65,
+            renderHeader: () => renderCompactHeader(t("adjudicated")),
             valueFormatter: (value: any) => hasEmlNonThreatMarker(value)
                 ? t("emlNonThreat")
                 : (value?.length > 0 ? t("yes") : t("no")),
+            renderCell: params => {
+                const isEml = hasEmlNonThreatMarker(params.value);
+                const isYes = !isEml && (params.value?.length ?? 0) > 0;
+                return (
+                    <Box
+                        component="span"
+                        sx={{
+                            fontSize: "0.8rem",
+                            fontWeight: isEml || isYes ? 600 : 400,
+                            color: isEml ? "info.main" : isYes ? "success.main" : "text.secondary",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                        }}
+                    >
+                        {params.formattedValue}
+                    </Box>
+                );
+            },
         },
         {
-            field: "adjudicationCode", headerName: t("adjudicationCode"), minWidth: 210, flex: 1.5,
+            field: "adjudicationCode",
+            headerName: t("adjudicationCode"),
+            minWidth: 132,
+            flex: 1.05,
+            renderHeader: () => renderCompactHeader(t("adjudicationCode")),
             valueGetter: (_value, row) => extractLatestAdjudicationCode(row.adjudicatedIds),
             valueFormatter: (value: number | null) => value === null || value === undefined ? "—" : formatAdjudicationCodeLabel(value),
         },
         {
-            field: "Menu", headerName: "", type: "actions", minWidth: 50,
+            field: "Menu",
+            headerName: "",
+            type: "actions",
+            width: 40,
+            minWidth: 40,
+            maxWidth: 40,
+            sortable: false,
+            filterable: false,
+            disableColumnMenu: true,
             getActions: params => [<GridActionsCellItem key="details" icon={<VisibilityRoundedIcon />} label={t("details")} onClick={() => previewEvent(params.row, true)} showInMenu />],
         },
-    ], [formatAdjudicationCodeLabel, locale, t]);
+    ], [formatAdjudicationCodeLabel, locale, renderCompactHeader, renderCompactTimestamp, t]);
 
     const getColumnList = () => columns
         .filter(column => viewAdjudicated || (column.field !== "adjudicatedIds" && column.field !== "adjudicationCode"))
@@ -702,6 +883,8 @@ export default function EventTable({
                 rows={rows}
                 getRowId={eventSelectionKey}
                 columns={columns}
+                columnHeaderHeight={48}
+                rowHeight={48}
                 loading={loading}
                 paginationMode="server"
                 filterMode="server"
@@ -752,9 +935,40 @@ export default function EventTable({
                 getRowClassName={params => params.row.id === selectedRowId ? "preview-row" : ""}
                 sx={{
                     [`.${gridClasses.row}.preview-row`]: {boxShadow: "inset 3px 0 0 #1976d2"},
-                    [`.${gridClasses.cell}.highlightGamma`]: {backgroundColor: "error.main", color: "error.contrastText"},
-                    [`.${gridClasses.cell}.highlightNeutron`]: {backgroundColor: "info.main", color: "info.contrastText"},
-                    [`.${gridClasses.cell}.highlightGammaNeutron`]: {backgroundColor: "secondary.main", color: "secondary.contrastText"},
+                    [`& .${gridClasses.columnHeader}, & .${gridClasses.cell}`]: {px: 0.75},
+                    [`& .${gridClasses.cell}`]: {display: "flex", alignItems: "center"},
+                    [`& .${gridClasses.columnHeaderTitleContainer}`]: {flex: 1, minWidth: 0, overflow: "visible"},
+                    [`& .${gridClasses.columnHeaderTitleContainerContent}`]: {overflow: "visible", minWidth: 0},
+                    [`& .${gridClasses.menuIcon}`]: {
+                        display: "none",
+                        width: 0,
+                        mr: 0,
+                    },
+                    [`& .${gridClasses.columnHeader}:hover .${gridClasses.menuIcon}, & .${gridClasses.menuOpen}`]: {
+                        display: "flex",
+                        width: "auto",
+                        visibility: "visible",
+                    },
+                    [`& .${gridClasses.iconButtonContainer}`]: {
+                        display: "none",
+                        width: 0,
+                    },
+                    [`& .${gridClasses.columnHeader}:hover .${gridClasses.iconButtonContainer}, & .${gridClasses.columnHeader}--sorted .${gridClasses.iconButtonContainer}`]: {
+                        display: "flex",
+                        width: "auto",
+                        visibility: "visible",
+                    },
+                    [`& .${gridClasses.actionsCell}`]: {
+                        gridGap: 0,
+                    },
+                    [`& [data-field="Menu"]`]: {
+                        px: 0,
+                        justifyContent: "center",
+                        overflow: "hidden",
+                    },
+                    [`& .${gridClasses.cellCheckbox}, & .${gridClasses.columnHeaderCheckbox}`]: {
+                        px: 0.5,
+                    },
                     border: "none",
                 }}
             />
