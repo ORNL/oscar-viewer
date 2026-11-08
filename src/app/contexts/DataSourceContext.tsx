@@ -60,8 +60,21 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
     const discoveryGenerationRef = useRef(0);
 
     useEffect(() => {
-        const selection = parseOperationalView(window.location.search);
-        setViewSelection({resolved: true, ...selection});
+        const syncOperationalView = () => {
+            const selection = parseOperationalView(window.location.search);
+            setViewSelection((current) => (
+                current.resolved &&
+                current.key === selection.key &&
+                current.error === selection.error
+                    ? current
+                    : {resolved: true, ...selection}
+            ));
+        };
+        syncOperationalView();
+        window.addEventListener("popstate", syncOperationalView);
+        return () => {
+            window.removeEventListener("popstate", syncOperationalView);
+        };
     }, []);
 
 

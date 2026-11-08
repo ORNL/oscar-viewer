@@ -1,11 +1,15 @@
 import {
+    buildLaneExtentSignature,
     buildSiteDiagramUrl,
+    LANE_EXTENT_FIT_OPTIONS,
     LANE_MARKER_PANE_Z_INDEX,
     OSM_TILE_URL,
+    resolveLaneMapLocation,
     SITE_DIAGRAM_FIT_OPTIONS,
     SITE_DIAGRAM_PANE_Z_INDEX,
     toLaneMapLocation,
     toLaneMapLocationFromSystem,
+    toLeafletLaneExtentBounds,
     toLeafletSiteDiagramBounds,
 } from "../../src/app/_components/maps/MapUtils";
 import {isLocationDataStream} from "../../src/lib/data/oscar/Utilities";
@@ -99,5 +103,62 @@ describe("map configuration", () => {
             animate: false,
             padding: [0, 0],
         });
+    });
+
+    it("computes tight lane extent bounds for 4, 25, or 50 lanes and operational views", () => {
+        const fourLanes = [
+            {lat: 35.89, lon: -84.19},
+            {lat: 35.883, lon: -84.19},
+            {lat: 35.876, lon: -84.188},
+            {lat: 35.87, lon: -84.186},
+        ];
+        expect(toLeafletLaneExtentBounds(fourLanes)).to.deep.equal([
+            [35.87, -84.19],
+            [35.89, -84.186],
+        ]);
+
+        const fiftyLanes = Array.from({length: 50}, (_, idx) => ({
+            lat: 35.87 + (idx % 5) * 0.005,
+            lon: -84.19 + Math.floor(idx / 5) * 0.006,
+        }));
+        expect(toLeafletLaneExtentBounds(fiftyLanes)).to.deep.equal([
+            [35.87, -84.19],
+            [35.89, -84.136],
+        ]);
+
+        expect(LANE_EXTENT_FIT_OPTIONS).to.deep.equal({
+            animate: false,
+            padding: [14, 14],
+            maxZoom: 18,
+        });
+    });
+
+    it("excludes unconfigured (0, 0) coordinates when valid lane locations exist", () => {
+        expect(toLeafletLaneExtentBounds([
+            {lat: 0, lon: 0},
+            {lat: 35.87, lon: -84.19},
+            {lat: 35.89, lon: -84.18},
+        ])).to.deep.equal([
+            [35.87, -84.19],
+            [35.89, -84.18],
+        ]);
+
+        expect(resolveLaneMapLocation(
+            {location: {lat: 0, lon: 0, alt: 0}},
+            {lat: 35.8855, lon: -84.2115, alt: 12},
+        )).to.deep.equal({lat: 35.8855, lon: -84.2115, alt: 12});
+    });
+
+    it("builds a deterministic lane extent signature unaffected by status changes", () => {
+        const initial = buildLaneExtentSignature([
+            {laneName: "Lane02", location: {lat: 35.883, lon: -84.19}},
+            {laneName: "Lane01", location: {lat: 35.89, lon: -84.19}},
+        ]);
+        const reordered = buildLaneExtentSignature([
+            {laneName: "Lane01", location: {lat: 35.89, lon: -84.19}},
+            {laneName: "Lane02", location: {lat: 35.883, lon: -84.19}},
+        ]);
+        expect(initial).to.equal(reordered);
+        expect(initial).to.equal("Lane01:35.890000,-84.190000|Lane02:35.883000,-84.190000");
     });
 });
