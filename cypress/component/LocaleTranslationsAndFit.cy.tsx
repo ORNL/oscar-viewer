@@ -101,5 +101,7 @@ describe("i18n domain terminology, status localization, and compact headers", ()
         cy.mount(<LanguageProvider><DataRow eventData={sampleEvent} nodeId="node-1"/></LanguageProvider>);
         cy.contains("th", "Λωρίδα").should("have.css", "white-space", "nowrap");
         cy.contains("td", "Γάμμα").should("exist");
+        cy.get(".status-pill").should("contain.text", "Γάμμα");
+        cy.get('[role="region"][tabindex="0"]').should("exist");
     });
 });
