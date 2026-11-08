@@ -25,6 +25,7 @@ import CloudRoundedIcon from '@mui/icons-material/CloudRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import SettingsIcon from '@mui/icons-material/Settings';
+import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import MediationIcon from '@mui/icons-material/Mediation';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import {Alert, Button, Chip, FormControlLabel, Menu, MenuItem, Slider, Stack, Switch, Tooltip} from '@mui/material';
@@ -43,6 +44,7 @@ import {setEventData} from "@/lib/state/EventDetailsSlice";
 import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
+import HelpDialog from "@/app/_components/HelpDialog";
 
 const drawerWidth = 276;
 const drawerWidthMobile = 236;
@@ -133,6 +135,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
 
     const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null); // Anchor element for settings menu
     const settingsMenuOpen = Boolean(settingsAnchorEl); // Open state for settings menu
+    const [helpDialogOpen, setHelpDialogOpen] = useState(false);
 
     const [drawerOpen, setDrawerOpen] = useState(false);  // Open state for navigation drawer
     const { t } = useLanguage();
@@ -427,6 +430,15 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 {t('logOut')}
                             </Button>
                             <LanguageSelector />
+                            <Tooltip title={t('operatorHelp')} arrow placement="top">
+                                <IconButton
+                                    color="inherit"
+                                    aria-label={t('operatorHelp')}
+                                    onClick={() => setHelpDialogOpen(true)}
+                                >
+                                    <HelpOutlineRoundedIcon />
+                                </IconButton>
+                            </Tooltip>
                             <Tooltip title={t('settings')} arrow placement="top">
                                 <IconButton
                                     color="inherit"
@@ -440,6 +452,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     </Stack>
                 </Toolbar>
             </AppBar>
+            <HelpDialog open={helpDialogOpen} onClose={() => setHelpDialogOpen(false)} />
             <Menu
                 id="settings-menu"
                 anchorEl={settingsAnchorEl}
