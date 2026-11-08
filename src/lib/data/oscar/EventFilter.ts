@@ -3,6 +3,8 @@ import {
     adjudicationCodeMarker,
     EML_NON_THREAT_CODE,
     EML_NON_THREAT_MARKER,
+    EXTENDED_OCCUPANCY_GAMMA_CODE,
+    EXTENDED_OCCUPANCY_GAMMA_MARKER,
 } from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
 import {
     extractLatestAdjudicationCode,
@@ -141,6 +143,9 @@ const normalizeAdjudicationCodeToken = (raw: unknown): number | null => {
     const lower = trimmed.toLocaleLowerCase();
     if (lower === EML_NON_THREAT_MARKER || lower === "eml non-threat") {
         return EML_NON_THREAT_CODE;
+    }
+    if (lower === EXTENDED_OCCUPANCY_GAMMA_MARKER || lower === "extended occupancy gamma alarm") {
+        return EXTENDED_OCCUPANCY_GAMMA_CODE;
     }
     if (!/^\d+$/.test(trimmed)) return null;
     const parsed = Number(trimmed);

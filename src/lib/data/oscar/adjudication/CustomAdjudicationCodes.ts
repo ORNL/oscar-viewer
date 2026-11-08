@@ -1,5 +1,10 @@
 import {INode} from "@/lib/data/osh/Node";
-import {AdjudicationCode, AdjudicationCodes, EML_NON_THREAT_CODE} from "./models/AdjudicationConstants";
+import {
+    AdjudicationCode,
+    AdjudicationCodes,
+    EML_NON_THREAT_CODE,
+    EXTENDED_OCCUPANCY_GAMMA_CODE,
+} from "./models/AdjudicationConstants";
 
 export const CUSTOM_CODES_DEFINITION = "urn:osh:def:property:CustomAdjudicationCodes";
 
@@ -11,8 +16,15 @@ export function parseCustomCodes(value: unknown): AdjudicationCode[] {
     if (!Array.isArray(value)) return [];
     const codes = new Map<number, AdjudicationCode>();
     for (const entry of value) {
-        if (!Number.isInteger(entry?.code) || entry.code <= 11 || entry.code === EML_NON_THREAT_CODE ||
-            entry.code > 2147483647 || typeof entry.label !== "string" || !entry.label.trim()) continue;
+        if (
+            !Number.isInteger(entry?.code) ||
+            entry.code <= 11 ||
+            entry.code === EXTENDED_OCCUPANCY_GAMMA_CODE ||
+            entry.code === EML_NON_THREAT_CODE ||
+            entry.code > 2147483647 ||
+            typeof entry.label !== "string" ||
+            !entry.label.trim()
+        ) continue;
         codes.set(entry.code, {code: entry.code, label: entry.label, group: "Custom"});
     }
     return [...codes.values()];

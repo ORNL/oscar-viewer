@@ -2,6 +2,8 @@ import {
     ADJUDICATION_CODE_MARKER_PREFIX,
     EML_NON_THREAT_CODE,
     EML_NON_THREAT_MARKER,
+    EXTENDED_OCCUPANCY_GAMMA_CODE,
+    EXTENDED_OCCUPANCY_GAMMA_MARKER,
 } from "./models/AdjudicationConstants";
 
 export const EML_METADATA_PREFIX = "EML_METADATA:";
@@ -41,6 +43,11 @@ export function hasEmlNonThreatMarker(adjudicatedIds?: readonly unknown[] | null
     return adjudicatedIds.some(value => String(value ?? "").trim() === EML_NON_THREAT_MARKER);
 }
 
+export function hasExtendedOccupancyGammaMarker(adjudicatedIds?: readonly unknown[] | null): boolean {
+    if (!Array.isArray(adjudicatedIds)) return false;
+    return adjudicatedIds.some(value => String(value ?? "").trim() === EXTENDED_OCCUPANCY_GAMMA_MARKER);
+}
+
 export function parseAdjudicationCodeMarker(value: unknown): number | null {
     const trimmed = String(value ?? "").trim();
     if (!trimmed.startsWith(ADJUDICATION_CODE_MARKER_PREFIX)) return null;
@@ -56,12 +63,15 @@ export function extractLatestAdjudicationCode(adjudicatedIds?: readonly unknown[
         const code = parseAdjudicationCodeMarker(adjudicatedIds[index]);
         if (code !== null) return code;
     }
-    return hasEmlNonThreatMarker(adjudicatedIds) ? EML_NON_THREAT_CODE : null;
+    if (hasEmlNonThreatMarker(adjudicatedIds)) return EML_NON_THREAT_CODE;
+    if (hasExtendedOccupancyGammaMarker(adjudicatedIds)) return EXTENDED_OCCUPANCY_GAMMA_CODE;
+    return null;
 }
 
 export function isSyntheticAdjudicationMarker(id: string): boolean {
     const trimmed = String(id ?? "").trim();
     return trimmed === EML_NON_THREAT_MARKER
+        || trimmed === EXTENDED_OCCUPANCY_GAMMA_MARKER
         || trimmed === "bulk-adjudicated"
         || parseAdjudicationCodeMarker(trimmed) !== null;
 }
