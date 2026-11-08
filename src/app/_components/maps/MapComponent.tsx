@@ -1,6 +1,6 @@
 "use client"
 
-import React, {useCallback, useContext, useEffect, useRef, useState} from "react";
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {
     acquireSharedConnection,
     findRealtimeDataSourceForStream,
@@ -31,17 +31,22 @@ import {useLanguage} from '@/app/contexts/LanguageContext';
 import {EventType} from "osh-js/source/core/event/EventType";
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
 import {
+    buildLaneExtentSignature,
     buildSiteDiagramUrl,
+    LANE_EXTENT_FIT_OPTIONS,
+    LANE_MARKER_ICON_ANCHOR,
+    LANE_MARKER_ICON_SIZE,
     LANE_MARKER_PANE,
     LANE_MARKER_PANE_Z_INDEX,
     LaneMapLocation,
     OSM_TILE_URL,
+    resolveLaneMapLocation,
     SITE_DIAGRAM_FIT_OPTIONS,
     SITE_DIAGRAM_PANE,
     SITE_DIAGRAM_PANE_Z_INDEX,
     SiteDiagramBounds,
-    toLaneMapLocation,
     toLaneMapLocationFromSystem,
+    toLeafletLaneExtentBounds,
     toLeafletSiteDiagramBounds,
 } from "@/app/_components/maps/MapUtils";
 
@@ -58,9 +63,13 @@ export default function MapComponent() {
     const laneMap = useSelector((state: RootState) => selectLaneMap(state));
     const leafletViewRef = useRef<typeof LeafletView | null>(null);
     const siteDiagramLayersRef = useRef<Map<string, L.ImageOverlay>>(new Map());
+    const siteDiagramBoundsRef = useRef<L.LatLngBounds | null>(null);
     const laneMarkerLayersRef = useRef<Map<string, L.Marker>>(new Map());
+    const locationListRef = useRef<LaneMarkerState[]>([]);
+    const hasUserAdjustedViewRef = useRef(false);
+    const isProgrammaticViewChangeRef = useRef(false);
     const previousLanguageRef = useRef(language);
-    const {laneMapReady, scopedHref} = useContext(DataSourceContext);
+    const {activeViewKey, laneMapReady, scopedHref} = useContext(DataSourceContext);
     const dispatch = useAppDispatch();
 
     const nodes = useSelector((state: RootState) => selectNodes(state));
@@ -69,8 +78,56 @@ export default function MapComponent() {
     const [dataSourcesByLane, setDataSourcesByLane] = useState<Map<string, LaneDSColl>>(new Map<string, LaneDSColl>());
     const [locationList, setLocationList] = useState<LaneMarkerState[]>([]);
 
+    locationListRef.current = locationList;
+
+    const laneExtentSignature = useMemo(
+        () => buildLaneExtentSignature(locationList),
+        [locationList],
+    );
+
+    const fitMapToActiveExtent = useCallback((resetUserAdjustment = false) => {
+        const view = leafletViewRef.current;
+        if (!view?.map)
+            return;
+
+        if (resetUserAdjustment)
+            hasUserAdjustedViewRef.current = false;
+
+        const laneBoundsCoords = toLeafletLaneExtentBounds(
+            locationListRef.current.map((item) => item.location),
+        );
+
+        if (laneBoundsCoords) {
+            isProgrammaticViewChangeRef.current = true;
+            try {
+                view.map.invalidateSize({pan: false, animate: false});
+                view.map.fitBounds(L.latLngBounds(laneBoundsCoords), LANE_EXTENT_FIT_OPTIONS);
+            } finally {
+                isProgrammaticViewChangeRef.current = false;
+            }
+            return;
+        }
+
+        if (siteDiagramBoundsRef.current?.isValid()) {
+            isProgrammaticViewChangeRef.current = true;
+            try {
+                view.map.invalidateSize({pan: false, animate: false});
+                view.map.fitBounds(siteDiagramBoundsRef.current, SITE_DIAGRAM_FIT_OPTIONS);
+            } finally {
+                isProgrammaticViewChangeRef.current = false;
+            }
+        }
+    }, []);
+
     useEffect(() => {
-        if (!laneMapReady) return;
+        if (laneMap.size === 0 && !laneMapReady)
+            return;
+
+        if (laneMap.size === 0) {
+            setDataSourcesByLane(new Map());
+            setLocationList([]);
+            return;
+        }
 
         let cancelled = false;
         const laneDSMap = new Map<string, LaneDSColl>();
@@ -112,6 +169,26 @@ export default function MapComponent() {
         }
         setDataSourcesByLane(laneDSMap);
 
+        // Seed lane markers immediately from the lane system GeoJSON geometry
+        // so the map fits the active lane extent on the first render frame
+        // without waiting for per-lane latest observation queries to settle.
+        setLocationList((current) => {
+            const currentByLane = new Map(current.map((item) => [item.laneName, item]));
+            return locationSources
+                .map(({laneName, systemLocation}) => {
+                    const existing = currentByLane.get(laneName);
+                    const location = systemLocation ?? existing?.location ?? null;
+                    if (!location)
+                        return null;
+                    return {
+                        laneName,
+                        location,
+                        status: existing?.status ?? 'None',
+                    } as LaneMarkerState;
+                })
+                .filter((marker): marker is LaneMarkerState => marker !== null);
+        });
+
         const loadLatestLocations = async () => {
             const markers = await Promise.all(locationSources.map(async ({laneName, dataStream, systemLocation}) => {
                 if (!dataStream) {
@@ -126,7 +203,7 @@ export default function MapComponent() {
                     const observations = await dataStream.searchObservations(
                         new ObservationFilter({resultTime: "latest"}), 1);
                     const results = await observations.nextPage();
-                    const location = toLaneMapLocation(results[0]?.result) ?? systemLocation;
+                    const location = resolveLaneMapLocation(results[0]?.result, systemLocation);
                     if (!location) {
                         console.warn(`No valid latest location is available for lane ${laneName}`);
                         return null;
@@ -243,7 +320,7 @@ export default function MapComponent() {
                 container: mapcontainer,
                 layers: [],
                 imageOverlays: [],
-                autoZoomOnFirstMarker: true,
+                autoZoomOnFirstMarker: false,
                 baseLayers:{
                     [t('osmStreets')]: osmLayer,
                     [t('esriSatellite')]: esriLayer
@@ -252,6 +329,14 @@ export default function MapComponent() {
                 defaultLayer: osmLayer
             });
             view.map.options.zoomSnap = 0;
+            view.map.options.zoomDelta = 0.5;
+            const markUserAdjustedView = () => {
+                if (!isProgrammaticViewChangeRef.current)
+                    hasUserAdjustedViewRef.current = true;
+            };
+            view.map.on("dragstart", markUserAdjustedView);
+            view.map.on("zoomstart", markUserAdjustedView);
+
             const siteDiagramPane = view.map.createPane(SITE_DIAGRAM_PANE);
             siteDiagramPane.style.zIndex = String(SITE_DIAGRAM_PANE_Z_INDEX);
             siteDiagramPane.style.pointerEvents = "none";
@@ -263,6 +348,7 @@ export default function MapComponent() {
             if (!view.map.hasLayer(osmLayer))
                 osmLayer.addTo(view.map);
 
+            hasUserAdjustedViewRef.current = false;
             leafletViewRef.current = view;
             setIsInit(true);
         }
@@ -270,6 +356,7 @@ export default function MapComponent() {
         return () =>{
             if(isInit && leafletViewRef.current != null){
                 siteDiagramLayersRef.current.clear();
+                siteDiagramBoundsRef.current = null;
                 laneMarkerLayersRef.current.clear();
                 leafletViewRef.current.destroy();
                 leafletViewRef.current = undefined;
@@ -283,6 +370,7 @@ export default function MapComponent() {
 
         if (leafletViewRef.current) {
             siteDiagramLayersRef.current.clear();
+            siteDiagramBoundsRef.current = null;
             laneMarkerLayersRef.current.clear();
             leafletViewRef.current.destroy();
             leafletViewRef.current = null;
@@ -300,8 +388,8 @@ export default function MapComponent() {
             const iconPath = getMarkerIcon(status);
             const markerIcon = L.icon({
                 iconUrl: iconPath,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12],
+                iconSize: LANE_MARKER_ICON_SIZE,
+                iconAnchor: LANE_MARKER_ICON_ANCHOR,
             });
             let marker = laneMarkerLayersRef.current.get(laneName);
 
@@ -337,6 +425,57 @@ export default function MapComponent() {
             }
         });
     }, [locationList, isInit, language, t]);
+
+    useEffect(() => {
+        if (!isInit || !laneExtentSignature)
+            return;
+
+        fitMapToActiveExtent(true);
+        const frameId = window.requestAnimationFrame(() => {
+            fitMapToActiveExtent(false);
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, [activeViewKey, fitMapToActiveExtent, isInit, laneExtentSignature]);
+
+    useEffect(() => {
+        const view = leafletViewRef.current;
+        if (!view?.map || !isInit || typeof ResizeObserver === "undefined")
+            return;
+
+        const containerElement = document.getElementById(mapcontainer);
+        if (!containerElement)
+            return;
+
+        let resizeFrameId: number | null = null;
+        const observer = new ResizeObserver(() => {
+            if (resizeFrameId !== null)
+                window.cancelAnimationFrame(resizeFrameId);
+            resizeFrameId = window.requestAnimationFrame(() => {
+                if (leafletViewRef.current !== view)
+                    return;
+                if (!hasUserAdjustedViewRef.current) {
+                    fitMapToActiveExtent(false);
+                } else {
+                    isProgrammaticViewChangeRef.current = true;
+                    try {
+                        view.map.invalidateSize({pan: false, animate: false});
+                    } finally {
+                        isProgrammaticViewChangeRef.current = false;
+                    }
+                }
+            });
+        });
+        observer.observe(containerElement);
+
+        return () => {
+            observer.disconnect();
+            if (resizeFrameId !== null)
+                window.cancelAnimationFrame(resizeFrameId);
+        };
+    }, [fitMapToActiveExtent, isInit]);
 
     useEffect(() => {
         const view = leafletViewRef.current;
@@ -426,17 +565,18 @@ export default function MapComponent() {
                 combinedBounds.extend(leafletBounds);
             });
 
+            siteDiagramBoundsRef.current = diagrams.length > 0 ? combinedBounds : null;
+
             if (diagrams.length > 0) {
                 view.autoZoomOnFirstMarker = false;
-                // Wait for the dashboard grid to finish laying out the map.
-                // Leaflet then computes the tightest fractional zoom that
-                // contains the exact uploaded lower-left/upper-right extent.
+                // Fit to the active lane extent when lane locations exist, or
+                // fall back to the uploaded site diagram extent when no lane
+                // coordinates are available.
                 fitFrameId = window.requestAnimationFrame(() => {
                     if (cancelled || leafletViewRef.current !== view)
                         return;
 
-                    view.map.invalidateSize({pan: false, animate: false});
-                    view.map.fitBounds(combinedBounds, SITE_DIAGRAM_FIT_OPTIONS);
+                    fitMapToActiveExtent(false);
                 });
             }
         };
@@ -447,7 +587,7 @@ export default function MapComponent() {
             if (fitFrameId !== null)
                 window.cancelAnimationFrame(fitFrameId);
         };
-    }, [isInit, laneMap, laneMapReady, nodes, language]);
+    }, [fitMapToActiveExtent, isInit, laneMap, laneMapReady, nodes, language]);
 
     const updateLocationList = (laneName: string, newStatus: string) => {
         setLocationList((prevState) => {
