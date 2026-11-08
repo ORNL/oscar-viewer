@@ -536,5 +536,6 @@
   "emlSourceProbabilities": "NORM {norm} · Μη εκπέμπον {nonEmitting} · Απειλή {threat}",
   "emlModelAndVersion": "Μοντέλο EML",
   "emlVehicleMetrics": "Προφίλ οχήματος",
-  "emlVehicleProfileValue": "Κατ. {vehicleClass} · {length} m"
+  "emlVehicleProfileValue": "Κατ. {vehicleClass} · {length} m",
+  "operatorHelp": "Βοήθεια χειριστή & γλωσσάριο"
 }

@@ -536,5 +536,6 @@
   "emlSourceProbabilities": "NORM {norm} · Non-emitting {nonEmitting} · Threat {threat}",
   "emlModelAndVersion": "Classifier model",
   "emlVehicleMetrics": "Vehicle profile",
-  "emlVehicleProfileValue": "Class {vehicleClass} · {length} m"
+  "emlVehicleProfileValue": "Class {vehicleClass} · {length} m",
+  "operatorHelp": "Operator Help & Glossary"
 }
