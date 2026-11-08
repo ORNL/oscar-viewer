@@ -540,5 +540,15 @@
   "emlModelAndVersion": "Modèle classifieur",
   "emlVehicleMetrics": "Profil véhicule",
   "emlVehicleProfileValue": "Classe {vehicleClass} · {length} m",
-  "operatorHelp": "Aide opérateur et glossaire"
+  "operatorHelp": "Aide opérateur et glossaire",
+  "detectorPlotLayout": "Disposition des graphiques de détecteurs",
+  "combinedPlot": "Graphique combiné",
+  "separateAccessibilityPlots": "Graphiques séparés (Accessibilité)",
+  "customizeDashboard": "Widgets",
+  "showLaneStatusWidget": "État des voies",
+  "showEventsWidget": "Tableau des événements",
+  "showMapPreviewWidget": "Carte / Aperçu",
+  "hideWidget": "Masquer le widget",
+  "resetDashboardWidgets": "Tout restaurer",
+  "allDashboardWidgetsHidden": "Tous les widgets du tableau de bord sont actuellement masqués."
 }

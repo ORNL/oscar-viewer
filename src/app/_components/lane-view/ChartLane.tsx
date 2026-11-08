@@ -1,6 +1,6 @@
 "use client";
 
-import {Grid, ToggleButton, ToggleButtonGroup} from "@mui/material";
+import {Grid, Stack, ToggleButton, ToggleButtonGroup} from "@mui/material";
 import ConSysApi from "osh-js/source/core/datasource/consysapi/ConSysApi.datasource";
 import React, {useEffect, useRef, useState} from "react";
 import ChartJsView from "osh-js/source/core/ui/view/chart/ChartJsView";
@@ -10,6 +10,12 @@ import {
     createNeutronDetectorViewCurves,
     createNeutronViewCurve,
     createThresholdViewCurve,
+    DETECTOR_DATASET_OPTIONS,
+    type DetectorPlotLayout,
+    getStoredDetectorPlotLayout,
+    patchChartViewMultiCurveSync,
+    setStoredDetectorPlotLayout,
+    sortTooltipByHighestCps,
 } from "@/app/utils/ChartUtils";
 import {useLanguage} from '@/app/contexts/LanguageContext';
 
@@ -37,6 +43,8 @@ const gammaDetectorChartIds = [
     "gamma-detector-3",
     "gamma-detector-4",
 ];
+const combinedGammaChartID = "gamma-detectors-combined";
+const combinedNeutronChartID = "neutron-detectors-combined";
 const gammaChartID = "chart-view-gamma";
 const neutronChartID = "chart-view-neutron";
 
@@ -44,9 +52,18 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
     const {t} = useLanguage();
 
     const [mode, setMode] = useState<ChartMode>('total');
+    const [detectorLayout, setDetectorLayout] = useState<DetectorPlotLayout>(() => getStoredDetectorPlotLayout());
     const chartViewsRef = useRef<any[]>([]);
 
-    const createOptions = (title: string) => ({
+    const createOptions = (title: string, isCombinedDetectorPlot = false) => ({
+        ...(isCombinedDetectorPlot
+            ? {
+                interaction: {
+                    mode: 'index' as const,
+                    intersect: false,
+                },
+            }
+            : {}),
         plugins: {
             title: {
                 display: true,
@@ -55,7 +72,14 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
                 align: 'center' as const,
                 position: 'top' as const,
             },
-            legend: {display: true, align: 'center' as const, position: 'bottom' as const}
+            legend: {display: true, align: 'center' as const, position: 'bottom' as const},
+            ...(isCombinedDetectorPlot
+                ? {
+                    tooltip: {
+                        itemSort: sortTooltipByHighestCps,
+                    },
+                }
+                : {}),
         },
         responsive: true,
         scales: {
@@ -85,16 +109,28 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
         const labels = { time: t('time'), gamma: t('gamma'), neutron: t('neutron'), threshold: t('threshold') };
         const views: any[] = [];
 
-        const addChart = (container: string, layers: any[], title: string) => {
+        const addChart = (
+            container: string,
+            layers: any[],
+            title: string,
+            isCombinedDetectorPlot = false,
+            useCleanDetectorLines = false,
+        ) => {
             if (layers.length === 0 || !document.getElementById(container)) return;
 
-            views.push(new ChartJsView({
+            const view = new ChartJsView({
                 type: 'line',
                 container,
                 layers,
                 css: 'chart-view',
-                options: createOptions(title),
-            }));
+                refreshRate: useCleanDetectorLines ? 0 : undefined,
+                datasetOptions: useCleanDetectorLines ? DETECTOR_DATASET_OPTIONS : undefined,
+                options: createOptions(title, isCombinedDetectorPlot),
+            });
+            if (useCleanDetectorLines) {
+                patchChartViewMultiCurveSync(view, false);
+            }
+            views.push(view);
         };
 
         if (mode === 'total') {
@@ -110,15 +146,25 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
             const curves = mode === 'gamma'
                 ? createGammaDetectorViewCurves(datasources.gamma, labels)
                 : createNeutronDetectorViewCurves(datasources.neutron, labels);
-            const chartLabel = t('detector');
 
-            const chartIds = mode === 'gamma'
-                ? gammaDetectorChartIds
-                : neutronDetectorChartIds;
+            if (detectorLayout === 'combined') {
+                const combinedContainerId = mode === 'gamma'
+                    ? combinedGammaChartID
+                    : combinedNeutronChartID;
+                const combinedTitle = mode === 'gamma'
+                    ? t('chartModeGammaDetectors')
+                    : t('chartModeNeutronDetectors');
+                addChart(combinedContainerId, curves, combinedTitle, true, true);
+            } else {
+                const chartLabel = t('detector');
+                const chartIds = mode === 'gamma'
+                    ? gammaDetectorChartIds
+                    : neutronDetectorChartIds;
 
-            curves.forEach((curve, index) => {
-                addChart(chartIds[index], [curve], `${chartLabel} ${index + 1}`);
-            });
+                curves.forEach((curve, index) => {
+                    addChart(chartIds[index], [curve], `${chartLabel} ${index + 1}`, false, true);
+                });
+            }
         }
 
         chartViewsRef.current = views;
@@ -129,7 +175,7 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
             });
             chartViewsRef.current = [];
         };
-    }, [datasources.gamma, datasources.neutron, datasources.threshold, laneName, mode, t]);
+    }, [datasources.gamma, datasources.neutron, datasources.threshold, detectorLayout, laneName, mode, t]);
 
     useEffect(() => {
         const ready = Boolean(datasources.gamma || datasources.neutron);
@@ -142,34 +188,60 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
         if (newView) setMode(newView);
     };
 
+    const handleDetectorLayoutChange = (
+        event: React.MouseEvent<HTMLElement>,
+        nextLayout: DetectorPlotLayout | null,
+    ) => {
+        if (!nextLayout) return;
+        setDetectorLayout(nextLayout);
+        setStoredDetectorPlotLayout(nextLayout);
+    };
+
     const renderToggleButtons = () => (
         <Grid item xs={12}>
-            <ToggleButtonGroup
-                aria-label={`chart mode`}
-                exclusive
-                onChange={handleToggle}
-                size="small"
-                value={mode}
+            <Stack
+                direction={{xs: "column", sm: "row"}}
+                spacing={1.5}
+                alignItems={{xs: "flex-start", sm: "center"}}
+                justifyContent="space-between"
+                 useFlexGap
+                flexWrap="wrap"
             >
-                <ToggleButton
-                    value="total"
-                    disabled={mode === 'total'}
+                <ToggleButtonGroup
+                    aria-label="chart mode"
+                    exclusive
+                    onChange={handleToggle}
+                    size="small"
+                    value={mode}
                 >
-                    {t('chartModeTotal')}
-                </ToggleButton>
-                <ToggleButton
-                    value="gamma"
-                    disabled={mode === 'gamma'}
-                >
-                    {t('chartModeGammaDetectors')}
-                </ToggleButton>
-                <ToggleButton
-                    value="neutron"
-                    disabled={mode === 'neutron'}
-                >
-                    {t('chartModeNeutronDetectors')}
-                </ToggleButton>
-            </ToggleButtonGroup>
+                    <ToggleButton value="total" data-testid="lane-chart-mode-total">
+                        {t('chartModeTotal')}
+                    </ToggleButton>
+                    <ToggleButton value="gamma" data-testid="lane-chart-mode-gamma">
+                        {t('chartModeGammaDetectors')}
+                    </ToggleButton>
+                    <ToggleButton value="neutron" data-testid="lane-chart-mode-neutron">
+                        {t('chartModeNeutronDetectors')}
+                    </ToggleButton>
+                </ToggleButtonGroup>
+                {mode !== 'total' && (
+                    <ToggleButtonGroup
+                        aria-label={t('detectorPlotLayout')}
+                        exclusive
+                        onChange={handleDetectorLayoutChange}
+                        size="small"
+                        value={detectorLayout}
+                        data-testid="lane-detector-layout-toggle-group"
+                    >
+                        <ToggleButton value="combined" data-testid="lane-detector-layout-combined">
+                            {t('combinedPlot')}
+                        </ToggleButton>
+                        <ToggleButton value="separate" data-testid="lane-detector-layout-separate">
+                            {t('separateAccessibilityPlots')}
+                        </ToggleButton>
+                    </ToggleButtonGroup>
+                )}
+            </Stack>
         </Grid>
     );
 
@@ -196,20 +268,38 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
         </Grid>
     );
 
-    const renderDetectorCharts = (mode: ChartMode) => {
-        const chartIds = mode === 'gamma'
+    const renderDetectorCharts = (activeMode: Exclude<ChartMode, 'total'>) => {
+        if (detectorLayout === 'combined') {
+            const combinedChartId = activeMode === 'gamma'
+                ? combinedGammaChartID
+                : combinedNeutronChartID;
+
+            return (
+                <Grid container spacing={2} xs={12}>
+                    <Grid item xs={12}>
+                        <div
+                            id={combinedChartId}
+                            data-testid={`lane-${activeMode}-detectors-combined`}
+                            style={{height: '380px'}}
+                        />
+                    </Grid>
+                </Grid>
+            );
+        }
+
+        const chartIds = activeMode === 'gamma'
             ? gammaDetectorChartIds
             : neutronDetectorChartIds;
 
         return (
-            <Grid container spacing={2} xs={12}>
+            <Grid container spacing={2} xs={12} data-testid={`lane-${activeMode}-detectors-separate`}>
                 {chartIds.map(chartId => (
                     <Grid item xs={12} md={6} key={chartId}>
                         <div id={chartId} style={{height: '360px'}}/>
                     </Grid>
                 ))}
             </Grid>
-        )
+        );
     };
 
     const renderChartsByMode = () => {
