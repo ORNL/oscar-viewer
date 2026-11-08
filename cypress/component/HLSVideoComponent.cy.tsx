@@ -329,6 +329,10 @@ describe("live HLS video", () => {
         mountPlayer("live/lane-01/index.m3u8", undefined, authenticatedNode, hlsLoader, "viewer-shared-1");
 
         currentHls().then((hls) => {
+            expect(hls.config.liveSyncDurationCount).to.equal(1);
+            expect(hls.config.liveMaxLatencyDurationCount).to.equal(3);
+            expect(hls.config.maxBufferLength).to.equal(10);
+            expect(hls.config.backBufferLength).to.equal(4);
             const xhrSetup = hls.config.xhrSetup as (xhr: any, url: string) => void;
             const sameOriginXhr = {setRequestHeader: cy.stub(), withCredentials: false};
             xhrSetup(sameOriginXhr, `${window.location.origin}/sensorhub/video-files/live0.ts`);
