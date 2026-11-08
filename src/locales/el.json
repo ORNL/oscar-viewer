@@ -540,5 +540,15 @@
   "emlModelAndVersion": "Μοντέλο EML",
   "emlVehicleMetrics": "Προφίλ οχήματος",
   "emlVehicleProfileValue": "Κατ. {vehicleClass} · {length} m",
-  "operatorHelp": "Βοήθεια χειριστή & γλωσσάριο"
+  "operatorHelp": "Βοήθεια χειριστή & γλωσσάριο",
+  "detectorPlotLayout": "Διάταξη γραφημάτων ανιχνευτών",
+  "combinedPlot": "Συνδυασμένο γράφημα",
+  "separateAccessibilityPlots": "Ξεχωριστά γραφήματα (Προσβασιμότητα)",
+  "customizeDashboard": "Στοιχεία",
+  "showLaneStatusWidget": "Κατάσταση λωρίδων",
+  "showEventsWidget": "Πίνακας συμβάντων",
+  "showMapPreviewWidget": "Χάρτης / Προεπισκόπηση",
+  "hideWidget": "Απόκρυψη στοιχείου",
+  "resetDashboardWidgets": "Επαναφορά όλων",
+  "allDashboardWidgetsHidden": "Όλα τα στοιχεία του πίνακα είναι επί του παρόντος κρυφά."
 }

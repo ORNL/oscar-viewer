@@ -540,5 +540,15 @@
   "emlModelAndVersion": "Classifier model",
   "emlVehicleMetrics": "Vehicle profile",
   "emlVehicleProfileValue": "Class {vehicleClass} · {length} m",
-  "operatorHelp": "Operator Help & Glossary"
+  "operatorHelp": "Operator Help & Glossary",
+  "detectorPlotLayout": "Detector plot layout",
+  "combinedPlot": "Combined Plot",
+  "separateAccessibilityPlots": "Separate Plots (Accessibility)",
+  "customizeDashboard": "Widgets",
+  "showLaneStatusWidget": "Lane Status",
+  "showEventsWidget": "Events Table",
+  "showMapPreviewWidget": "Map / Preview",
+  "hideWidget": "Hide widget",
+  "resetDashboardWidgets": "Restore All",
+  "allDashboardWidgetsHidden": "All dashboard widgets are currently hidden."
 }

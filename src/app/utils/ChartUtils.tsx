@@ -11,7 +11,122 @@ interface CurveLabels {
 }
 
 const DETECTOR_COUNT = 4;
-const DETECTOR_COLORS = ['#f44336', '#ff9800', '#4caf50', '#2196f3'];
+export const DETECTOR_COLORS = [
+    '#f44336',
+    '#ff9800',
+    '#4caf50',
+    '#2196f3',
+    '#9c27b0',
+    '#00acc1',
+    '#795548',
+    '#607d8b',
+];
+
+export const DETECTOR_DATASET_OPTIONS = {
+    pointRadius: 0,
+    pointHoverRadius: 4,
+    pointHitRadius: 8,
+};
+
+export type DetectorPlotLayout = 'combined' | 'separate';
+export const DETECTOR_PLOT_LAYOUT_STORAGE_KEY = 'oscar.detectorPlotLayout.v1';
+
+export function getStoredDetectorPlotLayout(): DetectorPlotLayout {
+    if (typeof window === 'undefined') return 'combined';
+    try {
+        const raw = window.localStorage.getItem(DETECTOR_PLOT_LAYOUT_STORAGE_KEY);
+        return raw === 'separate' ? 'separate' : 'combined';
+    } catch {
+        return 'combined';
+    }
+}
+
+export function setStoredDetectorPlotLayout(layout: DetectorPlotLayout): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(DETECTOR_PLOT_LAYOUT_STORAGE_KEY, layout);
+    } catch {
+        // Ignore storage write errors in restricted browsing contexts.
+    }
+}
+
+export type DashboardWidgetId = 'laneStatus' | 'eventTable' | 'quickView';
+export type DashboardWidgetVisibility = Record<DashboardWidgetId, boolean>;
+export const DASHBOARD_WIDGETS_STORAGE_KEY = 'oscar.dashboardWidgets.v1';
+export const DEFAULT_DASHBOARD_WIDGET_VISIBILITY: DashboardWidgetVisibility = {
+    laneStatus: true,
+    eventTable: true,
+    quickView: true,
+};
+
+export function getStoredDashboardWidgetVisibility(): DashboardWidgetVisibility {
+    if (typeof window === 'undefined') {
+        return {...DEFAULT_DASHBOARD_WIDGET_VISIBILITY};
+    }
+    try {
+        const raw = window.localStorage.getItem(DASHBOARD_WIDGETS_STORAGE_KEY);
+        if (!raw) return {...DEFAULT_DASHBOARD_WIDGET_VISIBILITY};
+        const parsed = JSON.parse(raw);
+        return {
+            laneStatus: typeof parsed?.laneStatus === 'boolean' ? parsed.laneStatus : true,
+            eventTable: typeof parsed?.eventTable === 'boolean' ? parsed.eventTable : true,
+            quickView: typeof parsed?.quickView === 'boolean' ? parsed.quickView : true,
+        };
+    } catch {
+        return {...DEFAULT_DASHBOARD_WIDGET_VISIBILITY};
+    }
+}
+
+export function setStoredDashboardWidgetVisibility(visibility: DashboardWidgetVisibility): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(DASHBOARD_WIDGETS_STORAGE_KEY, JSON.stringify(visibility));
+    } catch {
+        // Ignore storage write errors in restricted browsing contexts.
+    }
+}
+
+export function sortTooltipByHighestCps(a: any, b: any): number {
+    const aVal = typeof a?.parsed?.y === 'number' && Number.isFinite(a.parsed.y)
+        ? a.parsed.y
+        : Number.NEGATIVE_INFINITY;
+    const bVal = typeof b?.parsed?.y === 'number' && Number.isFinite(b.parsed.y)
+        ? b.parsed.y
+        : Number.NEGATIVE_INFINITY;
+    return bVal - aVal;
+}
+
+/**
+ * Patches a ChartJsView instance so that:
+ * 1. Every buffered CurveLayer series (`chartView.buffer[curveId]`) is flushed to
+ *    its corresponding Chart.js dataset (`chartView.datasets[curveId].data`) before
+ *    each chart update, preventing osh-js's shared `lastTimestamp` throttle from
+ *    skipping simultaneous multi-detector updates.
+ * 2. When `sortPointsChronologically` is enabled, each dataset's points are sorted
+ *    by timestamp (`a.x - b.x`) so historical replays render in chronological order.
+ */
+export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronologically = false): void {
+    if (!chartView?.chart?.update) return;
+
+    const originalUpdate = chartView.chart.update.bind(chartView.chart);
+    chartView.chart.update = (mode?: any) => {
+        if (chartView.buffer && chartView.datasets) {
+            for (const bufferKey of Object.keys(chartView.buffer)) {
+                if (chartView.datasets[bufferKey]) {
+                    chartView.datasets[bufferKey].data = chartView.buffer[bufferKey];
+                }
+            }
+        }
+        if (sortPointsChronologically && Array.isArray(chartView.chart?.data?.datasets)) {
+            for (const dataset of chartView.chart.data.datasets) {
+                if (dataset.data?.length > 1) {
+                    dataset.data.sort((a: any, b: any) => a.x - b.x);
+                }
+            }
+        }
+        originalUpdate(mode);
+    };
+}
 
 function asFiniteNumber(value: unknown): number | undefined {
     if (value === null || value === undefined || value === '')
@@ -40,7 +155,7 @@ function createDetectorViewCurves(
 
     return Array.from({length: DETECTOR_COUNT}, (_, index) => {
         const detector = index + 1;
-        const color = DETECTOR_COLORS[index];
+        const color = DETECTOR_COLORS[index % DETECTOR_COLORS.length];
 
         return new CurveLayer({
             dataSourceIds: [datasource.id],

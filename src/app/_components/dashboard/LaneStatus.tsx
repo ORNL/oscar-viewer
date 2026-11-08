@@ -9,9 +9,12 @@ import {
     DialogContent,
     DialogContentText,
     DialogTitle,
+    IconButton,
     Stack,
+    Tooltip,
     Typography,
 } from "@mui/material";
+import {VisibilityOffOutlined} from "@mui/icons-material";
 import React, {useContext, useEffect, useMemo, useState} from "react";
 import {useRouter} from "next/navigation";
 import {EventType} from "osh-js/source/core/event/EventType";
@@ -33,7 +36,17 @@ import {setAlarmTrigger} from "@/lib/state/EventDataSlice";
 import {useAppDispatch} from "@/lib/state/Hooks";
 import {setCurrentLane} from "@/lib/state/LaneViewSlice";
 
-export default function LaneStatus({dataSourcesByLane}: {dataSourcesByLane: Map<string, LaneDSColl>}) {
+export default function LaneStatus({
+    dataSourcesByLane,
+    onHide,
+    expanded = false,
+    subscribeAlarmStream = true,
+}: {
+    dataSourcesByLane?: Map<string, LaneDSColl>;
+    onHide?: () => void;
+    expanded?: boolean;
+    subscribeAlarmStream?: boolean;
+}) {
     const [tamperLaneToClear, setTamperLaneToClear] = useState<string | null>(null);
     const [isClearingTamper, setIsClearingTamper] = useState(false);
     const [clearTamperError, setClearTamperError] = useState<string | null>(null);
@@ -53,6 +66,8 @@ export default function LaneStatus({dataSourcesByLane}: {dataSourcesByLane: Map<
     // The batched health snapshot supplies all visual state. Keep only the
     // gamma/neutron realtime listeners required for the existing alarm sound.
     useEffect(() => {
+        if (!subscribeAlarmStream || !dataSourcesByLane) return;
+
         let active = true;
         const subscriptions: Array<{
             source: any;
@@ -89,7 +104,7 @@ export default function LaneStatus({dataSourcesByLane}: {dataSourcesByLane: Map<
                 });
             });
         };
-    }, [dataSourcesByLane, dispatch]);
+    }, [dataSourcesByLane, dispatch, subscribeAlarmStream]);
 
     const handleLaneView = (laneName: string) => {
         dispatch(setCurrentLane(laneName));
@@ -156,14 +171,28 @@ export default function LaneStatus({dataSourcesByLane}: {dataSourcesByLane: Map<
 
     return (
         <Stack justifyContent="start" spacing={1} sx={{p: 1}}>
-            <Typography variant="h6">{t("laneStatus")}</Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6">{t("laneStatus")}</Typography>
+                {onHide && (
+                    <Tooltip title={t("hideWidget")}>
+                        <IconButton
+                            size="small"
+                            onClick={onHide}
+                            aria-label={`${t("hideWidget")}: ${t("laneStatus")}`}
+                            data-testid="hide-lane-status-widget"
+                        >
+                            <VisibilityOffOutlined fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                )}
+            </Stack>
             <Box
                 sx={{
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
                     gap: 1,
                     overflowY: "auto",
-                    maxHeight: 275,
+                    maxHeight: expanded ? "calc(100vh - 220px)" : 275,
                     flexGrow: 1,
                 }}
             >
