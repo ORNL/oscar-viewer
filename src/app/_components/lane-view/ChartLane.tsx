@@ -123,13 +123,11 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
                 container,
                 layers,
                 css: 'chart-view',
-                refreshRate: useCleanDetectorLines ? 0 : undefined,
-                datasetOptions: useCleanDetectorLines ? DETECTOR_DATASET_OPTIONS : undefined,
+                refreshRate: 0,
+                ...(useCleanDetectorLines ? {datasetOptions: DETECTOR_DATASET_OPTIONS} : {}),
                 options: createOptions(title, isCombinedDetectorPlot),
             });
-            if (useCleanDetectorLines) {
-                patchChartViewMultiCurveSync(view, false);
-            }
+            patchChartViewMultiCurveSync(view, false);
             views.push(view);
         };
 

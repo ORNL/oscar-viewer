@@ -107,6 +107,12 @@ export function sortTooltipByHighestCps(a: any, b: any): number {
  */
 export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronologically = false): void {
     if (!chartView?.chart?.update) return;
+    if (typeof chartView.refreshRate !== 'number' || !Number.isFinite(chartView.refreshRate)) {
+        chartView.refreshRate = 0;
+    }
+    if (!chartView.datasetOptions || typeof chartView.datasetOptions !== 'object') {
+        chartView.datasetOptions = {};
+    }
 
     const originalUpdate = chartView.chart.update.bind(chartView.chart);
     chartView.chart.update = (mode?: any) => {

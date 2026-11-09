@@ -101,6 +101,8 @@ describe("ChartUtils gammaThreshold background lookup", () => {
         patchChartViewMultiCurveSync(fakeChartView, true);
         fakeChartView.chart.update();
 
+        expect(fakeChartView.refreshRate).to.equal(0);
+        expect(fakeChartView.datasetOptions).to.deep.equal({});
         expect(fakeChartView.datasets["curve-1"].data.map((pt: any) => pt.x)).to.deep.equal([100, 200]);
         expect(fakeChartView.datasets["curve-2"].data.map((pt: any) => pt.x)).to.deep.equal([100, 200]);
     });
