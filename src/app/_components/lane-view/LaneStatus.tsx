@@ -18,6 +18,7 @@ import {useSelector} from "react-redux";
 import {RootState} from "@/lib/state/Store";
 import {EventType} from "osh-js/source/core/event/EventType";
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
+import {withLazyStreamConnector} from "@/lib/data/osh/Node";
 
 interface LaneStatusProps {
     dataSourcesByLane: LaneDSColl;
@@ -98,13 +99,13 @@ export default function LaneStatus(props: LaneStatusProps) {
         const gammaDataStreamId = getRealtimeDataSourceStreamId(gammaDatasource);
         if (!gammaDataStreamId) return;
 
-        const dsAPI = new DataStreams({
+        const dsAPI = new DataStreams(withLazyStreamConnector({
             endpointUrl: `${gammaDatasource.properties.endpointUrl}`,
             tls: gammaDatasource.properties.tls,
             connectorOpts: gammaDatasource.properties.connectorOpts,
             mqttOpts: gammaDatasource.properties.mqttOpts,
             streamProtocol: 'mqtt'
-        });
+        }));
 
         const gammaDataStream = await dsAPI.getDataStreamById(gammaDataStreamId);
         const latestObservationQuery = await gammaDataStream.searchObservations(new ObservationFilter({resultTime: 'latest'}), 1);

@@ -96,13 +96,20 @@ export function sortTooltipByHighestCps(a: any, b: any): number {
     return bVal - aVal;
 }
 
+export const EVENT_CHART_MAX_VALUES = 1500;
+export const LIVE_CHART_MAX_VALUES = 60;
+const MULTI_CURVE_COALESCE_DELAY_MS = 16;
+
 /**
  * Patches a ChartJsView instance so that:
  * 1. Every buffered CurveLayer series (`chartView.buffer[curveId]`) is flushed to
  *    its corresponding Chart.js dataset (`chartView.datasets[curveId].data`) before
  *    each chart update, preventing osh-js's shared `lastTimestamp` throttle from
  *    skipping simultaneous multi-detector updates.
- * 2. When `sortPointsChronologically` is enabled, each dataset's points are sorted
+ * 2. Rapid `chart.update('none')` calls from multi-detector curves or historical
+ *    replay bursts are coalesced into at most one sort + canvas redraw per frame
+ *    (16 ms), keeping 24/7 operator wallboards flat in CPU usage.
+ * 3. When `sortPointsChronologically` is enabled, each dataset's points are sorted
  *    by timestamp (`a.x - b.x`) so historical replays render in chronological order.
  */
 export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronologically = false): void {
@@ -115,7 +122,10 @@ export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronolog
     }
 
     const originalUpdate = chartView.chart.update.bind(chartView.chart);
-    chartView.chart.update = (mode?: any) => {
+    let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    const syncBuffersAndSort = (shouldSort: boolean) => {
         if (chartView.buffer && chartView.datasets) {
             for (const bufferKey of Object.keys(chartView.buffer)) {
                 if (chartView.datasets[bufferKey]) {
@@ -123,15 +133,55 @@ export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronolog
                 }
             }
         }
-        if (sortPointsChronologically && Array.isArray(chartView.chart?.data?.datasets)) {
+        if (shouldSort && Array.isArray(chartView.chart?.data?.datasets)) {
             for (const dataset of chartView.chart.data.datasets) {
                 if (dataset.data?.length > 1) {
                     dataset.data.sort((a: any, b: any) => a.x - b.x);
                 }
             }
         }
+    };
+
+    chartView.chart.update = (mode?: any) => {
+        if (destroyed) return;
+
+        if (mode === 'none') {
+            syncBuffersAndSort(false);
+            if (coalesceTimer !== null) return;
+            coalesceTimer = setTimeout(() => {
+                coalesceTimer = null;
+                if (destroyed) return;
+                syncBuffersAndSort(sortPointsChronologically);
+                originalUpdate('none');
+            }, MULTI_CURVE_COALESCE_DELAY_MS);
+            return;
+        }
+
+        if (coalesceTimer !== null) {
+            clearTimeout(coalesceTimer);
+            coalesceTimer = null;
+        }
+        syncBuffersAndSort(sortPointsChronologically);
         originalUpdate(mode);
     };
+
+    const originalDestroy = typeof chartView.destroy === 'function'
+        ? chartView.destroy.bind(chartView)
+        : null;
+    chartView.destroy = () => {
+        destroyed = true;
+        if (coalesceTimer !== null) {
+            clearTimeout(coalesceTimer);
+            coalesceTimer = null;
+        }
+        originalDestroy?.();
+    };
+}
+
+export function destroyChartView(chartView: any): void {
+    if (!chartView) return;
+    chartView.destroy?.();
+    chartView.chart?.destroy?.();
 }
 
 function asFiniteNumber(value: unknown): number | undefined {
@@ -156,6 +206,7 @@ function createDetectorViewCurves(
     grossFieldPrefix: string,
     label: string,
     labels: CurveLabels,
+    maxValues: number = EVENT_CHART_MAX_VALUES,
 ) {
     if (!datasource) return [];
 
@@ -180,7 +231,7 @@ function createDetectorViewCurves(
             lineColor: color,
             visible: true,
             hidden: false,
-            maxValues: 1500,
+            maxValues,
         });
     });
 }
@@ -196,13 +247,18 @@ export function getGammaGrossCount(record: any): number | undefined {
         ]);
 }
 
-export function createGammaDetectorViewCurves(gammaDatasource: { id: string; }, labels: CurveLabels = {}) {
+export function createGammaDetectorViewCurves(
+    gammaDatasource: { id: string; },
+    labels: CurveLabels = {},
+    maxValues: number = EVENT_CHART_MAX_VALUES,
+) {
     return createDetectorViewCurves(
         gammaDatasource,
         'gammaCount',
         'gammaGrossCount',
         labels.gamma ?? 'Gamma',
         labels,
+        maxValues,
     );
 }
 
@@ -217,17 +273,26 @@ export function getNeutronGrossCount(record: any): number | undefined {
         ]);
 }
 
-export function createNeutronDetectorViewCurves(neutronDatasource: { id: string; }, labels: CurveLabels = {}) {
+export function createNeutronDetectorViewCurves(
+    neutronDatasource: { id: string; },
+    labels: CurveLabels = {},
+    maxValues: number = EVENT_CHART_MAX_VALUES,
+) {
     return createDetectorViewCurves(
         neutronDatasource,
         'neutronCount',
         'neutronGrossCount',
         labels.neutron ?? 'Neutron',
         labels,
+        maxValues,
     );
 }
 
-export  function createNeutronViewCurve(neutronDatasource: { id: string; }, labels: CurveLabels = {}) {
+export function createNeutronViewCurve(
+    neutronDatasource: { id: string; },
+    labels: CurveLabels = {},
+    maxValues: number = EVENT_CHART_MAX_VALUES,
+) {
     if (!neutronDatasource) return null;
 
     let nCurve = new CurveLayer({
@@ -236,7 +301,7 @@ export  function createNeutronViewCurve(neutronDatasource: { id: string; }, labe
             return {x: rec.timestamp, y: getNeutronGrossCount(rec)}
         },
         name: labels.neutron ?? 'Neutron',
-        maxValues: 1500,
+        maxValues,
         borderWidth: 1.5,
         lineColor: '#29b6f6',
         backgroundColor: '#29b6f6',
@@ -249,7 +314,11 @@ export  function createNeutronViewCurve(neutronDatasource: { id: string; }, labe
     return nCurve;
 }
 
-export function createThresholdViewCurve(thresholdDatasource: { id: string; }, labels: CurveLabels = {}) {
+export function createThresholdViewCurve(
+    thresholdDatasource: { id: string; },
+    labels: CurveLabels = {},
+    maxValues: number = EVENT_CHART_MAX_VALUES,
+) {
     if (!thresholdDatasource) return null;
 
     let thresholdCurve = new CurveLayer({
@@ -267,12 +336,16 @@ export function createThresholdViewCurve(thresholdDatasource: { id: string; }, l
         yLabel: 'CPS',
         order: 2,
         fill: 1,
-        maxValues: 1500,
+        maxValues,
     });
 
     return thresholdCurve;
 }
-export  function createGammaViewCurve(gammaDatasource: { id: string; }, labels: CurveLabels = {}) {
+export function createGammaViewCurve(
+    gammaDatasource: { id: string; },
+    labels: CurveLabels = {},
+    maxValues: number = EVENT_CHART_MAX_VALUES,
+) {
     if (!gammaDatasource) return null;
 
     let gCurve = new CurveLayer({
@@ -289,7 +362,7 @@ export  function createGammaViewCurve(gammaDatasource: { id: string; }, labels: 
         visible: true,
         order: 1,
         fill: 1,
-        maxValues: 1500,
+        maxValues,
     });
 
     return gCurve;

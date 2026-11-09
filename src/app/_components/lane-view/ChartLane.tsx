@@ -10,9 +10,11 @@ import {
     createNeutronDetectorViewCurves,
     createNeutronViewCurve,
     createThresholdViewCurve,
+    destroyChartView,
     DETECTOR_DATASET_OPTIONS,
     type DetectorPlotLayout,
     getStoredDetectorPlotLayout,
+    LIVE_CHART_MAX_VALUES,
     patchChartViewMultiCurveSync,
     setStoredDetectorPlotLayout,
     sortTooltipByHighestCps,
@@ -123,6 +125,7 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
                 container,
                 layers,
                 css: 'chart-view',
+                destroyAfterMutation: false,
                 refreshRate: 0,
                 ...(useCleanDetectorLines ? {datasetOptions: DETECTOR_DATASET_OPTIONS} : {}),
                 options: createOptions(title, isCombinedDetectorPlot),
@@ -133,17 +136,17 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
 
         if (mode === 'total') {
             const gammaLayers = [
-                createGammaViewCurve(datasources.gamma, labels),
-                createThresholdViewCurve(datasources.threshold, labels),
+                createGammaViewCurve(datasources.gamma, labels, LIVE_CHART_MAX_VALUES),
+                createThresholdViewCurve(datasources.threshold, labels, LIVE_CHART_MAX_VALUES),
             ].filter(Boolean);
-            const neutronLayers = [createNeutronViewCurve(datasources.neutron, labels)].filter(Boolean);
+            const neutronLayers = [createNeutronViewCurve(datasources.neutron, labels, LIVE_CHART_MAX_VALUES)].filter(Boolean);
 
             addChart(gammaChartID, gammaLayers, t('gammaChart'));
             addChart(neutronChartID, neutronLayers, t('neutronChart'));
         } else {
             const curves = mode === 'gamma'
-                ? createGammaDetectorViewCurves(datasources.gamma, labels)
-                : createNeutronDetectorViewCurves(datasources.neutron, labels);
+                ? createGammaDetectorViewCurves(datasources.gamma, labels, LIVE_CHART_MAX_VALUES)
+                : createNeutronDetectorViewCurves(datasources.neutron, labels, LIVE_CHART_MAX_VALUES);
 
             if (detectorLayout === 'combined') {
                 const combinedContainerId = mode === 'gamma'
@@ -167,10 +170,7 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
 
         chartViewsRef.current = views;
         return () => {
-            views.forEach(view => {
-                view.destroy?.();
-                view.chart?.destroy?.();
-            });
+            views.forEach(destroyChartView);
             chartViewsRef.current = [];
         };
     }, [datasources.gamma, datasources.neutron, datasources.threshold, detectorLayout, laneName, mode, t]);
