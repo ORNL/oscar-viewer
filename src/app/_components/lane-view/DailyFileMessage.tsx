@@ -14,6 +14,7 @@ import {useSelector} from "react-redux";
 import {RootState} from "@/lib/state/Store";
 import {EventType} from "osh-js/source/core/event/EventType";
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
+import {withLazyStreamConnector} from "@/lib/data/osh/Node";
 import {Stack, Typography} from "@mui/material";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -88,13 +89,13 @@ export default function DailyFileMessage(props: MessageProps) {
             || datasource.properties?.resource?.split('/')?.[2];
         if (!dsId) return;
 
-        const dsAPI = new DataStreams({
+        const dsAPI = new DataStreams(withLazyStreamConnector({
             endpointUrl: `${datasource.properties.endpointUrl}`,
             tls: datasource.properties.tls,
             connectorOpts: datasource.properties.connectorOpts,
             mqttOpts: datasource.properties.mqttOpts,
             streamProtocol: 'mqtt'
-        });
+        }));
 
         const ds = await dsAPI.getDataStreamById(dsId);
         const latestObservationQuery = await ds.searchObservations(new ObservationFilter({order: 'desc'}), 15);

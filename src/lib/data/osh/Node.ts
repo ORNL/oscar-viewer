@@ -87,6 +87,16 @@ function createLazyStreamConnector(rawNetworkProperties: Record<string, any>) {
     return wrapper;
 }
 
+export function withLazyStreamConnector(rawNetworkProperties: Record<string, any>): Record<string, any> {
+    const networkProperties: Record<string, any> = {...rawNetworkProperties};
+    Object.defineProperty(networkProperties, "connector", {
+        enumerable: true,
+        configurable: true,
+        get: () => createLazyStreamConnector(rawNetworkProperties),
+    });
+    return networkProperties;
+}
+
 /**
  * Returns the terminal lane identifier used by subsystem UIDs.
  */
@@ -247,12 +257,7 @@ export class Node implements INode {
             mqttOpts: mqttOpts,
             connectorOpts,
         };
-        const networkProperties: Record<string, any> = {...rawNetworkProperties};
-        Object.defineProperty(networkProperties, "connector", {
-            enumerable: true,
-            configurable: true,
-            get: () => createLazyStreamConnector(rawNetworkProperties),
-        });
+        const networkProperties = withLazyStreamConnector(rawNetworkProperties);
 
         this.dataStreamsApi = new DataStreams(networkProperties);
         this.systemsApi = new Systems(networkProperties);

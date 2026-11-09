@@ -19,6 +19,7 @@ import {
     createNSigmaCalcViewCurve,
     createThresholdViewCurve,
     createThreshSigmaViewCurve,
+    destroyChartView,
     DETECTOR_DATASET_OPTIONS,
     type DetectorPlotLayout,
     getStoredDetectorPlotLayout,
@@ -95,6 +96,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
     });
 
     const [toggleView, setToggleView] = useState("cps");
+    const totalChartViewsRef = useRef<any[]>([]);
     const detectorChartViewsRef = useRef<any[]>([]);
     const [mode, setMode] = useState<ChartMode>("total");
     const [detectorLayout, setDetectorLayout] = useState<DetectorPlotLayout>(() => getStoredDetectorPlotLayout());
@@ -132,6 +134,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
                 container,
                 layers: curves,
                 css: "chart-view",
+                destroyAfterMutation: false,
                 refreshRate: 0,
                 datasetOptions: DETECTOR_DATASET_OPTIONS,
                 options: {
@@ -177,6 +180,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
                     container,
                     layers: [curve],
                     css: "chart-view",
+                    destroyAfterMutation: false,
                     refreshRate: 0,
                     datasetOptions: DETECTOR_DATASET_OPTIONS,
                     options: {
@@ -235,13 +239,17 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
 
         detectorChartViewsRef.current = views;
         return () => {
-            views.forEach(view => {
-                view.destroy?.();
-                view.chart?.destroy?.();
-            });
+            views.forEach(destroyChartView);
             detectorChartViewsRef.current = [];
         };
     }, [availableModes, gammaChartIds, neutronChartIds, props.datasources.gamma, props.datasources.neutron, props.showDetectorModes, t]);
+
+    useEffect(() => {
+        return () => {
+            totalChartViewsRef.current.forEach(destroyChartView);
+            totalChartViewsRef.current = [];
+        };
+    }, []);
 
     useEffect(() => {
         if (!props.showDetectorModes) return;
@@ -278,15 +286,21 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
     ];
 
     useEffect(() => {
-        if (chartViews.gamma)
-            setTimeout(() => {
-                chartViews.gamma.chart.update();
-            }, 300);
+        const timers: Array<ReturnType<typeof setTimeout>> = [];
+        if (chartViews.gamma) {
+            timers.push(setTimeout(() => {
+                chartViews.gamma?.chart?.update?.();
+            }, 300));
+        }
 
-        if (chartViews.nsigma)
-            setTimeout(() => {
-                chartViews.nsigma.chart.update();
-            }, 300);
+        if (chartViews.nsigma) {
+            timers.push(setTimeout(() => {
+                chartViews.nsigma?.chart?.update?.();
+            }, 300));
+        }
+        return () => {
+            timers.forEach(clearTimeout);
+        };
     }, [chartViews.gamma, chartViews.nsigma]);
 
 
@@ -447,6 +461,9 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
     }
 
     const renderCharts = (layers: CurveLayers, elementIds: string[]) => {
+        totalChartViewsRef.current.forEach(destroyChartView);
+        const createdTotalViews: any[] = [];
+
         if (layers?.gamma && gammaChartViewRef?.current) {
             const gammaLayers: any[] = [];
 
@@ -463,6 +480,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
                 layers: gammaLayers,
                 css: "chart-view-event-detail",
                 type: 'line',
+                destroyAfterMutation: false,
                 refreshRate: 0,
                 options: {
                     scales: {
@@ -473,6 +491,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
             });
 
             patchChartViewMultiCurveSync(gammaChart, true);
+            createdTotalViews.push(gammaChart);
             setChartViews(prev => ({...prev, gamma: gammaChart}));
         }
 
@@ -488,6 +507,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
                 layers: [layers.neutron],
                 css: "chart-view-event-detail",
                 type: 'line',
+                destroyAfterMutation: false,
                 refreshRate: 0,
                 options: {
                     scales: {
@@ -504,6 +524,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
             });
 
             patchChartViewMultiCurveSync(neutronChart, true);
+            createdTotalViews.push(neutronChart);
             setChartViews(prev => ({...prev, neutron: neutronChart}));
         }
 
@@ -520,6 +541,7 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
                 layers: [layers.nsigma, layers.threshNsigma],
                 css: "chart-view-event-detail",
                 type: 'line',
+                destroyAfterMutation: false,
                 refreshRate: 0,
                 options: {
                     scales: {
@@ -534,8 +556,11 @@ export default function ChartTimeHighlight(props: ChartInterceptProps) {
                 }
             });
             patchChartViewMultiCurveSync(nsigmaChart, true);
+            createdTotalViews.push(nsigmaChart);
             setChartViews(prev => ({...prev, nsigma: nsigmaChart}));
         }
+
+        totalChartViewsRef.current = createdTotalViews;
     };
 
     const handleToggle = (event: React.MouseEvent<HTMLElement>, newView: string | null) => {

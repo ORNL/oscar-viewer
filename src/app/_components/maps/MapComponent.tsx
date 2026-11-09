@@ -318,6 +318,7 @@ export default function MapComponent() {
 
             let view = new LeafletView({
                 container: mapcontainer,
+                destroyAfterMutation: false,
                 layers: [],
                 imageOverlays: [],
                 autoZoomOnFirstMarker: false,

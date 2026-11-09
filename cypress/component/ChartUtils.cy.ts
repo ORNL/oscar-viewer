@@ -1,13 +1,17 @@
 import {
     createGammaDetectorViewCurves,
+    createGammaViewCurve,
     createNeutronDetectorViewCurves,
     DASHBOARD_WIDGETS_STORAGE_KEY,
     DEFAULT_DASHBOARD_WIDGET_VISIBILITY,
+    destroyChartView,
     DETECTOR_DATASET_OPTIONS,
     DETECTOR_PLOT_LAYOUT_STORAGE_KEY,
+    EVENT_CHART_MAX_VALUES,
     getObservations,
     getStoredDashboardWidgetVisibility,
     getStoredDetectorPlotLayout,
+    LIVE_CHART_MAX_VALUES,
     patchChartViewMultiCurveSync,
     setStoredDashboardWidgetVisibility,
     setStoredDetectorPlotLayout,
@@ -59,9 +63,14 @@ describe("ChartUtils gammaThreshold background lookup", () => {
         expect(DETECTOR_DATASET_OPTIONS.pointRadius).to.equal(0);
 
         const gammaCurves = createGammaDetectorViewCurves({id: "gamma-ds"}, {gamma: "Gamma", time: "Time"});
+        const liveGammaCurves = createGammaDetectorViewCurves({id: "gamma-ds"}, {gamma: "Gamma", time: "Time"}, LIVE_CHART_MAX_VALUES);
+        const liveTotalGammaCurve = createGammaViewCurve({id: "gamma-ds"}, {gamma: "Gamma", time: "Time"}, LIVE_CHART_MAX_VALUES);
         const neutronCurves = createNeutronDetectorViewCurves({id: "neutron-ds"}, {neutron: "Neutron", time: "Time"});
         expect(gammaCurves).to.have.length(4);
         expect(neutronCurves).to.have.length(4);
+        expect(gammaCurves[0].properties.maxValues).to.equal(EVENT_CHART_MAX_VALUES);
+        expect(liveGammaCurves[0].properties.maxValues).to.equal(LIVE_CHART_MAX_VALUES);
+        expect(liveTotalGammaCurve?.properties.maxValues).to.equal(LIVE_CHART_MAX_VALUES);
 
         const items = [
             {dataset: {label: "Gamma 1"}, parsed: {y: 120}},
@@ -105,6 +114,58 @@ describe("ChartUtils gammaThreshold background lookup", () => {
         expect(fakeChartView.datasetOptions).to.deep.equal({});
         expect(fakeChartView.datasets["curve-1"].data.map((pt: any) => pt.x)).to.deep.equal([100, 200]);
         expect(fakeChartView.datasets["curve-2"].data.map((pt: any) => pt.x)).to.deep.equal([100, 200]);
+    });
+
+    it("coalesces burst chart.update('none') calls per frame and cancels pending timers on destroyChartView", () => {
+        const updateStub = cy.stub();
+        const chartDestroyStub = cy.stub();
+        const viewDestroyStub = cy.stub();
+        const fakeChartView: any = {
+            buffer: {
+                "curve-1": [{x: 300, y: 15}, {x: 100, y: 25}],
+                "curve-2": [{x: 300, y: 35}, {x: 100, y: 45}],
+            },
+            datasets: {
+                "curve-1": {data: []},
+                "curve-2": {data: []},
+            },
+            destroy: viewDestroyStub,
+            chart: {
+                data: {
+                    datasets: [],
+                },
+                update: updateStub,
+                destroy: chartDestroyStub,
+            },
+        };
+        fakeChartView.chart.data.datasets = [
+            fakeChartView.datasets["curve-1"],
+            fakeChartView.datasets["curve-2"],
+        ];
+
+        patchChartViewMultiCurveSync(fakeChartView, true);
+
+        // Four rapid update('none') calls in the same tick coalesce into one underlying Chart.js render.
+        fakeChartView.chart.update("none");
+        fakeChartView.chart.update("none");
+        fakeChartView.chart.update("none");
+        fakeChartView.chart.update("none");
+        expect(updateStub.callCount).to.equal(0);
+
+        cy.wait(30).then(() => {
+            expect(updateStub.callCount).to.equal(1);
+            expect(fakeChartView.datasets["curve-1"].data.map((pt: any) => pt.x)).to.deep.equal([100, 300]);
+
+            // Destroying the view while a coalesced update is pending cancels the timer.
+            fakeChartView.chart.update("none");
+            destroyChartView(fakeChartView);
+            expect(viewDestroyStub.callCount).to.equal(1);
+            expect(chartDestroyStub.callCount).to.equal(1);
+        });
+
+        cy.wait(30).then(() => {
+            expect(updateStub.callCount).to.equal(1);
+        });
     });
 
     it("persists customizable dashboard widget visibility in localStorage", () => {

@@ -113,10 +113,6 @@ export default function LaneVideoPlayback({selectedNode, videos, modeType, start
     const handleVideoRef = useCallback((element: HTMLVideoElement | null, index: number) => {
         if ( element ) {
             videoRefs.current[index] = element;
-
-            element.addEventListener('loadedmetadata', () => handleLoadedMetadata(element));
-            element.addEventListener('timeupdate', () => handleTimeUpdate(element));
-
             element.muted = true;
             element.loop = false;
         }
@@ -171,6 +167,8 @@ export default function LaneVideoPlayback({selectedNode, videos, modeType, start
                                 <video
                                     key={`video-${selVideoIdx}`}
                                     ref={(el) => handleVideoRef(el, selVideoIdx)}
+                                    onLoadedMetadata={(event) => handleLoadedMetadata(event.currentTarget)}
+                                    onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget)}
                                     width="100%"
                                     height={videoHeight}
                                     controls
