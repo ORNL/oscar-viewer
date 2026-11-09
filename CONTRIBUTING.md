@@ -1,6 +1,6 @@
 # Contributing to ORNL/oscar-viewer
 
-`ORNL/oscar-viewer` is maintained by Oak Ridge National Laboratory as the web UI submodule (`web/oscar-viewer`) of [`ORNL/oscar`](https://github.com/ORNL/oscar).
+`ORNL/oscar-viewer` is the web UI submodule (`web/oscar-viewer`) of [`ORNL/oscar`](https://github.com/ORNL/oscar).
 
 ## Fork & Pull Request Workflow
 

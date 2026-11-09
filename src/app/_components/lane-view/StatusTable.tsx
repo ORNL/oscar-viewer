@@ -36,6 +36,36 @@ import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNot
 const STATUS_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const STATUS_FAULT_FILTER = "tamperStatus=true OR alarmState='Fault - Neutron High' OR alarmState='Fault - Gamma High' OR alarmState='Fault - Gamma Low' OR alarmState='Fault - Extended Occupancy'";
 
+export function statusTableEventFromObservation(
+    obs: any,
+    currentLane: string,
+    isLive: boolean,
+): AlarmTableData | undefined {
+    if (!obs) return undefined;
+
+    let newEvent: AlarmTableData | undefined;
+
+    if (isLive) {
+        if (obs?.alarmState) {
+            const state = obs.alarmState;
+            if (!["Scan", "Background", "Alarm", "Clear"].includes(state)) {
+                newEvent = new AlarmTableData(randomUUID(), currentLane, state, obs.samplingTime ?? new Date().toISOString());
+            }
+        } else if (obs?.tamperStatus) {
+            newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.samplingTime ?? obs.samplingtime ?? new Date().toISOString());
+        }
+    } else {
+        const result = obs?.properties?.result;
+        if (result?.alarmState && !["Scan", "Background", "Alarm", "Clear"].includes(result.alarmState)) {
+            newEvent = new AlarmTableData(randomUUID(), currentLane, result.alarmState, obs.properties.resultTime);
+        } else if (result?.tamperStatus) {
+            newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.properties.resultTime);
+        }
+    }
+
+    return newEvent;
+}
+
 interface StatusTableProps {
     currentLane: string,
     entry: LaneMapEntry
@@ -130,29 +160,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
     }
 
     function eventFromObservation(obs: any, isLive: boolean): AlarmTableData | undefined {
-        if (!obs) return undefined;
-
-        let newEvent: AlarmTableData | undefined;
-
-        if (isLive) {
-            if (obs?.alarmState) {
-                const state = obs.alarmState;
-                if (!["Scan", "Background", "Alarm", "Clear"].includes(state)) {
-                    newEvent = new AlarmTableData(randomUUID(), currentLane, state, obs.samplingTime ?? new Date().toISOString());
-                }
-            } else if (obs?.tamperStatus) {
-                newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.samplingTime ?? obs.samplingtime ?? new Date().toISOString());
-            }
-        } else {
-            const result = obs?.properties?.result;
-            if (result?.alarmState && !["Scan", "Background", "Alarm", "Clear"].includes(result.alarmState)) {
-                newEvent = new AlarmTableData(randomUUID(), currentLane, result.alarmState, obs.properties.resultTime);
-            } else if (result?.tamperStatus) {
-                newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.properties.resultTime);
-            }
-        }
-
-        return newEvent;
+        return statusTableEventFromObservation(obs, currentLane, isLive);
     }
 
 
