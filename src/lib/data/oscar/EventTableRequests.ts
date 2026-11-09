@@ -118,8 +118,8 @@ export interface UseAbortableEventQueriesResult {
         strict?: boolean,
         options?: CountFetchOptions,
     ) => Promise<number>;
-    refreshCounts: () => Promise<void>;
-    fetchPage: (targetPage: number) => Promise<void>;
+    refreshCounts: (cutoffOverride?: string) => Promise<void>;
+    fetchPage: (targetPage: number, cutoffOverride?: string) => Promise<void>;
 }
 
 export function useAbortableEventQueries({
@@ -136,6 +136,7 @@ export function useAbortableEventQueries({
     const [countQueryError, setCountQueryError] = useState(false);
     const [pageQueryError, setPageQueryError] = useState(false);
     const currentPageRef = useRef(0);
+    const previousPageRef = useRef(page);
     const countRequestRef = useRef(0);
     const pageRequestRef = useRef(0);
     const countAbortRef = useRef<AbortController | null>(null);
@@ -156,7 +157,8 @@ export function useAbortableEventQueries({
         [pageLoadedTime],
     );
 
-    const refreshCounts = useCallback(async () => {
+    const refreshCounts = useCallback(async (cutoffOverride?: string) => {
+        const effectiveCutoff = cutoffOverride ?? pageLoadedTime;
         countAbortRef.current?.abort();
         const requestId = ++countRequestRef.current;
         if (queryPlans.length === 0) {
@@ -171,7 +173,7 @@ export function useAbortableEventQueries({
             const counts = await runWithConcurrency(
                 queryPlans,
                 6,
-                plan => fetchPlanCount(plan, pageLoadedTime, true, {
+                plan => fetchPlanCount(plan, effectiveCutoff, true, {
                     signal: controller.signal,
                     lowPriority: true,
                 }),
@@ -190,7 +192,8 @@ export function useAbortableEventQueries({
         }
     }, [queryPlans, fetchPlanCount, pageLoadedTime]);
 
-    const fetchPage = useCallback(async (targetPage: number) => {
+    const fetchPage = useCallback(async (targetPage: number, cutoffOverride?: string) => {
+        const effectiveCutoff = cutoffOverride ?? pageLoadedTime;
         pageAbortRef.current?.abort();
         const requestId = ++pageRequestRef.current;
         if (pageQueryPlans.length === 0) {
@@ -209,7 +212,7 @@ export function useAbortableEventQueries({
                     pageQueryPlans[0],
                     pageSize,
                     targetPage * pageSize,
-                    pageLoadedTime,
+                    effectiveCutoff,
                     controller.signal,
                 );
                 if (controller.signal.aborted || requestId !== pageRequestRef.current) return;
@@ -222,7 +225,7 @@ export function useAbortableEventQueries({
             const results = await runWithConcurrency(
                 pageQueryPlans,
                 6,
-                plan => fetchPlanRows(plan, required, 0, pageLoadedTime, controller.signal),
+                plan => fetchPlanRows(plan, required, 0, effectiveCutoff, controller.signal),
             );
             if (controller.signal.aborted || requestId !== pageRequestRef.current) return;
             const merged = deduplicateEvents(results.flat())
@@ -246,13 +249,18 @@ export function useAbortableEventQueries({
     }, [pageQueryPlans, pageSize, fetchPlanRows, pageLoadedTime]);
 
     useEffect(() => {
+        previousPageRef.current = 0;
         void refreshCounts();
         void fetchPage(0);
     }, [refreshCounts, fetchPage]);
 
     useEffect(() => {
-        if (page > 0) void fetchPage(page);
+        const previousPage = previousPageRef.current;
+        previousPageRef.current = page;
         currentPageRef.current = page;
+        if (page > 0 || previousPage !== 0) {
+            void fetchPage(page);
+        }
     }, [page, fetchPage]);
 
     return {

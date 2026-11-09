@@ -54,11 +54,11 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
     const [data, setData] = useState<AlarmTableData[]>([]);
 
     const [currentPage, setCurrentPage] = useState(0);
-    const [statusTimeRange] = useState(() => {
+    const getRollingStatusTimeRange = useCallback(() => {
         const end = new Date();
         const start = new Date(end.getTime() - STATUS_HISTORY_WINDOW_MS);
         return `${start.toISOString()}/${end.toISOString()}`;
-    });
+    }, []);
 
 
     const columns: GridColDef<AlarmTableData>[] = [
@@ -99,7 +99,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
     async function fetchTotalCount(node: INode, datastreamIds: string[]) {
         let endpoint = node.getConnectedSystemsEndpoint(false);
         const queryParams = new URLSearchParams({
-            resultTime: statusTimeRange,
+            resultTime: getRollingStatusTimeRange(),
             format: "application/om+json",
             dataStream: `${datastreamIds.join(",")}`,
             filter: STATUS_FAULT_FILTER
@@ -138,10 +138,10 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
             if (obs?.alarmState) {
                 const state = obs.alarmState;
                 if (!["Scan", "Background", "Alarm", "Clear"].includes(state)) {
-                    newEvent = new AlarmTableData(randomUUID(), currentLane, state, obs.samplingTime);
+                    newEvent = new AlarmTableData(randomUUID(), currentLane, state, obs.samplingTime ?? new Date().toISOString());
                 }
             } else if (obs?.tamperStatus) {
-                newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.samplingtime);
+                newEvent = new AlarmTableData(randomUUID(), currentLane, "Tamper", obs.samplingTime ?? obs.samplingtime ?? new Date().toISOString());
             }
         } else {
             const result = obs?.properties?.result;
@@ -199,7 +199,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
         }
 
         fetchAllCounts();
-    }, [nodes, entry, getDatastreamIds, statusTimeRange]);
+    }, [nodes, entry, getDatastreamIds, getRollingStatusTimeRange]);
 
 
 
@@ -222,7 +222,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
 
             const observationFilter = new ObservationFilter({
                 dataStream: datastreamIds,
-                resultTime: statusTimeRange,
+                resultTime: getRollingStatusTimeRange(),
                 filter: STATUS_FAULT_FILTER,
                 order: 'desc'
             });
@@ -353,6 +353,7 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
         }
 
         const subscriptions: Array<{source: any; lease: SharedConnectionLease}> = [];
+        const subscribedSources = new Set<any>();
 
         const handleMessage = (msg: any) => {
             try {
@@ -360,11 +361,11 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
                 const event = eventFromObservation(obsData, true);
 
                 // CRITICAL FIX: Check if event is defined before adding to array
-                if (event && currentPage === 0) {
-                    setData(prev => {
-                        return [event, ...prev].slice(0, pageSize);
-                    });
+                if (event) {
                     setRowCount(prev => prev + 1);
+                    if (currentPage === 0) {
+                        setData(prev => [event, ...prev].slice(0, pageSize));
+                    }
                 }
             } catch (err) {
                 console.error("Error creating event from observation:", err);
@@ -372,6 +373,8 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
         };
 
         const subscribe = (source: any, description: string) => {
+            if (!source || subscribedSources.has(source)) return;
+            subscribedSources.add(source);
             source.subscribe(handleMessage, [EventType.DATA]);
             const lease = acquireSharedConnection(source);
             subscriptions.push({source, lease});
@@ -380,39 +383,17 @@ export default function StatusTable({currentLane, entry}: StatusTableProps){
             });
         };
 
-        const alarmStream: typeof DataStream = entry.findDataStreamByObsProperty(ALARM_DEF);
-
-        if (!alarmStream) {
-            console.info("No alarm datastream");
-        } else {
-            const alarmSource = findRealtimeDataSourceForStream(entry, alarmStream);
-
-            if (!alarmSource) {
-                console.info("No alarm datasource");
-            } else {
-                subscribe(alarmSource, "alarm");
-            }
-        }
-
-        const tamperStream: typeof DataStream = entry.findDataStreamByObsProperty(TAMPER_STATUS_DEF);
-
-        if (!tamperStream) {
-            console.info("no tamper datastream");
-        } else {
-            const tamperSource = findRealtimeDataSourceForStream(entry, tamperStream);
-
-            if (!tamperSource) {
-                console.info("no tamper datasource");
-            } else {
-                subscribe(tamperSource, "tamper");
-            }
-        }
-
-        const occupancyStatusStream: typeof DataStream = entry.findDataStreamByObsProperty(OCCUPANCY_STATUS_DEF);
-        if (occupancyStatusStream) {
-            const occupancyStatusSource = findRealtimeDataSourceForStream(entry, occupancyStatusStream);
-            if (occupancyStatusSource) {
-                subscribe(occupancyStatusSource, "occupancyStatus");
+        for (const ds of entry.datastreams ?? []) {
+            if (
+                isGammaDataStream(ds) ||
+                isNeutronDataStream(ds) ||
+                isTamperDataStream(ds) ||
+                isOccupancyStatusDataStream(ds)
+            ) {
+                const source = findRealtimeDataSourceForStream(entry, ds);
+                if (source) {
+                    subscribe(source, ds.properties?.name || "status");
+                }
             }
         }
 

@@ -362,4 +362,113 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
             expect(countCalls[countCalls.length - 1].priority).to.equal(undefined);
         });
     });
+
+    it("refetches Page 0 when returning from Page 1+ and supports cutoffOverride for 24/7/365 sessions", () => {
+        const fetchedPages: Array<{offset: number; cutoff: string}> = [];
+        const fakeNode: any = {
+            id: "node-1",
+            name: "Local Node",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+        };
+
+        cy.window().then((win) => {
+            cy.stub(win, "fetch").callsFake(() =>
+                Promise.resolve(new Response(JSON.stringify({count: 20}), {
+                    status: 200,
+                    headers: {"Content-Type": "application/json"},
+                })),
+            );
+        });
+
+        function PaginationConsumer() {
+            const [page, setPage] = useState(0);
+            const queryPlans = useMemo<EventQueryPlan[]>(() => [{
+                key: "plan-1",
+                node: fakeNode,
+                datastreamIds: ["occ-1"],
+                filter: "gammaAlarm=true",
+            }], []);
+
+            const fetchPlanRows = useCallback(async (
+                _plan: EventQueryPlan,
+                _limit: number,
+                offset: number,
+                cutoff = "2026-11-01T00:00:00.000Z",
+            ) => {
+                fetchedPages.push({offset, cutoff});
+                return [
+                    new EventTableData(
+                        offset + 1,
+                        `Lane-Offset-${offset}`,
+                        {
+                            occupancyCount: 1,
+                            startTime: cutoff,
+                            endTime: cutoff,
+                            maxGamma: 500,
+                            maxNeutron: 0,
+                            gammaAlarm: true,
+                            neutronAlarm: false,
+                            adjudicatedIds: [],
+                        },
+                        `obs-${offset}`,
+                        "foi-1",
+                        "Local Node",
+                        false,
+                    ),
+                ];
+            }, []);
+
+            const {rows, fetchPage, refreshCounts} = useAbortableEventQueries({
+                queryPlans,
+                pageQueryPlans: queryPlans,
+                page,
+                pageSize: 15,
+                pageLoadedTime: "2026-11-01T00:00:00.000Z",
+                fetchPlanRows,
+            });
+
+            return (
+                <div>
+                    <span data-testid="page-rows">{rows.map((r) => r.laneId).join(",")}</span>
+                    <button data-testid="to-page-1" onClick={() => setPage(1)}>Page 1</button>
+                    <button data-testid="to-page-0" onClick={() => setPage(0)}>Page 0</button>
+                    <button
+                        data-testid="refresh-fresh-cutoff"
+                        onClick={() => {
+                            void refreshCounts("2026-12-31T23:59:59.000Z");
+                            void fetchPage(0, "2026-12-31T23:59:59.000Z");
+                        }}
+                    >
+                        Refresh with cutoff
+                    </button>
+                </div>
+            );
+        }
+
+        cy.mount(<PaginationConsumer />);
+        cy.get('[data-testid="page-rows"]').should("have.text", "Lane-Offset-0");
+        cy.then(() => {
+            expect(fetchedPages).to.have.length(1);
+            expect(fetchedPages[0]).to.deep.equal({offset: 0, cutoff: "2026-11-01T00:00:00.000Z"});
+        });
+
+        cy.get('[data-testid="to-page-1"]').click();
+        cy.get('[data-testid="page-rows"]').should("have.text", "Lane-Offset-15");
+
+        cy.get('[data-testid="to-page-0"]').click();
+        cy.get('[data-testid="page-rows"]').should("have.text", "Lane-Offset-0");
+        cy.then(() => {
+            expect(fetchedPages).to.have.length(3);
+            expect(fetchedPages[2]).to.deep.equal({offset: 0, cutoff: "2026-11-01T00:00:00.000Z"});
+        });
+
+        cy.get('[data-testid="refresh-fresh-cutoff"]').click();
+        cy.then(() => {
+            expect(fetchedPages[fetchedPages.length - 1]).to.deep.equal({
+                offset: 0,
+                cutoff: "2026-12-31T23:59:59.000Z",
+            });
+        });
+    });
 });

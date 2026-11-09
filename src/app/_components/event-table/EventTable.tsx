@@ -109,6 +109,7 @@ type QueryPlan = EventQueryPlan;
 const PAGE_SIZE = 15;
 const BULK_FETCH_SIZE = 250;
 const REALTIME_ID_RESOLUTION_TIMEOUT_MS = 12_000;
+const MAX_EVENT_CACHE_ENTRIES = 1000;
 
 const EVENT_PRIORITY_FILTERS = [
     "gammaAlarm=true AND neutronAlarm=true",
@@ -134,10 +135,15 @@ export default function EventTable({
     const stableLaneMap = useMemo(() => convertToMap(laneMap), [laneMap]);
     const [paginationModel, setPaginationModel] = useState({page: 0, pageSize: PAGE_SIZE});
     const [filterEpoch, setFilterEpoch] = useState(0);
+    const latestCutoffRef = useRef<string>(new Date().toISOString());
     // Stamp the REST snapshot upper bound when discovered lanes hydrate (or when filters
     // are re-applied), rather than at empty initial mount before MQTT subscriptions exist.
     const pageLoadedTime = useMemo(
-        () => new Date().toISOString(),
+        () => {
+            const now = new Date().toISOString();
+            latestCutoffRef.current = now;
+            return now;
+        },
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [stableLaneMap, filterEpoch],
     );
@@ -152,6 +158,7 @@ export default function EventTable({
     const [postSelectionKeys, setPostSelectionKeys] = useState<Set<string>>(new Set());
     const allFilteredCutoffRef = useRef<string | null>(null);
     const eventCacheRef = useRef<Map<string, EventTableData>>(new Map());
+    const selectedKeysRef = useRef<Set<string>>(selectedKeys);
     const selectedRowIdRef = useRef(selectedRowId);
     const realtimeResolutionJobsRef = useRef<Set<{
         controller: AbortController;
@@ -266,6 +273,33 @@ export default function EventTable({
         selectedRowIdRef.current = selectedRowId;
     }, [selectedRowId]);
 
+    useEffect(() => {
+        selectedKeysRef.current = selectedKeys;
+    }, [selectedKeys]);
+
+    const advanceSnapshotCutoff = useCallback((candidateTime?: string): string => {
+        const nowIso = new Date().toISOString();
+        let next = latestCutoffRef.current > nowIso ? latestCutoffRef.current : nowIso;
+        if (candidateTime && candidateTime > next) {
+            next = candidateTime;
+        }
+        latestCutoffRef.current = next;
+        return next;
+    }, []);
+
+    const cacheEventBounded = useCallback((key: string, event: EventTableData) => {
+        eventCacheRef.current.delete(key);
+        eventCacheRef.current.set(key, event);
+        if (eventCacheRef.current.size > MAX_EVENT_CACHE_ENTRIES) {
+            for (const candidateKey of eventCacheRef.current.keys()) {
+                if (!selectedKeysRef.current.has(candidateKey)) {
+                    eventCacheRef.current.delete(candidateKey);
+                    if (eventCacheRef.current.size <= MAX_EVENT_CACHE_ENTRIES) break;
+                }
+            }
+        }
+    }, []);
+
     const cancelRealtimeResolutionJobs = useCallback(() => {
         realtimeResolutionJobsRef.current.forEach(job => {
             job.cancelledByCleanup = true;
@@ -294,9 +328,9 @@ export default function EventTable({
 
     const eventFromObservation = useCallback((observation: any, lane: LaneMapEntry, live: boolean): EventTableData => {
         const event = createEventFromOccupancyObservation(observation, lane, !live);
-        eventCacheRef.current.set(eventSelectionKey(event), event);
+        cacheEventBounded(eventSelectionKey(event), event);
         return event;
-    }, []);
+    }, [cacheEventBounded]);
 
     const fetchPlanRows = useCallback(async (
         plan: QueryPlan,
@@ -305,9 +339,12 @@ export default function EventTable({
         cutoff = pageLoadedTime,
         signal?: AbortSignal,
     ) => {
+        const effectiveCutoff = cutoff === pageLoadedTime && latestCutoffRef.current > cutoff
+            ? latestCutoffRef.current
+            : cutoff;
         const observationFilter = new ObservationFilter({
             dataStream: plan.datastreamIds,
-            resultTime: `../${cutoff}`,
+            resultTime: `../${effectiveCutoff}`,
             filter: plan.filter ? encodeURIComponent(plan.filter) : undefined,
             order: "desc",
         });
@@ -352,7 +389,7 @@ export default function EventTable({
         const resolvedKey = eventSelectionKey(resolved);
         if (eventCacheRef.current.get(originalKey) === original)
             eventCacheRef.current.delete(originalKey);
-        eventCacheRef.current.set(resolvedKey, resolved);
+        cacheEventBounded(resolvedKey, resolved);
         setRows(previous => deduplicateEvents(previous.map(row => row === original ? resolved : row)));
 
         const replaceKey = (previous: Set<string>) => {
@@ -437,13 +474,14 @@ export default function EventTable({
                     const event = eventFromObservation(message.values?.[0]?.data || message, lane, true);
                     event.setDataStreamId(occupancyStream.properties.id);
                     event.setRPMSystemId(occupancyStream.properties["system@id"]);
+                    advanceSnapshotCutoff(event.endTime);
                     resolveIdentityAndNotify(event, lane);
-                    if (currentPageRef.current !== 0) return;
                     if (!rowPassesLocalFilters(event, lane)) return;
                     if (allFilteredCutoffRef.current && event.status !== "None" && !event.adjudicatedIds?.length) {
                         setPostSelectionKeys(previous => new Set(previous).add(eventSelectionKey(event)));
                     }
                     setRowCount(previous => previous + 1);
+                    if (currentPageRef.current !== 0) return;
                     setRows(previous => deduplicateEvents([event, ...previous])
                         .sort(sortEventsByAlarmPriority)
                         .slice(0, PAGE_SIZE));
@@ -475,7 +513,25 @@ export default function EventTable({
         setRows(previous => previous.filter(row => row.id !== adjudicatedEventId));
         setRowCount(previous => Math.max(0, previous - 1));
         dispatch(setAdjudicatedEventId(null));
-    }, [adjudicatedEventId, tableMode, dispatch]);
+        const cutoff = advanceSnapshotCutoff();
+        void refreshCounts(cutoff);
+        void fetchPage(currentPageRef.current, cutoff);
+    }, [adjudicatedEventId, tableMode, dispatch, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef]);
+
+    useEffect(() => {
+        if (stableLaneMap.size === 0) return;
+        const reconcileAfterReconnect = () => {
+            const cutoff = advanceSnapshotCutoff();
+            void refreshCounts(cutoff);
+            if (currentPageRef.current === 0) {
+                void fetchPage(0, cutoff);
+            }
+        };
+        window.addEventListener("online", reconcileAfterReconnect);
+        return () => {
+            window.removeEventListener("online", reconcileAfterReconnect);
+        };
+    }, [stableLaneMap.size, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef]);
 
     const clearSelection = useCallback(() => {
         setSelectedKeys(new Set());
@@ -551,7 +607,7 @@ export default function EventTable({
     };
 
     const enumerateAllFiltered = useCallback(async (): Promise<EventTableData[]> => {
-        const cutoff = allFilteredCutoffRef.current ?? pageLoadedTime;
+        const cutoff = allFilteredCutoffRef.current ?? advanceSnapshotCutoff();
         const planRows = await runWithConcurrency(bulkQueryPlans, 4, async plan => {
             const count = await fetchPlanCount(plan, cutoff, true);
             const collected: EventTableData[] = [];
@@ -561,10 +617,10 @@ export default function EventTable({
         });
         return deduplicateEvents(planRows.flat())
             .filter(event => !excludedKeys.has(eventSelectionKey(event)));
-    }, [bulkQueryPlans, fetchPlanCount, fetchPlanRows, excludedKeys, pageLoadedTime]);
+    }, [bulkQueryPlans, fetchPlanCount, fetchPlanRows, excludedKeys, advanceSnapshotCutoff]);
 
     const selectAllFilteredAlarms = async () => {
-        const cutoff = pageLoadedTime;
+        const cutoff = advanceSnapshotCutoff();
         setLoading(true);
         try {
             const counts = await runWithConcurrency(bulkQueryPlans, 6, plan => fetchPlanCount(plan, cutoff, true));
@@ -609,6 +665,11 @@ export default function EventTable({
         if (tableMode === "alarmtable") {
             setRows(previous => previous.filter(event => !successfulKeys.has(eventSelectionKey(event))));
             setRowCount(previous => Math.max(0, previous - successful.length));
+            if (successful.length > 0) {
+                const cutoff = advanceSnapshotCutoff();
+                void refreshCounts(cutoff);
+                void fetchPage(currentPageRef.current, cutoff);
+            }
         } else {
             setRows(previous => previous.map(event => {
                 if (successfulKeys.has(eventSelectionKey(event))) {
@@ -862,8 +923,9 @@ export default function EventTable({
         .map(column => column.field);
 
     const retryEventQueries = () => {
-        void refreshCounts();
-        void fetchPage(paginationModel.page);
+        const cutoff = advanceSnapshotCutoff();
+        void refreshCounts(cutoff);
+        void fetchPage(paginationModel.page, cutoff);
     };
 
     return (
