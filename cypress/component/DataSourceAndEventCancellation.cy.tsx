@@ -4,6 +4,7 @@ import {Provider} from "react-redux";
 import ObservationFilter from "osh-js/source/core/sweapi/observation/ObservationFilter";
 
 import DataSourceProvider, {DataSourceContext} from "../../src/app/contexts/DataSourceContext";
+import {statusTableEventFromObservation} from "../../src/app/_components/lane-view/StatusTable";
 import {
     EventQueryPlan,
     fetchCollectionDataWithSignal,
@@ -470,5 +471,45 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
                 cutoff: "2026-12-31T23:59:59.000Z",
             });
         });
+    });
+
+    it("parses live and historical StatusTable fault and tamper observations with valid ISO timestamps", () => {
+        const liveGammaFault = statusTableEventFromObservation(
+            {alarmState: "Fault - Gamma High", samplingTime: "2026-11-09T01:02:03.456Z"},
+            "Lane03",
+            true,
+        );
+        expect(liveGammaFault).to.not.equal(undefined);
+        expect(liveGammaFault?.laneId).to.equal("Lane03");
+        expect(liveGammaFault?.status).to.equal("Fault - Gamma High");
+        expect(liveGammaFault?.timestamp).to.equal("2026-11-09T01:02:03.456Z");
+        expect(Number.isNaN(new Date(liveGammaFault!.timestamp).getTime())).to.equal(false);
+
+        const liveTamper = statusTableEventFromObservation(
+            {tamperStatus: true, samplingtime: "2026-11-09T01:05:00.000Z"},
+            "Lane03",
+            true,
+        );
+        expect(liveTamper?.status).to.equal("Tamper");
+        expect(liveTamper?.timestamp).to.equal("2026-11-09T01:05:00.000Z");
+
+        for (const nonFault of ["Scan", "Background", "Alarm", "Clear"]) {
+            expect(
+                statusTableEventFromObservation({alarmState: nonFault, samplingTime: "2026-11-09T01:00:00Z"}, "Lane03", true),
+            ).to.equal(undefined);
+        }
+
+        const historicalFault = statusTableEventFromObservation(
+            {
+                properties: {
+                    resultTime: "2026-11-09T00:55:00.000Z",
+                    result: {alarmState: "Fault - Neutron High"},
+                },
+            },
+            "Lane03",
+            false,
+        );
+        expect(historicalFault?.status).to.equal("Fault - Neutron High");
+        expect(historicalFault?.timestamp).to.equal("2026-11-09T00:55:00.000Z");
     });
 });
