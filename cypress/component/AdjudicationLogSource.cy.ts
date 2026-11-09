@@ -119,6 +119,48 @@ describe("adjudication log source discovery", () => {
         expect(merged[0].feedback).to.equal("Vvvhhh");
     });
 
+    it("keeps adjudication records immutable and appends additional adjudications with distinct commandIds", () => {
+        const firstEntry = new AdjudicationData("2026-10-28T10:27:47.100Z", "44", "0jm85qgf");
+        firstEntry.id = "02fc";
+        firstEntry.commandId = "02fc";
+        firstEntry.setAdjudicationCode(AdjudicationCodes.getCodeObjByIndex(2));
+        firstEntry.setFeedback("Initial adjudication record");
+        firstEntry.setIsotopes(["Neutron"]);
+        firstEntry.setSecondaryInspectionStatus("COMPLETED");
+        firstEntry.setVehicleId("TRK-101");
+        firstEntry.setUser("operator1");
+
+        // Attempted mutation of the same commandId must never overwrite the original immutable record
+        const attemptedMutation = new AdjudicationData("2026-10-28T10:28:00.000Z", "44", "0jm85qgf");
+        attemptedMutation.id = "02fc";
+        attemptedMutation.commandId = "02fc";
+        attemptedMutation.setAdjudicationCode(AdjudicationCodes.getCodeObjByIndex(5));
+        attemptedMutation.setFeedback("Tampered feedback");
+        attemptedMutation.setIsotopes(["Plutonium"]);
+        attemptedMutation.setSecondaryInspectionStatus("NONE");
+        attemptedMutation.setVehicleId("TRK-999");
+        attemptedMutation.setUser("operator2");
+
+        // Second adjudication submitted in the same second with a distinct commandId must be appended
+        const secondEntrySameSecond = new AdjudicationData("2026-10-28T10:27:47.900Z", "44", "0jm85qgf");
+        secondEntrySameSecond.id = "02fd";
+        secondEntrySameSecond.commandId = "02fd";
+        secondEntrySameSecond.setAdjudicationCode(AdjudicationCodes.getCodeObjByIndex(2));
+        secondEntrySameSecond.setFeedback("Initial adjudication record");
+        secondEntrySameSecond.setIsotopes(["Neutron"]);
+        secondEntrySameSecond.setSecondaryInspectionStatus("COMPLETED");
+        secondEntrySameSecond.setVehicleId("TRK-101");
+        secondEntrySameSecond.setUser("operator1");
+
+        const merged = mergeAdjudicationLogs([firstEntry], [attemptedMutation, secondEntrySameSecond]);
+        expect(merged).to.have.length(2);
+        expect(merged[0].commandId).to.equal("02fc");
+        expect(merged[0].feedback).to.equal("Initial adjudication record");
+        expect(merged[0].adjudicationCode.code).to.equal(2);
+        expect(merged[1].commandId).to.equal("02fd");
+        expect(merged[1].feedback).to.equal("Initial adjudication record");
+    });
+
     it("formats Linux forward-slash, Windows backslash, and duplicate-basename attachment link labels", () => {
         expect(formatAdjudicationAttachmentLabel("adjudication/evidence-01.txt")).to.equal("evidence-01.txt");
         expect(formatAdjudicationAttachmentLabel("/adjudication/evidence-01.txt")).to.equal("evidence-01.txt");

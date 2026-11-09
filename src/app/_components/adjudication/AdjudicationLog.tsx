@@ -147,14 +147,30 @@ export function mergeAdjudicationLogs(
         if (!item) continue;
         const cmdId = item.commandId ? String(item.commandId).trim() : "";
         const contentKey = adjudicationLogKey(item);
-        const key = (cmdId && commandIdToKey.get(cmdId)) || contentKey;
+        const mappedKey = cmdId ? commandIdToKey.get(cmdId) : undefined;
+        let key = mappedKey || contentKey;
         const previous = merged.get(key);
         if (previous) {
-            item.id = previous.id;
-            if (!item.commandId && previous.commandId) {
-                item.commandId = previous.commandId;
+            const prevCmdId = previous.commandId ? String(previous.commandId).trim() : "";
+            if (prevCmdId && cmdId && prevCmdId !== cmdId) {
+                // Distinct commandId means a separate immutable adjudication record appended to the list.
+                key = `cmd:${cmdId}`;
+                if (!item.id) {
+                    item.id = cmdId;
+                }
+                commandIdToKey.set(cmdId, key);
+                merged.set(key, item);
+                continue;
             }
-        } else if (!item.id) {
+            // Preserve the existing immutable adjudication record; only hydrate commandId if the
+            // earlier entry arrived optimistically before its commandId was known.
+            if (!previous.commandId && cmdId) {
+                previous.commandId = cmdId;
+                commandIdToKey.set(cmdId, key);
+            }
+            continue;
+        }
+        if (!item.id) {
             item.id = cmdId || key;
         }
         if (cmdId) {

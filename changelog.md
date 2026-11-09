@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Retained-media manifest validation now accepts Java `Instant.MAX` (`+1000000000-12-31T23:59:59.999999999Z`) provisional `rollbackDeleteAfter` timestamps emitted before the 24-hour MP4 rollback grace clock begins, while continuing to reject malformed signed-year timestamps.
-- Event Details adjudication logs now refresh deterministically after adjudication submission and deduplicate historical and live MQTT entries by observation ID and timestamp.
+- Event Details adjudication logs now discover all adjudication datastreams associated with a lane, merge historical observations matched either by the occupancy's `adjudicatedIds` array or by `occupancyObsId` with live MQTT entries, refresh deterministically after adjudication submission, and deduplicate entries by observation ID and timestamp.
 - National Statistics refresh now follows its durable command status through `PENDING` to terminal
   completion, keeps the controls busy for the complete operation, and fetches the exact observation
   ID returned by that command instead of accepting a stale latest row. Terminal failures remain
