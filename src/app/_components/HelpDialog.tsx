@@ -171,7 +171,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'EML & Code 9999',
-                meaning: 'Energy Metric Ratios — Rapiscan algorithm comparing gamma energy windows to distinguish benign NORM cargo from threat sources. Non-threat NORM alarms are auto-adjudicated as `Code 9999: EML Non-Threat`.',
+                meaning: 'Enhanced Machine Learning — Rapiscan algorithm comparing gamma energy windows to distinguish benign NORM cargo from threat sources. Non-threat NORM alarms are auto-adjudicated as `Code 9999: EML Non-Threat`.',
             },
             {
                 term: 'Extended Occupancy (`Fault - Extended Occupancy`) & Code 9998',
@@ -317,7 +317,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'EML y Código 9999',
-                meaning: 'Relaciones de métricas de energía en pórticos Rapiscan para distinguir carga NORM benigna de amenazas. Las alarmas NORM no amenazantes se auto-adjudican como `Código 9999: EML sin amenaza`.',
+                meaning: 'Aprendizaje automático mejorado (Enhanced Machine Learning) en pórticos Rapiscan para distinguir carga NORM benigna de amenazas. Las alarmas NORM no amenazantes se auto-adjudican como `Código 9999: EML sin amenaza`.',
             },
             {
                 term: 'Ocupación prolongada (`Fault - Extended Occupancy`) y Código 9998',
@@ -463,7 +463,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'EML et Code 9999',
-                meaning: 'Algorithme Rapiscan comparant les fenêtres d’énergie gamma pour distinguer le fret NORM bénin des menaces. Les alarmes non menaçantes sont auto-adjugées en `Code 9999 : EML sans menace`.',
+                meaning: 'Apprentissage automatique amélioré (Enhanced Machine Learning) — algorithme Rapiscan comparant les fenêtres d’énergie gamma pour distinguer le fret NORM bénin des menaces. Les alarmes non menaçantes sont auto-adjugées en `Code 9999 : EML sans menace`.',
             },
             {
                 term: 'Occupation prolongée (`Fault - Extended Occupancy`) et Code 9998',
@@ -609,7 +609,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'EML & Κωδικός 9999',
-                meaning: 'Αλγόριθμος Rapiscan που συγκρίνει ενεργειακά παράθυρα γάμμα για διάκριση ακίνδυνου φορτίου NORM από απειλές. Οι μη απειλητικοί συναγερμοί αξιολογούνται αυτόματα ως `Κωδ. 9999: EML μη απειλή`.',
+                meaning: 'Ενισχυμένη μηχανική μάθηση (Enhanced Machine Learning) — αλγόριθμος Rapiscan που συγκρίνει ενεργειακά παράθυρα γάμμα για διάκριση ακίνδυνου φορτίου NORM από απειλές. Οι μη απειλητικοί συναγερμοί αξιολογούνται αυτόματα ως `Κωδ. 9999: EML μη απειλή`.',
             },
             {
                 term: 'Παρατεταμένη διέλευση (`Fault - Extended Occupancy`) & Κωδικός 9998',
