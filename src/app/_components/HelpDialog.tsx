@@ -76,15 +76,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Dashboard (`/`)',
-                summary: 'Real-time lane status grid, site map, live alarm feed, and quick adjudication preview drawer. Click a lane to view live video and counts; click an alarm row to inspect retained frames and adjudicate.',
+                summary: 'Real-time lane status grid, site map, live alarm feed, Customize Dashboard layout control, and quick adjudication preview drawer. Click a lane to view live video and combined/separate detector charts; click an alarm row to inspect the 5-frame filmstrip and adjudicate.',
             },
             {
                 title: 'Events (`/event-log`)',
-                summary: 'Searchable historical log of all occupancies, alarms, and faults. Filter by Event UUID, lane, time window, or nested AND/OR rules, or select multiple alarms for bulk adjudication.',
+                summary: 'Searchable historical log of all occupancies, alarms, and faults. Filter by Event UUID, lane, time window, Adjudication Code (`Code 9998: Extended Occupancy Gamma Alarm`, `Code 9999: EML Non-Threat`, built-in `1–11`, and custom codes), or nested AND/OR rules, or select multiple alarms for bulk adjudication.',
             },
             {
                 title: 'Status of Health (`/health`)',
-                summary: 'Live connection state (Online, Offline, Waiting) for every RPM and camera, plus Gamma High/Low, Neutron High, Tamper, and Extended Occupancy fault indicators.',
+                summary: 'Live connection state (Online, Offline, Waiting) for every RPM and camera, plus Gamma High/Low, Neutron High, Tamper, and Extended Occupancy (`Fault - Extended Occupancy` + `Code 9998` gamma-only auto-adjudication) fault indicators.',
             },
             {
                 title: 'Map (`/map`)',
@@ -111,11 +111,11 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         reports: [
             {
                 title: 'RDS Site Report (`RDS_SITE`)',
-                summary: 'Executive site KPI summary, alarm and EML suppression rates (`Code 9999: EML Non-Threat` vs. `Operator Review Required`), fault totals, storage capacity, and per-lane summary table.',
+                summary: 'Executive site KPI summary, alarm and automated disposition rates (`Code 9998: Extended Occupancy Gamma Alarm`, `Code 9999: EML Non-Threat`, and `Operator Review Required`), fault totals, storage capacity, and per-lane summary table.',
             },
             {
                 title: 'Lane Report (`LANE`)',
-                summary: 'Per-lane operational KPIs, alarm and EML rates, fault breakdown, and daily time-series activity for the selected scope.',
+                summary: 'Per-lane operational KPIs, alarm and automated disposition (`9998`/`9999`) rates, fault breakdown, and daily time-series activity for the selected scope.',
             },
             {
                 title: 'Event Report (`EVENT`)',
@@ -174,12 +174,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 meaning: 'Energy Metric Ratios — Rapiscan algorithm comparing gamma energy windows to distinguish benign NORM cargo from threat sources. Non-threat NORM alarms are auto-adjudicated as `Code 9999: EML Non-Threat`.',
             },
             {
+                term: 'Extended Occupancy (`Fault - Extended Occupancy`) & Code 9998',
+                meaning: 'When a vehicle occupies a lane for at least its configured threshold (`extendedOccupancyThresholdMinutes`, default 1 min), OSCAR publishes `Fault - Extended Occupancy`. If it completes with a gamma-only alarm (no neutron alarm), OSCAR suppresses it from the live Dashboard queue and auto-adjudicates it as `Code 9998: Extended Occupancy Gamma Alarm`. Neutron alarms are never auto-adjudicated.',
+            },
+            {
                 term: 'WebID & DRF',
                 meaning: 'WebID is the Sandia Full Spectrum isotope identification service for uploaded spectra (`N42`/SPC). The DRF (Detector Response Function) specifies the detector model and geometry.',
             },
             {
-                term: 'Daily File Codes (`GB`, `GS`, `GA`, `NS`, `GX`)',
-                meaning: 'Raw RPM daily CSV record codes: `GB`/`NB` = gamma/neutron background, `GS` = occupancy start, `GC`/`NC` = count profile, `GA`/`NA`/`NS` = gamma/neutron alarm, `GX` = occupancy end, `TT`/`TC` = tamper fault/clear.',
+                term: 'Daily File Codes (`GB`, `GS`, `GA`, `NS`, `GX`, `SG1`–`SG3`, `SN1`–`SN2`)',
+                meaning: 'Raw RPM daily CSV record codes: `GB`/`NB` = gamma/neutron background, `GS` = occupancy start, `GC`/`NC` = count profile, `GA`/`NA`/`NS` = gamma/neutron alarm, `GX` = occupancy end, `TT`/`TC` = tamper fault/clear, `SG1`–`SG3`/`SN1`–`SN2` = daily gamma/neutron setup parameters (auto-synced to `config.json`).',
             },
             {
                 term: 'Event UUID',
@@ -218,15 +222,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Panel (`/`)',
-                summary: 'Cuadrícula en tiempo real del estado de carriles, mapa del sitio, flujo de alarmas y panel rápido de adjudicación.',
+                summary: 'Cuadrícula en tiempo real del estado de carriles, mapa del sitio, flujo de alarmas, control Personalizar panel y adjudicación rápida.',
             },
             {
                 title: 'Eventos (`/event-log`)',
-                summary: 'Registro histórico de ocupaciones, alarmas y fallos con búsqueda por UUID, filtros anidados Y/O y adjudicación masiva.',
+                summary: 'Registro histórico de ocupaciones, alarmas y fallos con búsqueda por UUID, filtros por Código de adjudicación (`Código 9998`, `Código 9999`, `1–11` y personalizados) y adjudicación masiva.',
             },
             {
                 title: 'Estado de salud (`/health`)',
-                summary: 'Estado en vivo de conexión (En línea, Sin conexión, Esperando) de cada RPM y cámara, e indicadores de fallos y manipulación.',
+                summary: 'Estado en vivo de conexión (En línea, Sin conexión, Esperando) de cada RPM y cámara, e indicadores de fallos, manipulación y ocupación prolongada (`Fault - Extended Occupancy` + `Código 9998`).',
             },
             {
                 title: 'Mapa (`/map`)',
@@ -316,12 +320,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 meaning: 'Relaciones de métricas de energía en pórticos Rapiscan para distinguir carga NORM benigna de amenazas. Las alarmas NORM no amenazantes se auto-adjudican como `Código 9999: EML sin amenaza`.',
             },
             {
+                term: 'Ocupación prolongada (`Fault - Extended Occupancy`) y Código 9998',
+                meaning: 'Cuando un vehículo ocupa un carril al menos su umbral configurado (`extendedOccupancyThresholdMinutes`, predeterminado 1 min), OSCAR publica `Fault - Extended Occupancy`. Si finaliza con alarma solo gamma (sin alarma de neutrones), se suprime del panel y se auto-adjudica como `Código 9998: Alarma gamma de ocupación prolongada`.',
+            },
+            {
                 term: 'WebID y DRF',
                 meaning: 'Servicio Sandia Full Spectrum para identificar isótopos en espectros. La DRF indica el modelo y geometría del detector.',
             },
             {
-                term: 'Códigos de archivo diario (`GB`, `GS`, `GA`, `NS`, `GX`)',
-                meaning: '`GB`/`NB` = fondo gamma/neutrones, `GS` = inicio de ocupación, `GC`/`NC` = conteos, `GA`/`NA`/`NS` = alarma, `GX` = fin de ocupación, `TT`/`TC` = manipulación.',
+                term: 'Códigos de archivo diario (`GB`, `GS`, `GA`, `NS`, `GX`, `SG1`–`SG3`, `SN1`–`SN2`)',
+                meaning: '`GB`/`NB` = fondo gamma/neutrones, `GS` = inicio de ocupación, `GC`/`NC` = conteos, `GA`/`NA`/`NS` = alarma, `GX` = fin de ocupación, `TT`/`TC` = manipulación, `SG1`–`SG3`/`SN1`–`SN2` = parámetros diarios sincronizados en `config.json`.',
             },
             {
                 term: 'UUID de evento',
@@ -360,15 +368,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Tableau de bord (`/`)',
-                summary: 'Grille d’état des voies en temps réel, carte du site, flux d’alarmes en direct et tiroir d’adjudication rapide.',
+                summary: 'Grille d’état des voies en temps réel, carte du site, flux d’alarmes en direct, personnalisation des cartes et tiroir d’adjudication rapide.',
             },
             {
                 title: 'Événements (`/event-log`)',
-                summary: 'Journal historique consultable des occupations, alarmes et défauts avec recherche par UUID, filtres ET/OU et adjudication groupée.',
+                summary: 'Journal historique consultable des occupations, alarmes et défauts avec recherche par UUID, filtres par Code d’adjudication (`Code 9998`, `Code 9999`, `1–11` et personnalisés) et adjudication groupée.',
             },
             {
                 title: 'État de santé (`/health`)',
-                summary: 'État de connexion en direct (En ligne, Hors ligne, En attente) des RPM et caméras, et indicateurs de défauts et de sabotage.',
+                summary: 'État de connexion en direct (En ligne, Hors ligne, En attente) des RPM et caméras, et indicateurs de défauts, sabotage et occupation prolongée (`Fault - Extended Occupancy` + `Code 9998`).',
             },
             {
                 title: 'Carte (`/map`)',
@@ -458,12 +466,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 meaning: 'Algorithme Rapiscan comparant les fenêtres d’énergie gamma pour distinguer le fret NORM bénin des menaces. Les alarmes non menaçantes sont auto-adjugées en `Code 9999 : EML sans menace`.',
             },
             {
+                term: 'Occupation prolongée (`Fault - Extended Occupancy`) et Code 9998',
+                meaning: 'Lorsqu’un véhicule occupe une voie au moins pendant son seuil configuré (`extendedOccupancyThresholdMinutes`, défaut 1 min), OSCAR publie `Fault - Extended Occupancy`. Si elle se termine par une alarme gamma seule (sans alarme neutron), elle est masquée du tableau de bord et auto-adjugée en `Code 9998 : Alarme gamma d’occupation prolongée`.',
+            },
+            {
                 term: 'WebID et DRF',
                 meaning: 'Service Sandia Full Spectrum d’identification isotopique. La DRF précise le modèle et la géométrie du détecteur.',
             },
             {
-                term: 'Codes de fichier quotidien (`GB`, `GS`, `GA`, `NS`, `GX`)',
-                meaning: '`GB`/`NB` = fond gamma/neutrons, `GS` = début d’occupation, `GC`/`NC` = comptages, `GA`/`NA`/`NS` = alarme, `GX` = fin d’occupation, `TT`/`TC` = sabotage.',
+                term: 'Codes de fichier quotidien (`GB`, `GS`, `GA`, `NS`, `GX`, `SG1`–`SG3`, `SN1`–`SN2`)',
+                meaning: '`GB`/`NB` = fond gamma/neutrons, `GS` = début d’occupation, `GC`/`NC` = comptages, `GA`/`NA`/`NS` = alarme, `GX` = fin d’occupation, `TT`/`TC` = sabotage, `SG1`–`SG3`/`SN1`–`SN2` = paramètres quotidiens synchronisés dans `config.json`.',
             },
             {
                 term: 'UUID d’événement',
@@ -502,15 +514,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Πίνακας ελέγχου (`/`)',
-                summary: 'Πλέγμα κατάστασης λωρίδων σε πραγματικό χρόνο, χάρτης εγκατάστασης, ροή συναγερμών και γρήγορη αξιολόγηση.',
+                summary: 'Πλέγμα κατάστασης λωρίδων σε πραγματικό χρόνο, χάρτης εγκατάστασης, ροή συναγερμών, προσαρμογή καρτών και γρήγορη αξιολόγηση.',
             },
             {
                 title: 'Συμβάντα (`/event-log`)',
-                summary: 'Ιστορικό διελεύσεων, συναγερμών και βλαβών με αναζήτηση UUID, ένθετα φίλτρα ΚΑΙ/Ή και μαζική αξιολόγηση.',
+                summary: 'Ιστορικό διελεύσεων, συναγερμών και βλαβών με αναζήτηση UUID, φίλτρα Κωδικού αξιολόγησης (`Κωδικός 9998`, `Κωδικός 9999`, `1–11` και προσαρμοσμένοι) και μαζική αξιολόγηση.',
             },
             {
                 title: 'Κατάσταση υγείας (`/health`)',
-                summary: 'Ζωντανή κατάσταση σύνδεσης (Σε σύνδεση, Εκτός σύνδεσης, Αναμονή) για κάθε RPM και κάμερα, καθώς και ενδείξεις βλαβών/παραβίασης.',
+                summary: 'Ζωντανή κατάσταση σύνδεσης (Σε σύνδεση, Εκτός σύνδεσης, Αναμονή) για κάθε RPM και κάμερα, καθώς και ενδείξεις βλαβών, παραβίασης και παρατεταμένης διέλευσης (`Fault - Extended Occupancy` + `Κωδικός 9998`).',
             },
             {
                 title: 'Χάρτης (`/map`)',
@@ -600,12 +612,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 meaning: 'Αλγόριθμος Rapiscan που συγκρίνει ενεργειακά παράθυρα γάμμα για διάκριση ακίνδυνου φορτίου NORM από απειλές. Οι μη απειλητικοί συναγερμοί αξιολογούνται αυτόματα ως `Κωδ. 9999: EML μη απειλή`.',
             },
             {
+                term: 'Παρατεταμένη διέλευση (`Fault - Extended Occupancy`) & Κωδικός 9998',
+                meaning: 'Όταν ένα όχημα παραμένει σε λωρίδα τουλάχιστον για το ρυθμισμένο όριο (`extendedOccupancyThresholdMinutes`, προεπιλογή 1 λεπτό), το OSCAR δημοσιεύει `Fault - Extended Occupancy`. Αν ολοκληρωθεί με συναγερμό μόνο γάμμα (χωρίς συναγερμό νετρονίων), αποκρύπτεται από τον πίνακα και αξιολογείται αυτόματα ως `Κωδικός 9998: Συναγερμός γάμμα παρατεταμένης διέλευσης`.',
+            },
+            {
                 term: 'WebID & DRF',
                 meaning: 'Υπηρεσία Sandia Full Spectrum για ταυτοποίηση ισοτόπων από φάσματα. Το DRF καθορίζει το μοντέλο και τη γεωμετρία του ανιχνευτή.',
             },
             {
-                term: 'Κωδικοί ημερήσιου αρχείου (`GB`, `GS`, `GA`, `NS`, `GX`)',
-                meaning: '`GB`/`NB` = υπόβαθρο γάμμα/νετρονίων, `GS` = έναρξη διέλευσης, `GC`/`NC` = μετρήσεις, `GA`/`NA`/`NS` = συναγερμός, `GX` = λήξη διέλευσης, `TT`/`TC` = παραβίαση.',
+                term: 'Κωδικοί ημερήσιου αρχείου (`GB`, `GS`, `GA`, `NS`, `GX`, `SG1`–`SG3`, `SN1`–`SN2`)',
+                meaning: '`GB`/`NB` = υπόβαθρο γάμμα/νετρονίων, `GS` = έναρξη διέλευσης, `GC`/`NC` = μετρήσεις, `GA`/`NA`/`NS` = συναγερμός, `GX` = λήξη διέλευσης, `TT`/`TC` = παραβίαση, `SG1`–`SG3`/`SN1`–`SN2` = ημερήσιες παράμετροι που συγχρονίζονται στο `config.json`.',
             },
             {
                 term: 'UUID συμβάντος',
