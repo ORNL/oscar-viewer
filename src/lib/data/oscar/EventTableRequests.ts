@@ -12,9 +12,24 @@ export interface EventQueryPlan {
     filter: string;
 }
 
+export const ACTIVE_ALARM_WINDOW_DAYS = 15;
+export const ACTIVE_ALARM_WINDOW_MS = ACTIVE_ALARM_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+export function computeActiveAlarmWindowStartIso(cutoffIso: string): string | undefined {
+    const cutoffMs = Date.parse(cutoffIso);
+    if (!Number.isFinite(cutoffMs)) return undefined;
+    return new Date(cutoffMs - ACTIVE_ALARM_WINDOW_MS).toISOString();
+}
+
+export function computeActiveAlarmPhenomenonTime(cutoffIso: string): string | undefined {
+    const startIso = computeActiveAlarmWindowStartIso(cutoffIso);
+    return startIso ? `${startIso}/..` : undefined;
+}
+
 export interface CountFetchOptions {
     signal?: AbortSignal;
     lowPriority?: boolean;
+    phenomenonTime?: string;
 }
 
 export const deduplicateEvents = (events: EventTableData[]): EventTableData[] => {
@@ -65,6 +80,7 @@ export async function fetchObservationPlanCount(
         format: "application/om+json",
         dataStream: plan.datastreamIds.join(","),
     });
+    if (options?.phenomenonTime) params.set("phenomenonTime", options.phenomenonTime);
     if (plan.filter) params.set("filter", plan.filter);
     try {
         const requestInit: RequestInit = {
@@ -93,6 +109,7 @@ export interface UseAbortableEventQueriesArgs {
     page: number;
     pageSize: number;
     pageLoadedTime: string;
+    phenomenonTimeForCutoff?: (cutoff: string) => string | undefined;
     fetchPlanRows: (
         plan: EventQueryPlan,
         limit: number,
@@ -128,6 +145,7 @@ export function useAbortableEventQueries({
     page,
     pageSize,
     pageLoadedTime,
+    phenomenonTimeForCutoff,
     fetchPlanRows,
 }: UseAbortableEventQueriesArgs): UseAbortableEventQueriesResult {
     const [rows, setRows] = useState<EventTableData[]>([]);
@@ -153,8 +171,14 @@ export function useAbortableEventQueries({
             cutoff = pageLoadedTime,
             strict = false,
             options?: CountFetchOptions,
-        ) => fetchObservationPlanCount(plan, cutoff, strict, options),
-        [pageLoadedTime],
+        ) => {
+            const phenomenonTime = options?.phenomenonTime ?? phenomenonTimeForCutoff?.(cutoff);
+            const mergedOptions = phenomenonTime && options?.phenomenonTime === undefined
+                ? {...options, phenomenonTime}
+                : options;
+            return fetchObservationPlanCount(plan, cutoff, strict, mergedOptions);
+        },
+        [pageLoadedTime, phenomenonTimeForCutoff],
     );
 
     const refreshCounts = useCallback(async (cutoffOverride?: string) => {

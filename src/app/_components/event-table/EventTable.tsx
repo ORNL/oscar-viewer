@@ -84,6 +84,8 @@ import {
     type RealtimeEventHandler,
 } from "@/lib/data/oscar/RealtimeEventNotification";
 import {
+    ACTIVE_ALARM_WINDOW_MS,
+    computeActiveAlarmPhenomenonTime,
     deduplicateEvents,
     EventQueryPlan,
     fetchCollectionDataWithSignal,
@@ -107,7 +109,7 @@ interface TableProps {
 type QueryPlan = EventQueryPlan;
 
 const PAGE_SIZE = 15;
-const BULK_FETCH_SIZE = 250;
+const BULK_FETCH_SIZE = 5000;
 const REALTIME_ID_RESOLUTION_TIMEOUT_MS = 12_000;
 const MAX_EVENT_CACHE_ENTRIES = 1000;
 
@@ -258,8 +260,29 @@ export default function EventTable({
         filter: combineServerFilters(plan.filter, "gammaAlarm=true OR neutronAlarm=true", "adjudicatedIdsCount=0"),
     })), [queryPlans]);
 
-    const findLaneByDataStreamId = useCallback((datastreamId: string): LaneMapEntry | undefined =>
-        Array.from(stableLaneMap.values()).find(lane => lane.datastreams.some((stream: any) => stream.properties.id === datastreamId)), [stableLaneMap]);
+    const laneByDataStreamId = useMemo(() => {
+        const index = new Map<string, LaneMapEntry>();
+        for (const lane of stableLaneMap.values()) {
+            for (const stream of lane.datastreams as any[]) {
+                const streamId = stream?.properties?.id;
+                if (typeof streamId === "string" && streamId.length > 0 && !index.has(streamId)) {
+                    index.set(streamId, lane);
+                }
+            }
+        }
+        return index;
+    }, [stableLaneMap]);
+
+    const findLaneByDataStreamId = useCallback(
+        (datastreamId: string): LaneMapEntry | undefined => laneByDataStreamId.get(datastreamId),
+        [laneByDataStreamId],
+    );
+
+    const phenomenonTimeForCutoff = useCallback(
+        (cutoff: string): string | undefined =>
+            tableMode === "alarmtable" ? computeActiveAlarmPhenomenonTime(cutoff) : undefined,
+        [tableMode],
+    );
 
     const notificationServiceRef = useRef<NotificationService | null>(null);
     useEffect(() => {
@@ -326,9 +349,11 @@ export default function EventTable({
         }
     }, [t, activeViewKey]);
 
-    const eventFromObservation = useCallback((observation: any, lane: LaneMapEntry, live: boolean): EventTableData => {
+    const eventFromObservation = useCallback((observation: any, lane: LaneMapEntry, live: boolean, cacheRow = true): EventTableData => {
         const event = createEventFromOccupancyObservation(observation, lane, !live);
-        cacheEventBounded(eventSelectionKey(event), event);
+        if (cacheRow) {
+            cacheEventBounded(eventSelectionKey(event), event);
+        }
         return event;
     }, [cacheEventBounded]);
 
@@ -338,12 +363,15 @@ export default function EventTable({
         offset: number,
         cutoff = pageLoadedTime,
         signal?: AbortSignal,
+        cacheRows = true,
     ) => {
         const effectiveCutoff = cutoff === pageLoadedTime && latestCutoffRef.current > cutoff
             ? latestCutoffRef.current
             : cutoff;
+        const phenomenonTime = phenomenonTimeForCutoff(effectiveCutoff);
         const observationFilter = new ObservationFilter({
             dataStream: plan.datastreamIds,
+            ...(phenomenonTime ? {phenomenonTime} : {}),
             resultTime: `../${effectiveCutoff}`,
             filter: plan.filter ? encodeURIComponent(plan.filter) : undefined,
             order: "desc",
@@ -356,9 +384,9 @@ export default function EventTable({
         const observations = await fetchCollectionDataWithSignal(collection, signal);
         return observations.flatMap((observation: any) => {
             const lane = findLaneByDataStreamId(observation.properties["datastream@id"]);
-            return lane ? [eventFromObservation(observation, lane, false)] : [];
+            return lane ? [eventFromObservation(observation, lane, false, cacheRows)] : [];
         });
-    }, [eventFromObservation, findLaneByDataStreamId, pageLoadedTime]);
+    }, [eventFromObservation, findLaneByDataStreamId, pageLoadedTime, phenomenonTimeForCutoff]);
 
     const {
         rows,
@@ -379,6 +407,7 @@ export default function EventTable({
         page: paginationModel.page,
         pageSize: PAGE_SIZE,
         pageLoadedTime,
+        phenomenonTimeForCutoff,
         fetchPlanRows,
     });
 
@@ -446,7 +475,14 @@ export default function EventTable({
     }, [replaceRealtimeEventIdentity, sendNotification]);
 
     const rowPassesLocalFilters = useCallback((event: EventTableData, lane: LaneMapEntry): boolean => {
-        if (tableMode === "alarmtable" && (event.status === "None" || event.adjudicatedIds?.length > 0)) return false;
+        if (tableMode === "alarmtable") {
+            if (event.status === "None" || event.adjudicatedIds?.length > 0) return false;
+            const endTimeMs = Date.parse(event.endTime || event.startTime);
+            const cutoffMs = Date.parse(latestCutoffRef.current);
+            if (Number.isFinite(endTimeMs) && Number.isFinite(cutoffMs) && endTimeMs < cutoffMs - ACTIVE_ALARM_WINDOW_MS) {
+                return false;
+            }
+        }
         if (tableMode === "lanelog" && currentLane && event.laneId !== currentLane) return false;
         return eventMatchesFilter(filter, event, {
             nodeId: lane.parentNode.id,
@@ -612,7 +648,7 @@ export default function EventTable({
             const count = await fetchPlanCount(plan, cutoff, true);
             const collected: EventTableData[] = [];
             for (let offset = 0; offset < count; offset += BULK_FETCH_SIZE)
-                collected.push(...await fetchPlanRows(plan, BULK_FETCH_SIZE, offset, cutoff));
+                collected.push(...await fetchPlanRows(plan, BULK_FETCH_SIZE, offset, cutoff, undefined, false));
             return collected;
         });
         return deduplicateEvents(planRows.flat())
@@ -686,7 +722,15 @@ export default function EventTable({
         allFilteredCutoffRef.current = null;
         setExcludedKeys(new Set());
         setPostSelectionKeys(new Set());
-        setSelectedKeys(new Set(failed.map(outcome => eventSelectionKey(outcome.event))));
+        const failedSelectionKeys = new Set<string>();
+        for (const outcome of failed) {
+            const key = eventSelectionKey(outcome.event);
+            failedSelectionKeys.add(key);
+            if (failedSelectionKeys.size <= MAX_EVENT_CACHE_ENTRIES) {
+                cacheEventBounded(key, outcome.event);
+            }
+        }
+        setSelectedKeys(failedSelectionKeys);
         return {success: successful.length, failed: failed.length};
     };
 

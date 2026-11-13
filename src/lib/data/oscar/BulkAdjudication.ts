@@ -44,16 +44,72 @@ export async function runWithConcurrency<T, R>(
     return results;
 }
 
-function findLaneForEvent(laneMap: Map<string, LaneMapEntry>, event: EventTableData): LaneMapEntry | undefined {
+export const BULK_ADJUDICATION_CONCURRENCY = 24;
+
+interface BulkAdjudicationIndex {
+    lanesByNodeAndName: Map<string, LaneMapEntry>;
+    controlStreamsByNode: Map<any, Promise<any[]>>;
+}
+
+function laneLookupKey(nodeKey: string, laneName: string): string {
+    return `${nodeKey}\u001f${laneName}`;
+}
+
+function buildBulkAdjudicationIndex(laneMap: Map<string, LaneMapEntry>): BulkAdjudicationIndex {
+    const lanesByNodeAndName = new Map<string, LaneMapEntry>();
+    for (const lane of laneMap.values()) {
+        if (lane.parentNode?.name) {
+            lanesByNodeAndName.set(laneLookupKey(lane.parentNode.name, lane.laneName), lane);
+        }
+        if (lane.parentNode?.id) {
+            lanesByNodeAndName.set(laneLookupKey(lane.parentNode.id, lane.laneName), lane);
+        }
+    }
+    return {
+        lanesByNodeAndName,
+        controlStreamsByNode: new Map(),
+    };
+}
+
+function findLaneForEvent(
+    laneMap: Map<string, LaneMapEntry>,
+    event: EventTableData,
+    index?: BulkAdjudicationIndex,
+): LaneMapEntry | undefined {
+    if (index) {
+        return index.lanesByNodeAndName.get(laneLookupKey(event.parentNode, event.laneId));
+    }
     return Array.from(laneMap.values()).find(lane =>
         lane.laneName === event.laneId &&
         (lane.parentNode.name === event.parentNode || lane.parentNode.id === event.parentNode));
+}
+
+async function resolveControlStreamsForLane(
+    lane: LaneMapEntry,
+    index?: BulkAdjudicationIndex,
+): Promise<any[]> {
+    if (lane.controlStreams.length > 0) {
+        return lane.controlStreams;
+    }
+    if (!index) {
+        return lane.parentNode.fetchNodeControlStreams();
+    }
+    let pending = index.controlStreamsByNode.get(lane.parentNode);
+    if (!pending) {
+        pending = Promise.resolve(lane.parentNode.fetchNodeControlStreams()).catch(err => {
+            index.controlStreamsByNode.delete(lane.parentNode);
+            throw err;
+        });
+        index.controlStreamsByNode.set(lane.parentNode, pending);
+    }
+    return pending;
 }
 
 export async function adjudicateOneEvent(
     event: EventTableData,
     laneMap: Map<string, LaneMapEntry>,
     values: BulkAdjudicationValues,
+    index?: BulkAdjudicationIndex,
 ): Promise<BulkAdjudicationOutcome> {
     try {
         if (event.status === "None")
@@ -61,16 +117,14 @@ export async function adjudicateOneEvent(
         if (event.adjudicatedIds?.length > 0)
             return {event, ok: false, error: "alreadyAdjudicated"};
 
-        const lane = findLaneForEvent(laneMap, event);
+        const lane = findLaneForEvent(laneMap, event, index);
         if (!lane) return {event, ok: false, error: "laneUnavailable"};
 
         const dataStream = lane.datastreams.find((stream: any) => stream.properties.id === event.dataStreamId)
             ?? lane.datastreams.find((stream: any) => isOccupancyDataStream(stream));
         if (!dataStream) return {event, ok: false, error: "occupancyStreamMissing"};
 
-        const streams = lane.controlStreams.length > 0
-            ? lane.controlStreams
-            : await lane.parentNode.fetchNodeControlStreams();
+        const streams = await resolveControlStreamsForLane(lane, index);
         const controlStream = streams.find((stream: typeof ControlStream) => isAdjudicationControlStream(stream));
         if (!controlStream) return {event, ok: false, error: "controlStreamMissing"};
 
@@ -111,5 +165,11 @@ export async function adjudicateEvents(
     values: BulkAdjudicationValues,
     onProgress?: (complete: number, total: number) => void,
 ): Promise<BulkAdjudicationOutcome[]> {
-    return runWithConcurrency(events, 6, event => adjudicateOneEvent(event, laneMap, values), onProgress);
+    const index = buildBulkAdjudicationIndex(laneMap);
+    return runWithConcurrency(
+        events,
+        BULK_ADJUDICATION_CONCURRENCY,
+        event => adjudicateOneEvent(event, laneMap, values, index),
+        onProgress,
+    );
 }

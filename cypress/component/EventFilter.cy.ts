@@ -8,7 +8,14 @@ import {
     eventMatchesFilter,
     operatorsForEventFilterField,
 } from "../../src/lib/data/oscar/EventFilter";
-import {runWithConcurrency} from "../../src/lib/data/oscar/BulkAdjudication";
+import {BULK_ADJUDICATION_CONCURRENCY, runWithConcurrency} from "../../src/lib/data/oscar/BulkAdjudication";
+import {
+    ACTIVE_ALARM_WINDOW_DAYS,
+    ACTIVE_ALARM_WINDOW_MS,
+    computeActiveAlarmPhenomenonTime,
+    computeActiveAlarmWindowStartIso,
+    fetchObservationPlanCount,
+} from "../../src/lib/data/oscar/EventTableRequests";
 import {sortEventsByAlarmPriority} from "../../src/lib/data/oscar/TableHelpers";
 import {
     parseCustomCodes,
@@ -292,6 +299,64 @@ describe("bounded bulk work", () => {
 
         expect(peak).to.equal(3);
         expect(results).to.deep.equal([0, 2, 4, 6, 8, 10, 12, 14]);
+        expect(BULK_ADJUDICATION_CONCURRENCY).to.equal(24);
+    });
+});
+
+describe("dashboard 15-day active alarm window", () => {
+    it("computes an exact 15-day trailing phenomenonTime bound from the cutoff while rejecting invalid timestamps", () => {
+        expect(ACTIVE_ALARM_WINDOW_DAYS).to.equal(15);
+        expect(ACTIVE_ALARM_WINDOW_MS).to.equal(15 * 24 * 60 * 60 * 1000);
+
+        const cutoff = "2026-11-16T12:00:00.000Z";
+        expect(computeActiveAlarmWindowStartIso(cutoff)).to.equal("2026-11-01T12:00:00.000Z");
+        expect(computeActiveAlarmPhenomenonTime(cutoff)).to.equal("2026-11-01T12:00:00.000Z/..");
+        expect(computeActiveAlarmWindowStartIso("not-a-timestamp")).to.equal(undefined);
+        expect(computeActiveAlarmPhenomenonTime("not-a-timestamp")).to.equal(undefined);
+    });
+
+    it("attaches phenomenonTime only when requested while preserving resultTime=../cutoff on count requests", async () => {
+        const seenUrls: string[] = [];
+        const originalFetch = window.fetch;
+        (window as any).fetch = async (input: RequestInfo | URL) => {
+            seenUrls.push(String(input));
+            return new Response(JSON.stringify({count: 42}), {
+                status: 200,
+                headers: {"Content-Type": "application/json"},
+            });
+        };
+        try {
+            const plan = {
+                key: "node-1",
+                node: {
+                    getBasicAuthHeader: () => ({}),
+                    getConnectedSystemsEndpoint: () => "http://localhost:8181/sensorhub/api",
+                } as any,
+                datastreamIds: ["occ-1", "occ-2"],
+                filter: "(gammaAlarm=true OR neutronAlarm=true) AND adjudicatedIdsCount=0",
+            };
+            const cutoff = "2026-11-16T12:00:00.000Z";
+            const activePhenomenonTime = computeActiveAlarmPhenomenonTime(cutoff);
+            const activeCount = await fetchObservationPlanCount(plan, cutoff, true, {
+                phenomenonTime: activePhenomenonTime,
+            });
+            const eventLogCount = await fetchObservationPlanCount(plan, cutoff, true);
+
+            expect(activeCount).to.equal(42);
+            expect(eventLogCount).to.equal(42);
+            expect(seenUrls).to.have.length(2);
+
+            const dashboardParams = new URL(seenUrls[0]).searchParams;
+            expect(dashboardParams.get("resultTime")).to.equal(`../${cutoff}`);
+            expect(dashboardParams.get("phenomenonTime")).to.equal("2026-11-01T12:00:00.000Z/..");
+            expect(dashboardParams.get("filter")).to.equal(plan.filter);
+
+            const eventLogParams = new URL(seenUrls[1]).searchParams;
+            expect(eventLogParams.get("resultTime")).to.equal(`../${cutoff}`);
+            expect(eventLogParams.get("phenomenonTime")).to.equal(null);
+        } finally {
+            window.fetch = originalFetch;
+        }
     });
 });
 
