@@ -10,20 +10,45 @@ export interface EventQueryPlan {
     node: LaneMapEntry["parentNode"];
     datastreamIds: string[];
     filter: string;
+    minTimestampMs?: number;
 }
 
 export const ACTIVE_ALARM_WINDOW_DAYS = 15;
 export const ACTIVE_ALARM_WINDOW_MS = ACTIVE_ALARM_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-export function computeActiveAlarmWindowStartIso(cutoffIso: string): string | undefined {
+export type AlarmTimeWindowPreset = "15m" | "1h" | "24h" | "15d";
+
+export const ALARM_TIME_WINDOW_PRESET_MS: Record<AlarmTimeWindowPreset, number> = {
+    "15m": 15 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "15d": ACTIVE_ALARM_WINDOW_MS,
+};
+
+export function computeActiveAlarmWindowStartIso(
+    cutoffIso: string,
+    windowMs = ACTIVE_ALARM_WINDOW_MS,
+): string | undefined {
     const cutoffMs = Date.parse(cutoffIso);
     if (!Number.isFinite(cutoffMs)) return undefined;
-    return new Date(cutoffMs - ACTIVE_ALARM_WINDOW_MS).toISOString();
+    return new Date(cutoffMs - windowMs).toISOString();
 }
 
-export function computeActiveAlarmPhenomenonTime(cutoffIso: string): string | undefined {
-    const startIso = computeActiveAlarmWindowStartIso(cutoffIso);
-    return startIso ? `${startIso}/..` : undefined;
+export function computeActiveAlarmPhenomenonTime(
+    cutoffIso: string,
+    windowMs = ACTIVE_ALARM_WINDOW_MS,
+    minTimestampMs?: number,
+): string | undefined {
+    const cutoffMs = Date.parse(cutoffIso);
+    if (!Number.isFinite(cutoffMs)) return undefined;
+    const windowStartMs = cutoffMs - windowMs;
+    const watermarkFloorMs = typeof minTimestampMs === "number"
+        && Number.isFinite(minTimestampMs)
+        && minTimestampMs > 0
+        ? Math.max(0, minTimestampMs - 60_000)
+        : 0;
+    const startMs = Math.max(windowStartMs, watermarkFloorMs);
+    return `${new Date(startMs).toISOString()}/..`;
 }
 
 export interface CountFetchOptions {
@@ -109,7 +134,10 @@ export interface UseAbortableEventQueriesArgs {
     page: number;
     pageSize: number;
     pageLoadedTime: string;
-    phenomenonTimeForCutoff?: (cutoff: string) => string | undefined;
+    phenomenonTimeForCutoff?: (cutoff: string, plan?: EventQueryPlan) => string | undefined;
+    rowFilter?: (row: EventTableData) => boolean;
+    extraFetchRows?: number;
+    filterModeActive?: boolean;
     fetchPlanRows: (
         plan: EventQueryPlan,
         limit: number,
@@ -136,7 +164,7 @@ export interface UseAbortableEventQueriesResult {
         options?: CountFetchOptions,
     ) => Promise<number>;
     refreshCounts: (cutoffOverride?: string) => Promise<void>;
-    fetchPage: (targetPage: number, cutoffOverride?: string) => Promise<void>;
+    fetchPage: (targetPage: number, cutoffOverride?: string, minExtraRows?: number) => Promise<void>;
 }
 
 export function useAbortableEventQueries({
@@ -146,6 +174,9 @@ export function useAbortableEventQueries({
     pageSize,
     pageLoadedTime,
     phenomenonTimeForCutoff,
+    rowFilter,
+    extraFetchRows = 0,
+    filterModeActive = false,
     fetchPlanRows,
 }: UseAbortableEventQueriesArgs): UseAbortableEventQueriesResult {
     const [rows, setRows] = useState<EventTableData[]>([]);
@@ -159,6 +190,10 @@ export function useAbortableEventQueries({
     const pageRequestRef = useRef(0);
     const countAbortRef = useRef<AbortController | null>(null);
     const pageAbortRef = useRef<AbortController | null>(null);
+    const rowFilterRef = useRef(rowFilter);
+    const extraFetchRowsRef = useRef(extraFetchRows);
+    rowFilterRef.current = rowFilter;
+    extraFetchRowsRef.current = extraFetchRows;
 
     useEffect(() => () => {
         countAbortRef.current?.abort();
@@ -172,7 +207,7 @@ export function useAbortableEventQueries({
             strict = false,
             options?: CountFetchOptions,
         ) => {
-            const phenomenonTime = options?.phenomenonTime ?? phenomenonTimeForCutoff?.(cutoff);
+            const phenomenonTime = options?.phenomenonTime ?? phenomenonTimeForCutoff?.(cutoff, plan);
             const mergedOptions = phenomenonTime && options?.phenomenonTime === undefined
                 ? {...options, phenomenonTime}
                 : options;
@@ -216,7 +251,7 @@ export function useAbortableEventQueries({
         }
     }, [queryPlans, fetchPlanCount, pageLoadedTime]);
 
-    const fetchPage = useCallback(async (targetPage: number, cutoffOverride?: string) => {
+    const fetchPage = useCallback(async (targetPage: number, cutoffOverride?: string, minExtraRows = 0) => {
         const effectiveCutoff = cutoffOverride ?? pageLoadedTime;
         pageAbortRef.current?.abort();
         const requestId = ++pageRequestRef.current;
@@ -231,7 +266,7 @@ export function useAbortableEventQueries({
         pageAbortRef.current = controller;
         setLoading(true);
         try {
-            if (pageQueryPlans.length === 1) {
+            if (pageQueryPlans.length === 1 && !filterModeActive) {
                 const pageRows = await fetchPlanRows(
                     pageQueryPlans[0],
                     pageSize,
@@ -246,14 +281,21 @@ export function useAbortableEventQueries({
                 return;
             }
             const required = (targetPage + 1) * pageSize;
+            const requestedExtra = Math.max(extraFetchRowsRef.current || 0, minExtraRows || 0);
+            const boundedExtra = filterModeActive
+                ? Math.max(0, Math.min(requestedExtra, 50))
+                : 0;
+            const fetchLimit = required + boundedExtra;
             const results = await runWithConcurrency(
                 pageQueryPlans,
                 6,
-                plan => fetchPlanRows(plan, required, 0, effectiveCutoff, controller.signal),
+                plan => fetchPlanRows(plan, fetchLimit, 0, effectiveCutoff, controller.signal),
             );
             if (controller.signal.aborted || requestId !== pageRequestRef.current) return;
-            const merged = deduplicateEvents(results.flat())
-                .sort(sortEventsByAlarmPriority);
+            const deduped = deduplicateEvents(results.flat());
+            const activeRowFilter = filterModeActive ? rowFilterRef.current : undefined;
+            const filtered = activeRowFilter ? deduped.filter(activeRowFilter) : deduped;
+            const merged = filtered.sort(sortEventsByAlarmPriority);
             setRows(merged.slice(targetPage * pageSize, required));
             currentPageRef.current = targetPage;
             setPageQueryError(false);
@@ -270,7 +312,7 @@ export function useAbortableEventQueries({
                 setLoading(false);
             }
         }
-    }, [pageQueryPlans, pageSize, fetchPlanRows, pageLoadedTime]);
+    }, [pageQueryPlans, pageSize, fetchPlanRows, pageLoadedTime, filterModeActive]);
 
     useEffect(() => {
         previousPageRef.current = 0;

@@ -28,18 +28,25 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import MediationIcon from '@mui/icons-material/Mediation';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
-import {Alert, Button, Chip, FormControlLabel, Menu, MenuItem, Slider, Stack, Switch, Tooltip} from '@mui/material';
+import {Alert, Badge, Button, Chip, FormControlLabel, Menu, MenuItem, Slider, Stack, Switch, Tooltip} from '@mui/material';
 import Link from 'next/link';
 import {Download, InsertChart, VolumeDown, VolumeUp} from "@mui/icons-material";
 import AlarmAudio from "@/app/_components/AlarmAudio";
-import {selectAlarmAudioVolume, setAlarmAudioVolume} from "@/lib/state/OSCARClientSlice";
+import {
+    selectAlarmAudioVolume,
+    selectContinuousAlarmAudio,
+    selectVisualUnreadAlert,
+    setAlarmAudioVolume,
+    setContinuousAlarmAudio,
+    setVisualUnreadAlert,
+} from "@/lib/state/OSCARClientSlice";
 import {useDispatch, useSelector} from "react-redux";
 import { useBreakpoint } from '../providers';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { useRouter } from 'next/navigation';
 import {setEventPreview, setSelectedRowId} from "@/lib/state/EventPreviewSlice";
-import {setSelectedEvent} from "@/lib/state/EventDataSlice";
+import {selectDashboardUnreadAlarmCount, setSelectedEvent} from "@/lib/state/EventDataSlice";
 import {setEventData} from "@/lib/state/EventDetailsSlice";
 import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
@@ -144,6 +151,9 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const router = useRouter();
     const {activeViewKey, viewError, scopedHref} = React.useContext(DataSourceContext);
     const savedVolume = useSelector(selectAlarmAudioVolume);
+    const continuousAlarmAudio = useSelector(selectContinuousAlarmAudio);
+    const visualUnreadAlert = useSelector(selectVisualUnreadAlert);
+    const unreadAlarmCount = useSelector(selectDashboardUnreadAlarmCount);
     const [authenticatedUsername, setAuthenticatedUsername] = useState<string | null>(null);
 
     useEffect(() => {
@@ -257,6 +267,10 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     };
 
     const [volumeValue, setVolumeValue] = useState(savedVolume);
+
+    useEffect(() => {
+        setVolumeValue(savedVolume);
+    }, [savedVolume]);
 
     const handleVolumeChange = (event: Event, newValue: number | number[]) => {
         const volume = newValue as number;
@@ -441,11 +455,19 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                             </Tooltip>
                             <Tooltip title={t('settings')} arrow placement="top">
                                 <IconButton
+                                    id="settings-button"
                                     color="inherit"
                                     aria-label={t('openSettings')}
                                     onClick={handleSettingsMenuOpen}
                                 >
-                                    {<SettingsIcon  />}
+                                    <Badge
+                                        color="warning"
+                                        badgeContent={(visualUnreadAlert || continuousAlarmAudio) ? unreadAlarmCount : 0}
+                                        invisible={!(visualUnreadAlert || continuousAlarmAudio) || unreadAlarmCount <= 0}
+                                        max={99}
+                                    >
+                                        <SettingsIcon aria-hidden="true" />
+                                    </Badge>
                                 </IconButton>
                             </Tooltip>
                         </Stack>
@@ -495,10 +517,50 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                     <Typography variant="body2" fontWeight={500}>
                                         {t('browserNotificationPermission')}
                                     </Typography>
-
-                                    {/*<Typography variant="caption" color="text.secondary">*/}
-                                    {/*    { notificationsEnabled === 'granted' ? t('permissionGranted') : notificationsEnabled === 'denied' ? t('permissionDenied') : t('clickToRequestPermission') }*/}
-                                    {/*</Typography>*/}
+                                </Box>
+                            }
+                        />
+                        <FormControlLabel
+                            sx={{alignItems: 'flex-start', m: 0}}
+                            control={
+                                <Switch
+                                    checked={visualUnreadAlert}
+                                    onChange={(_event, checked) => dispatch(setVisualUnreadAlert(checked))}
+                                    size="small"
+                                    inputProps={{'aria-label': t('visualUnreadAlert')}}
+                                    data-testid="toggle-visual-unread-alert"
+                                />
+                            }
+                            label={
+                                <Box sx={{marginLeft: 1.5}}>
+                                    <Typography variant="body2" fontWeight={500}>
+                                        {t('visualUnreadAlert')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{display: 'block', whiteSpace: 'normal', lineHeight: 1.3}}>
+                                        {t('visualUnreadAlertHint')}
+                                    </Typography>
+                                </Box>
+                            }
+                        />
+                        <FormControlLabel
+                            sx={{alignItems: 'flex-start', m: 0}}
+                            control={
+                                <Switch
+                                    checked={continuousAlarmAudio}
+                                    onChange={(_event, checked) => dispatch(setContinuousAlarmAudio(checked))}
+                                    size="small"
+                                    inputProps={{'aria-label': t('continuousAlarmAudio')}}
+                                    data-testid="toggle-continuous-alarm-audio"
+                                />
+                            }
+                            label={
+                                <Box sx={{marginLeft: 1.5}}>
+                                    <Typography variant="body2" fontWeight={500}>
+                                        {t('continuousAlarmAudio')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{display: 'block', whiteSpace: 'normal', lineHeight: 1.3}}>
+                                        {t('continuousAlarmAudioHint')}
+                                    </Typography>
                                 </Box>
                             }
                         />

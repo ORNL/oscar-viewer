@@ -550,5 +550,21 @@
   "showMapPreviewWidget": "Map / Preview",
   "hideWidget": "Hide widget",
   "resetDashboardWidgets": "Restore All",
-  "allDashboardWidgetsHidden": "All dashboard widgets are currently hidden."
+  "allDashboardWidgetsHidden": "All dashboard widgets are currently hidden.",
+  "unreadAlarm": "Unread alarm",
+  "acknowledgeSelected": "Acknowledge {count} selected",
+  "acknowledgeAll": "Acknowledge all",
+  "acknowledgedAlarmsStatus": "{count} alarms marked as read.",
+  "acknowledgedAllScopedStatus": "All alarms in the active view marked as read.",
+  "visualUnreadAlert": "Unread alarm banner",
+  "visualUnreadAlertHint": "Show a Dashboard banner while unread alarms remain in the active view.",
+  "continuousAlarmAudio": "Latching alarm audio",
+  "continuousAlarmAudioHint": "Repeat alarm audio until unread Dashboard alarms are acknowledged.",
+  "unreadAlarmsBanner": "{count} unread Dashboard alarm(s) in the active view.",
+  "unreadOnly": "Unread only",
+  "alarmTimeWindow": "Alarm time window",
+  "timeWindow15m": "15m",
+  "timeWindow1h": "1h",
+  "timeWindow24h": "24h",
+  "timeWindow15d": "15d"
 }

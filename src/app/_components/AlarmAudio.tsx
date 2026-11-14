@@ -1,30 +1,78 @@
-import { selectTriggeredAlarm, setAlarmTrigger } from "@/lib/state/EventDataSlice";
+import {
+    selectDashboardAcknowledgeNonce,
+    selectDashboardUnreadAlarmCount,
+    selectTriggeredAlarm,
+    setAlarmTrigger,
+} from "@/lib/state/EventDataSlice";
 import { RootState } from "@/lib/state/Store";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Box from "@mui/material/Box";
-import {Alert} from "@mui/material";
-import { selectAlarmAudioVolume } from "@/lib/state/OSCARClientSlice";
-import {useLanguage} from "@/app/contexts/LanguageContext";
-import {attemptMediaPlayback} from "@/lib/media/MediaPlayback";
+import { Alert } from "@mui/material";
+import {
+    selectAlarmAudioVolume,
+    selectContinuousAlarmAudio,
+} from "@/lib/state/OSCARClientSlice";
+import { useLanguage } from "@/app/contexts/LanguageContext";
+import { attemptMediaPlayback } from "@/lib/media/MediaPlayback";
+
+const PORTAL_ALARM_BRIDGE_MS = 8_000;
 
 let alarmAudio: HTMLAudioElement | null = null;
 
 export function getAlarmAudio() {
     if (!alarmAudio) {
         alarmAudio = new Audio("/alarm_sound.wav");
-        alarmAudio.preload = "auto";  // preload for faster start
+        alarmAudio.preload = "auto";
     }
     return alarmAudio;
 }
 
+export function resetAlarmAudioForTest() {
+    if (alarmAudio) {
+        alarmAudio.loop = false;
+        alarmAudio.pause();
+        alarmAudio.currentTime = 0;
+    }
+    alarmAudio = null;
+}
+
 export default function AlarmAudio() {
-    const {t} = useLanguage();
+    const { t } = useLanguage();
     const dispatch = useDispatch();
     const savedVolume = useSelector(selectAlarmAudioVolume);
+    const continuousAlarmAudio = useSelector(selectContinuousAlarmAudio);
     const triggerAlarm = useSelector((state: RootState) => selectTriggeredAlarm(state));
-    const [soundLocked, setSoundLocked] = useState(true);
+    const unreadCount = useSelector((state: RootState) => selectDashboardUnreadAlarmCount(state));
+    const acknowledgeNonce = useSelector((state: RootState) => selectDashboardAcknowledgeNonce(state));
 
+    const [soundLocked, setSoundLocked] = useState(true);
+    const [portalLatchActive, setPortalLatchActive] = useState(false);
+    const portalBridgeTimerRef = useRef<number | null>(null);
+    const prevUnreadCountRef = useRef<number>(unreadCount);
+    const prevAckNonceRef = useRef<number>(acknowledgeNonce);
+    const wasLoopingRef = useRef<boolean>(false);
+
+    const clearPortalBridge = () => {
+        if (portalBridgeTimerRef.current !== null) {
+            window.clearTimeout(portalBridgeTimerRef.current);
+            portalBridgeTimerRef.current = null;
+        }
+        setPortalLatchActive(false);
+    };
+
+    useEffect(() => () => {
+        if (portalBridgeTimerRef.current !== null) {
+            window.clearTimeout(portalBridgeTimerRef.current);
+            portalBridgeTimerRef.current = null;
+        }
+        if (alarmAudio && wasLoopingRef.current) {
+            alarmAudio.loop = false;
+            alarmAudio.pause();
+            alarmAudio.currentTime = 0;
+            wasLoopingRef.current = false;
+        }
+    }, []);
 
     useEffect(() => {
         if (!soundLocked) {
@@ -40,39 +88,70 @@ export default function AlarmAudio() {
 
             unlockInFlight = true;
             const audio = getAlarmAudio();
-            audio.volume = savedVolume / 100;
+            const previousMuted = audio.muted;
+            audio.muted = true;
+            audio.volume = Math.max(0, Math.min(1, savedVolume / 100));
 
-            const result = await attemptMediaPlayback(audio);
-            if (result.status === "started") {
-                audio.pause();
-                audio.currentTime = 0;
-                setSoundLocked(false);
-                document.removeEventListener("click", unlockAudio);
-            } else if (result.status === "failed") {
-                console.error("Unable to initialize alarm audio", result.error);
+            try {
+                const result = await attemptMediaPlayback(audio);
+                if (result.status === "started") {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    setSoundLocked(false);
+                    document.removeEventListener("click", unlockAudio);
+                } else if (result.status === "failed") {
+                    console.error("Unable to initialize alarm audio", result.error);
+                }
+            } finally {
+                audio.muted = previousMuted;
+                unlockInFlight = false;
             }
-
-            unlockInFlight = false;
         };
 
         document.addEventListener("click", unlockAudio);
         return () => document.removeEventListener("click", unlockAudio);
     }, [savedVolume, soundLocked]);
 
+    // Clear transient portal-entry bridge as soon as the occupancy arrives as an unread row,
+    // transitions back to 0 unread rows, or an operator clicks Acknowledge All.
+    useEffect(() => {
+        const unreadCleared = prevUnreadCountRef.current > 0 && unreadCount === 0;
+        const ackRequested = acknowledgeNonce !== prevAckNonceRef.current;
+        prevUnreadCountRef.current = unreadCount;
+        prevAckNonceRef.current = acknowledgeNonce;
 
+        if (unreadCount > 0 || unreadCleared || ackRequested || !continuousAlarmAudio) {
+            clearPortalBridge();
+        }
+    }, [unreadCount, acknowledgeNonce, continuousAlarmAudio]);
 
+    // Handle live alarm trigger pulses (one-shot when continuous mode is off; portal bridge when on).
     useEffect(() => {
         if (!triggerAlarm) {
             return;
         }
 
-        if (soundLocked) {
+        if (continuousAlarmAudio) {
+            setPortalLatchActive(true);
+            if (portalBridgeTimerRef.current !== null) {
+                window.clearTimeout(portalBridgeTimerRef.current);
+            }
+            portalBridgeTimerRef.current = window.setTimeout(() => {
+                portalBridgeTimerRef.current = null;
+                setPortalLatchActive(false);
+            }, PORTAL_ALARM_BRIDGE_MS);
+            dispatch(setAlarmTrigger(false));
+            return;
+        }
+
+        if (soundLocked || savedVolume <= 0) {
             dispatch(setAlarmTrigger(false));
             return;
         }
 
         const audio = getAlarmAudio();
-        audio.volume = savedVolume / 100;
+        audio.loop = false;
+        audio.volume = Math.max(0, Math.min(1, savedVolume / 100));
 
         void attemptMediaPlayback(audio).then(result => {
             if (result.status === "blocked") {
@@ -81,17 +160,49 @@ export default function AlarmAudio() {
                 console.error("Unable to play alarm audio", result.error);
             }
         }).finally(() => dispatch(setAlarmTrigger(false)));
-    }, [triggerAlarm, savedVolume, soundLocked]);
+    }, [triggerAlarm, continuousAlarmAudio, savedVolume, soundLocked, dispatch]);
+
+    // Maintain latching loop playback while continuousAlarmAudio is enabled and unread alarms exist.
+    useEffect(() => {
+        const shouldLoop = continuousAlarmAudio
+            && !soundLocked
+            && savedVolume > 0
+            && (unreadCount > 0 || portalLatchActive);
+
+        if (shouldLoop) {
+            const audio = getAlarmAudio();
+            audio.loop = true;
+            audio.volume = Math.max(0, Math.min(1, savedVolume / 100));
+            wasLoopingRef.current = true;
+            if (audio.paused) {
+                void attemptMediaPlayback(audio).then(result => {
+                    if (result.status === "blocked") {
+                        setSoundLocked(true);
+                    } else if (result.status === "failed") {
+                        console.error("Unable to loop alarm audio", result.error);
+                    }
+                });
+            }
+            return;
+        }
+
+        if (wasLoopingRef.current && alarmAudio) {
+            alarmAudio.loop = false;
+            if (!alarmAudio.paused) {
+                alarmAudio.pause();
+            }
+            alarmAudio.currentTime = 0;
+            wasLoopingRef.current = false;
+        }
+    }, [continuousAlarmAudio, soundLocked, savedVolume, unreadCount, portalLatchActive]);
 
     return (
         <Box sx={{ width: 200, padding: 1 }}>
-
             {soundLocked && (
                 <Alert severity="info" sx={{ mb: 2, fontSize: "0.8rem" }}>
                     {t('enableAlarmSound')}
                 </Alert>
             )}
-
         </Box>
     );
 }

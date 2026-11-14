@@ -49,14 +49,30 @@ import {
 } from "@/lib/state/EventPreviewSlice";
 import {
     selectAdjudicatedEventId,
+    selectDashboardAcknowledgeNonce,
+    selectDashboardUnreadOnly,
     setAdjudicatedEventId,
+    setDashboardUnreadAlarmCount,
+    setDashboardUnreadAlarmSummary,
+    setDashboardUnreadOnly,
     setSelectedEvent,
+    toggleDashboardUnreadOnly,
 } from "@/lib/state/EventDataSlice";
+import {
+    DashboardReadStateFetch,
+    hasRowContentFilter,
+    inspectPostWatermarkReadKeys,
+    MAX_UNREAD_RECONCILIATION_FETCH,
+    parseAlarmTimestampMs,
+    ScopedLaneTarget,
+    UNREAD_COUNT_RECONCILIATION_CAP,
+    useDashboardAlarmReadState,
+} from "@/lib/data/oscar/DashboardAlarmReadState";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import {NotificationService, NotificationTemplates} from "../notifications/NotificationService";
 import {formatOccupancyStatus, getDataGridLocaleText, getIntlLocale} from "@/app/utils/LocaleUtils";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
-import CustomToolbar from "@/app/_components/CustomToolbar";
+import CustomToolbar, {ToolbarTimeWindowOption} from "@/app/_components/CustomToolbar";
 import NestedEventFilterDialog from "@/app/_components/event-table/NestedEventFilterDialog";
 import BulkAdjudicationDialog, {BulkAdjudicationSummary} from "@/app/_components/event-table/BulkAdjudicationDialog";
 import {
@@ -85,6 +101,8 @@ import {
 } from "@/lib/data/oscar/RealtimeEventNotification";
 import {
     ACTIVE_ALARM_WINDOW_MS,
+    ALARM_TIME_WINDOW_PRESET_MS,
+    AlarmTimeWindowPreset,
     computeActiveAlarmPhenomenonTime,
     deduplicateEvents,
     EventQueryPlan,
@@ -104,6 +122,7 @@ interface TableProps {
     viewAdjudicated?: boolean;
     laneMap: Map<string, LaneMapEntry>;
     setEvents?: unknown;
+    readStateFetch?: DashboardReadStateFetch;
 }
 
 type QueryPlan = EventQueryPlan;
@@ -125,9 +144,26 @@ export default function EventTable({
     viewAdjudicated = false,
     laneMap,
     currentLane,
+    readStateFetch,
 }: TableProps) {
+    const isAlarmTable = tableMode === "alarmtable";
     const selectedRowId = useSelector(selectSelectedRowId);
     const adjudicatedEventId = useSelector(selectAdjudicatedEventId);
+    const dashboardAcknowledgeNonce = useSelector(selectDashboardAcknowledgeNonce);
+    const unreadOnly = useSelector(selectDashboardUnreadOnly);
+    const effectiveUnreadOnly = isAlarmTable && unreadOnly;
+    const lastHandledAckNonceRef = useRef(dashboardAcknowledgeNonce);
+    const [ackStatusMessage, setAckStatusMessage] = useState("");
+    const [timeWindowPreset, setTimeWindowPreset] = useState<AlarmTimeWindowPreset>("15d");
+    const activeAlarmWindowMs = isAlarmTable
+        ? ALARM_TIME_WINDOW_PRESET_MS[timeWindowPreset]
+        : ACTIVE_ALARM_WINDOW_MS;
+    const [unreadReconcileEpoch, setUnreadReconcileEpoch] = useState(0);
+    const [scopedUnreadSummary, setScopedUnreadSummary] = useState<{count: number; capped: boolean}>({
+        count: 0,
+        capped: false,
+    });
+    const [scopedUnreadReady, setScopedUnreadReady] = useState(false);
     const dispatch = useAppDispatch();
     const router = useRouter();
     const {activeViewKey, scopedHref} = useContext(DataSourceContext);
@@ -137,6 +173,30 @@ export default function EventTable({
     const stableLaneMap = useMemo(() => convertToMap(laneMap), [laneMap]);
     const [paginationModel, setPaginationModel] = useState({page: 0, pageSize: PAGE_SIZE});
     const [filterEpoch, setFilterEpoch] = useState(0);
+    const [filter, setFilter] = useState<EventFilterGroup>(() => createEventFilterGroup());
+    const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+    const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+    const [bulkSelectionError, setBulkSelectionError] = useState(false);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+    const [allFilteredSelected, setAllFilteredSelected] = useState(false);
+    const [allFilteredTotal, setAllFilteredTotal] = useState(0);
+    const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
+    const [postSelectionKeys, setPostSelectionKeys] = useState<Set<string>>(new Set());
+
+    const [syncedUnreadOnly, setSyncedUnreadOnly] = useState(effectiveUnreadOnly);
+    if (syncedUnreadOnly !== effectiveUnreadOnly) {
+        setSyncedUnreadOnly(effectiveUnreadOnly);
+        if (paginationModel.page !== 0) {
+            setPaginationModel(previous => ({...previous, page: 0}));
+        }
+        setFilterEpoch(previous => previous + 1);
+        setSelectedKeys(new Set());
+        setExcludedKeys(new Set());
+        setPostSelectionKeys(new Set());
+        setAllFilteredSelected(false);
+        setAllFilteredTotal(0);
+    }
+
     const latestCutoffRef = useRef<string>(new Date().toISOString());
     // Stamp the REST snapshot upper bound when discovered lanes hydrate (or when filters
     // are re-applied), rather than at empty initial mount before MQTT subscriptions exist.
@@ -149,15 +209,6 @@ export default function EventTable({
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [stableLaneMap, filterEpoch],
     );
-    const [filter, setFilter] = useState<EventFilterGroup>(() => createEventFilterGroup());
-    const [filterDialogOpen, setFilterDialogOpen] = useState(false);
-    const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
-    const [bulkSelectionError, setBulkSelectionError] = useState(false);
-    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-    const [allFilteredSelected, setAllFilteredSelected] = useState(false);
-    const [allFilteredTotal, setAllFilteredTotal] = useState(0);
-    const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
-    const [postSelectionKeys, setPostSelectionKeys] = useState<Set<string>>(new Set());
     const allFilteredCutoffRef = useRef<string | null>(null);
     const eventCacheRef = useRef<Map<string, EventTableData>>(new Map());
     const selectedKeysRef = useRef<Set<string>>(selectedKeys);
@@ -217,7 +268,120 @@ export default function EventTable({
         return "";
     }, [tableMode]);
 
-    const queryPlans = useMemo<QueryPlan[]>(() => {
+    useEffect(() => {
+        allFilteredCutoffRef.current = null;
+        failedBulkRef.current = [];
+    }, [syncedUnreadOnly]);
+
+    const laneByDataStreamId = useMemo(() => {
+        const index = new Map<string, LaneMapEntry>();
+        for (const lane of stableLaneMap.values()) {
+            for (const stream of lane.datastreams as any[]) {
+                const streamId = stream?.properties?.id;
+                if (typeof streamId === "string" && streamId.length > 0 && !index.has(streamId)) {
+                    index.set(streamId, lane);
+                }
+            }
+        }
+        return index;
+    }, [stableLaneMap]);
+
+    const findLaneByDataStreamId = useCallback(
+        (datastreamId: string): LaneMapEntry | undefined => laneByDataStreamId.get(datastreamId),
+        [laneByDataStreamId],
+    );
+
+    const readStateNodes = useMemo(() => {
+        if (!isAlarmTable) return [];
+        const unique = new Map<string, any>();
+        for (const lane of stableLaneMap.values()) {
+            const node = lane.parentNode as any;
+            if (node?.id && !unique.has(node.id)) {
+                unique.set(node.id, node);
+            }
+        }
+        return Array.from(unique.values());
+    }, [isAlarmTable, stableLaneMap]);
+
+    const {
+        nodeStates,
+        getLaneReadState,
+        isEventRead,
+        markEventsRead,
+        acknowledgeLanes,
+    } = useDashboardAlarmReadState(readStateNodes, isAlarmTable, readStateFetch);
+
+    const resolveEventNodeId = useCallback(
+        (event: EventTableData): string | undefined =>
+            findLaneByDataStreamId(event.dataStreamId)?.parentNode.id
+            ?? stableLaneMap.get(event.laneId)?.parentNode.id,
+        [findLaneByDataStreamId, stableLaneMap],
+    );
+
+    const isRowUnread = useCallback(
+        (row: EventTableData): boolean => {
+            if (!isAlarmTable) return false;
+            if (row.status === "None" || (row.adjudicatedIds?.length ?? 0) > 0) return false;
+            return !isEventRead(row, resolveEventNodeId(row));
+        },
+        [isAlarmTable, isEventRead, resolveEventNodeId],
+    );
+
+    const isEventReadRef = useRef(isEventRead);
+    const markEventsReadRef = useRef(markEventsRead);
+    const isRowUnreadRef = useRef(isRowUnread);
+    const activeAlarmWindowMsRef = useRef(activeAlarmWindowMs);
+    const effectiveUnreadOnlyRef = useRef(effectiveUnreadOnly);
+    isEventReadRef.current = isEventRead;
+    markEventsReadRef.current = markEventsRead;
+    isRowUnreadRef.current = isRowUnread;
+    activeAlarmWindowMsRef.current = activeAlarmWindowMs;
+    effectiveUnreadOnlyRef.current = effectiveUnreadOnly;
+
+    const laneWatermarksSignature = useMemo(() => {
+        if (!isAlarmTable) return "";
+        const parts: string[] = [];
+        for (const lane of stableLaneMap.values()) {
+            const ackMs = nodeStates.get(lane.parentNode.id)?.lanes.get(lane.laneName)?.acknowledgedThroughMs ?? 0;
+            if (ackMs > 0) {
+                parts.push(`${lane.parentNode.id}\u001f${lane.laneName}\u001f${ackMs}`);
+            }
+        }
+        parts.sort();
+        return parts.join("\u001e");
+    }, [isAlarmTable, nodeStates, stableLaneMap]);
+
+    const laneWatermarksByKey = useMemo(() => {
+        const map = new Map<string, number>();
+        if (!laneWatermarksSignature) return map;
+        for (const entry of laneWatermarksSignature.split("\u001e")) {
+            const sep = entry.lastIndexOf("\u001f");
+            if (sep <= 0) continue;
+            const key = entry.slice(0, sep);
+            const ackMs = Number(entry.slice(sep + 1));
+            if (Number.isFinite(ackMs) && ackMs > 0) {
+                map.set(key, ackMs);
+            }
+        }
+        return map;
+    }, [laneWatermarksSignature]);
+
+    const readKeysSignature = useMemo(() => {
+        if (!isAlarmTable) return "";
+        const parts: string[] = [];
+        for (const lane of stableLaneMap.values()) {
+            const laneState = nodeStates.get(lane.parentNode.id)?.lanes.get(lane.laneName);
+            if (laneState && laneState.readKeys.length > 0) {
+                parts.push(
+                    `${lane.parentNode.id}\u001f${lane.laneName}\u001f${laneState.readKeys.length}\u001f${laneState.readKeys[laneState.readKeys.length - 1]}`,
+                );
+            }
+        }
+        parts.sort();
+        return parts.join("\u001e");
+    }, [isAlarmTable, nodeStates, stableLaneMap]);
+
+    const baseQueryPlans = useMemo<QueryPlan[]>(() => {
         const grouped = new Map<string, QueryPlan>();
         for (const lane of stableLaneMap.values()) {
             if (tableMode === "lanelog" && currentLane && lane.laneName !== currentLane) continue;
@@ -243,6 +407,83 @@ export default function EventTable({
             .filter(plan => plan.datastreamIds.length > 0);
     }, [stableLaneMap, tableMode, currentLane, filter, baseServerFilter]);
 
+    const unreadScopePlanBundle = useMemo<{plans: QueryPlan[]; hasPositiveWatermark: boolean}>(() => {
+        if (!isAlarmTable) return {plans: [], hasPositiveWatermark: false};
+        const cutoffMs = Date.parse(pageLoadedTime);
+        const windowStartMs = Number.isFinite(cutoffMs) ? Math.max(0, cutoffMs - activeAlarmWindowMs) : 0;
+        const grouped = new Map<string, QueryPlan>();
+        let hasPositiveWatermark = false;
+
+        for (const lane of stableLaneMap.values()) {
+            const compiled = compileEventFilterForLane(filter, {
+                nodeId: lane.parentNode.id,
+                nodeName: lane.parentNode.name,
+                laneId: lane.laneName,
+            });
+            if (compiled === false) continue;
+
+            const rawAckMs = laneWatermarksByKey.get(`${lane.parentNode.id}\u001f${lane.laneName}`) ?? 0;
+            const effectiveAckMs = rawAckMs > 0 && (windowStartMs <= 0 || rawAckMs >= Math.max(0, windowStartMs - 60_000))
+                ? rawAckMs
+                : 0;
+            if (effectiveAckMs > 0) {
+                hasPositiveWatermark = true;
+            }
+            const watermarkFilter = effectiveAckMs > 0
+                ? `endTime>'${new Date(effectiveAckMs).toISOString()}'`
+                : "";
+            const serverFilter = combineServerFilters(baseServerFilter, compiled || "", watermarkFilter);
+            const groupKey = `${lane.parentNode.id}\u001f${serverFilter}\u001f${effectiveAckMs}`;
+            let plan = grouped.get(groupKey);
+            if (!plan) {
+                plan = {
+                    key: groupKey,
+                    node: lane.parentNode,
+                    datastreamIds: [],
+                    filter: serverFilter,
+                    ...(effectiveAckMs > 0 ? {minTimestampMs: effectiveAckMs} : {}),
+                };
+                grouped.set(groupKey, plan);
+            }
+            lane.datastreams
+                .filter((stream: typeof DataStream) => isOccupancyDataStream(stream))
+                .forEach((stream: typeof DataStream) => plan!.datastreamIds.push(stream.properties.id));
+        }
+
+        const plans = Array.from(grouped.values())
+            .map(plan => ({...plan, datastreamIds: Array.from(new Set(plan.datastreamIds))}))
+            .filter(plan => plan.datastreamIds.length > 0);
+        return {plans, hasPositiveWatermark};
+    }, [activeAlarmWindowMs, baseServerFilter, filter, isAlarmTable, laneWatermarksByKey, pageLoadedTime, stableLaneMap]);
+
+    const postWatermarkReadKeysSummary = useMemo(() => {
+        if (!isAlarmTable) return {hasPostWatermarkKeys: false, totalEstimatedCount: 0};
+        const cutoffMs = Date.parse(pageLoadedTime);
+        const windowStartMs = Number.isFinite(cutoffMs) ? Math.max(0, cutoffMs - activeAlarmWindowMs) : 0;
+        let hasPostWatermarkKeys = false;
+        let totalEstimatedCount = 0;
+
+        for (const lane of stableLaneMap.values()) {
+            const compiled = compileEventFilterForLane(filter, {
+                nodeId: lane.parentNode.id,
+                nodeName: lane.parentNode.name,
+                laneId: lane.laneName,
+            });
+            if (compiled === false) continue;
+            const summary = inspectPostWatermarkReadKeys(
+                getLaneReadState(lane.parentNode.id, lane.laneName),
+                windowStartMs,
+            );
+            if (summary.hasPostWatermarkKeys) {
+                hasPostWatermarkKeys = true;
+                totalEstimatedCount += summary.estimatedCount;
+            }
+        }
+        return {hasPostWatermarkKeys, totalEstimatedCount};
+    }, [activeAlarmWindowMs, filter, getLaneReadState, isAlarmTable, pageLoadedTime, stableLaneMap]);
+
+    const queryPlans = effectiveUnreadOnly ? unreadScopePlanBundle.plans : baseQueryPlans;
+
     const pageQueryPlans = useMemo<QueryPlan[]>(() => {
         const priorities = tableMode === "alarmtable"
             ? EVENT_PRIORITY_FILTERS.slice(0, 3)
@@ -260,28 +501,12 @@ export default function EventTable({
         filter: combineServerFilters(plan.filter, "gammaAlarm=true OR neutronAlarm=true", "adjudicatedIdsCount=0"),
     })), [queryPlans]);
 
-    const laneByDataStreamId = useMemo(() => {
-        const index = new Map<string, LaneMapEntry>();
-        for (const lane of stableLaneMap.values()) {
-            for (const stream of lane.datastreams as any[]) {
-                const streamId = stream?.properties?.id;
-                if (typeof streamId === "string" && streamId.length > 0 && !index.has(streamId)) {
-                    index.set(streamId, lane);
-                }
-            }
-        }
-        return index;
-    }, [stableLaneMap]);
-
-    const findLaneByDataStreamId = useCallback(
-        (datastreamId: string): LaneMapEntry | undefined => laneByDataStreamId.get(datastreamId),
-        [laneByDataStreamId],
-    );
-
     const phenomenonTimeForCutoff = useCallback(
-        (cutoff: string): string | undefined =>
-            tableMode === "alarmtable" ? computeActiveAlarmPhenomenonTime(cutoff) : undefined,
-        [tableMode],
+        (cutoff: string, plan?: QueryPlan): string | undefined =>
+            tableMode === "alarmtable"
+                ? computeActiveAlarmPhenomenonTime(cutoff, activeAlarmWindowMs, plan?.minTimestampMs)
+                : undefined,
+        [activeAlarmWindowMs, tableMode],
     );
 
     const notificationServiceRef = useRef<NotificationService | null>(null);
@@ -368,7 +593,7 @@ export default function EventTable({
         const effectiveCutoff = cutoff === pageLoadedTime && latestCutoffRef.current > cutoff
             ? latestCutoffRef.current
             : cutoff;
-        const phenomenonTime = phenomenonTimeForCutoff(effectiveCutoff);
+        const phenomenonTime = phenomenonTimeForCutoff(effectiveCutoff, plan);
         const observationFilter = new ObservationFilter({
             dataStream: plan.datastreamIds,
             ...(phenomenonTime ? {phenomenonTime} : {}),
@@ -408,6 +633,9 @@ export default function EventTable({
         pageSize: PAGE_SIZE,
         pageLoadedTime,
         phenomenonTimeForCutoff,
+        rowFilter: isRowUnread,
+        extraFetchRows: effectiveUnreadOnly ? postWatermarkReadKeysSummary.totalEstimatedCount : 0,
+        filterModeActive: effectiveUnreadOnly,
         fetchPlanRows,
     });
 
@@ -436,7 +664,11 @@ export default function EventTable({
             dispatch(setEventPreview({isOpen: true, eventData: resolved}));
             dispatch(setSelectedEvent(resolved));
         }
-    }, [dispatch, setRows]);
+
+        if (isAlarmTable && isEventReadRef.current(original, resolveEventNodeId(original))) {
+            markEventsReadRef.current([resolved], resolveEventNodeId);
+        }
+    }, [cacheEventBounded, dispatch, isAlarmTable, resolveEventNodeId, setRows]);
 
     const resolveIdentityAndNotify = useCallback((event: EventTableData, lane: LaneMapEntry) => {
         if (event.status === "None" || (event.adjudicatedIds?.length ?? 0) > 0) return;
@@ -479,7 +711,14 @@ export default function EventTable({
             if (event.status === "None" || event.adjudicatedIds?.length > 0) return false;
             const endTimeMs = Date.parse(event.endTime || event.startTime);
             const cutoffMs = Date.parse(latestCutoffRef.current);
-            if (Number.isFinite(endTimeMs) && Number.isFinite(cutoffMs) && endTimeMs < cutoffMs - ACTIVE_ALARM_WINDOW_MS) {
+            if (
+                Number.isFinite(endTimeMs)
+                && Number.isFinite(cutoffMs)
+                && endTimeMs < cutoffMs - activeAlarmWindowMsRef.current
+            ) {
+                return false;
+            }
+            if (effectiveUnreadOnlyRef.current && isEventReadRef.current(event, lane.parentNode.id)) {
                 return false;
             }
         }
@@ -512,6 +751,27 @@ export default function EventTable({
                     event.setRPMSystemId(occupancyStream.properties["system@id"]);
                     advanceSnapshotCutoff(event.endTime);
                     resolveIdentityAndNotify(event, lane);
+                    const isLiveAlarm = isAlarmTable
+                        && event.status !== "None"
+                        && !event.adjudicatedIds?.length
+                        && !isEventReadRef.current(event, lane.parentNode.id);
+                    if (isLiveAlarm) {
+                        const eventMs = parseAlarmTimestampMs(event);
+                        const cutoffMs = Date.parse(latestCutoffRef.current);
+                        const inActiveWindow = eventMs === null
+                            || !Number.isFinite(cutoffMs)
+                            || eventMs >= cutoffMs - activeAlarmWindowMsRef.current;
+                        const matchesFilter = eventMatchesFilter(filter, event, {
+                            nodeId: lane.parentNode.id,
+                            nodeName: lane.parentNode.name,
+                            laneId: lane.laneName,
+                        });
+                        if (inActiveWindow && matchesFilter) {
+                            setScopedUnreadSummary(previous => (
+                                previous.capped ? previous : {count: previous.count + 1, capped: false}
+                            ));
+                        }
+                    }
                     if (!rowPassesLocalFilters(event, lane)) return;
                     if (allFilteredCutoffRef.current && event.status !== "None" && !event.adjudicatedIds?.length) {
                         setPostSelectionKeys(previous => new Set(previous).add(eventSelectionKey(event)));
@@ -542,22 +802,36 @@ export default function EventTable({
                 });
             });
         };
-    }, [stableLaneMap, eventFromObservation, rowPassesLocalFilters, resolveIdentityAndNotify, cancelRealtimeResolutionJobs]);
+    }, [
+        stableLaneMap,
+        eventFromObservation,
+        rowPassesLocalFilters,
+        resolveIdentityAndNotify,
+        cancelRealtimeResolutionJobs,
+        advanceSnapshotCutoff,
+        currentPageRef,
+        filter,
+        isAlarmTable,
+        setRowCount,
+        setRows,
+    ]);
 
     useEffect(() => {
         if (!adjudicatedEventId || tableMode !== "alarmtable") return;
         setRows(previous => previous.filter(row => row.id !== adjudicatedEventId));
         setRowCount(previous => Math.max(0, previous - 1));
+        setUnreadReconcileEpoch(previous => previous + 1);
         dispatch(setAdjudicatedEventId(null));
         const cutoff = advanceSnapshotCutoff();
         void refreshCounts(cutoff);
         void fetchPage(currentPageRef.current, cutoff);
-    }, [adjudicatedEventId, tableMode, dispatch, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef]);
+    }, [adjudicatedEventId, tableMode, dispatch, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef, setRowCount, setRows]);
 
     useEffect(() => {
         if (stableLaneMap.size === 0) return;
         const reconcileAfterReconnect = () => {
             const cutoff = advanceSnapshotCutoff();
+            setUnreadReconcileEpoch(previous => previous + 1);
             void refreshCounts(cutoff);
             if (currentPageRef.current === 0) {
                 void fetchPage(0, cutoff);
@@ -586,6 +860,28 @@ export default function EventTable({
         setFilterEpoch(previous => previous + 1);
         clearSelection();
     };
+
+    const handleSelectTimeWindowPreset = useCallback((nextPreset: AlarmTimeWindowPreset) => {
+        if (nextPreset === timeWindowPreset) return;
+        setTimeWindowPreset(nextPreset);
+        setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
+        setFilterEpoch(previous => previous + 1);
+        clearSelection();
+    }, [clearSelection, timeWindowPreset]);
+
+    const handleToggleUnreadOnly = useCallback(() => {
+        dispatch(toggleDashboardUnreadOnly());
+    }, [dispatch]);
+
+    const timeWindowOptions = useMemo<ToolbarTimeWindowOption[]>(
+        () => [
+            {value: "15m", label: t("timeWindow15m")},
+            {value: "1h", label: t("timeWindow1h")},
+            {value: "24h", label: t("timeWindow24h")},
+            {value: "15d", label: t("timeWindow15d")},
+        ],
+        [t],
+    );
 
     const visibleSelectionModel = useMemo<GridRowSelectionModel>(() => rows
         .filter(row => row.status !== "None" && !row.adjudicatedIds?.length)
@@ -619,6 +915,213 @@ export default function EventTable({
 
     const selectedCount = allFilteredSelected ? Math.max(0, allFilteredTotal - excludedKeys.size) : selectedKeys.size;
 
+    const unreadVisibleCount = useMemo(
+        () => (isAlarmTable ? rows.reduce((sum, row) => sum + (isRowUnread(row) ? 1 : 0), 0) : 0),
+        [isAlarmTable, rows, isRowUnread],
+    );
+
+    const canUseZeroQueryTotalCount = isAlarmTable
+        && !effectiveUnreadOnly
+        && !unreadScopePlanBundle.hasPositiveWatermark
+        && !postWatermarkReadKeysSummary.hasPostWatermarkKeys;
+
+    const canUseZeroQueryPage0VisibleCount = isAlarmTable
+        && !loading
+        && paginationModel.page === 0
+        && rowCount <= PAGE_SIZE
+        && rows.length <= rowCount
+        && (
+            effectiveUnreadOnly
+            || rows.length === rowCount
+        );
+
+    const canUseZeroQueryUnreadOnlyCount = isAlarmTable
+        && effectiveUnreadOnly
+        && !postWatermarkReadKeysSummary.hasPostWatermarkKeys;
+
+    const canUseZeroQueryPage0VisibleCountRef = useRef(canUseZeroQueryPage0VisibleCount);
+    canUseZeroQueryPage0VisibleCountRef.current = canUseZeroQueryPage0VisibleCount;
+
+    useEffect(() => {
+        if (!canUseZeroQueryPage0VisibleCount) return;
+        setScopedUnreadSummary({count: unreadVisibleCount, capped: false});
+        setScopedUnreadReady(true);
+    }, [canUseZeroQueryPage0VisibleCount, unreadVisibleCount]);
+
+    useEffect(() => {
+        if (!isAlarmTable) return;
+        if (canUseZeroQueryTotalCount || canUseZeroQueryUnreadOnlyCount) {
+            setScopedUnreadReady(false);
+            return;
+        }
+        if (canUseZeroQueryPage0VisibleCountRef.current) {
+            return;
+        }
+        if (unreadScopePlanBundle.plans.length === 0) {
+            setScopedUnreadSummary({count: 0, capped: false});
+            setScopedUnreadReady(true);
+            return;
+        }
+
+        const controller = new AbortController();
+        const effectiveCutoff = latestCutoffRef.current > pageLoadedTime
+            ? latestCutoffRef.current
+            : pageLoadedTime;
+
+        void (async () => {
+            try {
+                const planCounts = await runWithConcurrency(
+                    unreadScopePlanBundle.plans,
+                    6,
+                    plan => fetchPlanCount(plan, effectiveCutoff, true, {
+                        signal: controller.signal,
+                        lowPriority: true,
+                    }),
+                );
+                if (controller.signal.aborted) return;
+                const serverPostWatermarkCount = planCounts.reduce((sum, count) => sum + count, 0);
+
+                if (!postWatermarkReadKeysSummary.hasPostWatermarkKeys || serverPostWatermarkCount === 0) {
+                    setScopedUnreadSummary({count: serverPostWatermarkCount, capped: false});
+                    setScopedUnreadReady(true);
+                    return;
+                }
+
+                const fetchLimitPerPlan = Math.min(serverPostWatermarkCount, MAX_UNREAD_RECONCILIATION_FETCH);
+                const sampledByPlan = await runWithConcurrency(
+                    unreadScopePlanBundle.plans,
+                    6,
+                    async (plan, index) => {
+                        const planCount = planCounts[index] ?? 0;
+                        if (planCount <= 0) return [];
+                        return fetchPlanRows(
+                            plan,
+                            Math.min(planCount, fetchLimitPerPlan),
+                            0,
+                            effectiveCutoff,
+                            controller.signal,
+                            false,
+                        );
+                    },
+                );
+                if (controller.signal.aborted) return;
+
+                const sampledEvents = deduplicateEvents(sampledByPlan.flat());
+                const unreadInSample = sampledEvents.reduce(
+                    (sum, event) => sum + (isRowUnreadRef.current(event) ? 1 : 0),
+                    0,
+                );
+
+                if (serverPostWatermarkCount <= MAX_UNREAD_RECONCILIATION_FETCH) {
+                    setScopedUnreadSummary({count: unreadInSample, capped: false});
+                    setScopedUnreadReady(true);
+                    return;
+                }
+
+                if (unreadInSample > UNREAD_COUNT_RECONCILIATION_CAP) {
+                    setScopedUnreadSummary({count: UNREAD_COUNT_RECONCILIATION_CAP, capped: true});
+                    setScopedUnreadReady(true);
+                    return;
+                }
+
+                const unseenCount = Math.max(0, serverPostWatermarkCount - sampledEvents.length);
+                const estimatedUnread = Math.max(
+                    unreadInSample,
+                    serverPostWatermarkCount - postWatermarkReadKeysSummary.totalEstimatedCount,
+                );
+                if (
+                    estimatedUnread > UNREAD_COUNT_RECONCILIATION_CAP
+                    || unreadInSample + unseenCount > UNREAD_COUNT_RECONCILIATION_CAP
+                ) {
+                    setScopedUnreadSummary({count: UNREAD_COUNT_RECONCILIATION_CAP, capped: true});
+                } else {
+                    setScopedUnreadSummary({count: estimatedUnread, capped: false});
+                }
+                setScopedUnreadReady(true);
+            } catch (error) {
+                if (controller.signal.aborted || isAbortRequestError(error)) return;
+                console.error("Unable to reconcile unread dashboard alarm count", error);
+            }
+        })();
+
+        return () => {
+            controller.abort();
+        };
+    }, [
+        canUseZeroQueryTotalCount,
+        canUseZeroQueryUnreadOnlyCount,
+        fetchPlanCount,
+        fetchPlanRows,
+        isAlarmTable,
+        pageLoadedTime,
+        postWatermarkReadKeysSummary,
+        readKeysSignature,
+        unreadReconcileEpoch,
+        unreadScopePlanBundle,
+    ]);
+
+    const effectiveUnreadSummary = useMemo<{count: number; capped: boolean}>(() => {
+        if (!isAlarmTable) return {count: 0, capped: false};
+        if (canUseZeroQueryTotalCount) {
+            return {count: rowCount, capped: false};
+        }
+        if (canUseZeroQueryPage0VisibleCount) {
+            return {count: unreadVisibleCount, capped: false};
+        }
+        if (canUseZeroQueryUnreadOnlyCount) {
+            return {count: rowCount, capped: false};
+        }
+        if (scopedUnreadReady) {
+            return scopedUnreadSummary;
+        }
+        return {count: unreadVisibleCount, capped: false};
+    }, [
+        canUseZeroQueryPage0VisibleCount,
+        canUseZeroQueryTotalCount,
+        canUseZeroQueryUnreadOnlyCount,
+        isAlarmTable,
+        rowCount,
+        scopedUnreadReady,
+        scopedUnreadSummary,
+        unreadVisibleCount,
+    ]);
+
+    const effectiveRowCount = useMemo(() => {
+        if (!effectiveUnreadOnly) return rowCount;
+        if (!postWatermarkReadKeysSummary.hasPostWatermarkKeys) return rowCount;
+        if (!loading && paginationModel.page === 0 && rowCount <= PAGE_SIZE && rows.length <= rowCount) {
+            return rows.length;
+        }
+        const estimated = scopedUnreadReady
+            ? (scopedUnreadSummary.capped
+                ? Math.max(0, rowCount - postWatermarkReadKeysSummary.totalEstimatedCount)
+                : scopedUnreadSummary.count)
+            : Math.max(0, rowCount - postWatermarkReadKeysSummary.totalEstimatedCount);
+        return Math.max(rows.length, estimated);
+    }, [
+        effectiveUnreadOnly,
+        loading,
+        paginationModel.page,
+        postWatermarkReadKeysSummary,
+        rowCount,
+        rows.length,
+        scopedUnreadReady,
+        scopedUnreadSummary,
+    ]);
+
+    useEffect(() => {
+        if (!isAlarmTable) return;
+        dispatch(setDashboardUnreadAlarmSummary(effectiveUnreadSummary));
+    }, [isAlarmTable, effectiveUnreadSummary, dispatch]);
+
+    useEffect(() => {
+        if (!isAlarmTable) return;
+        return () => {
+            dispatch(setDashboardUnreadAlarmCount(0));
+            dispatch(setDashboardUnreadOnly(false));
+        };
+    }, [isAlarmTable, dispatch]);
+
     const getLatestGB = async (event: EventTableData) => {
         for (const lane of stableLaneMap.values()) {
             const threshold = lane.datastreams
@@ -629,6 +1132,19 @@ export default function EventTable({
     };
 
     const previewEvent = (event: EventTableData, navigate = false) => {
+        if (isAlarmTable) {
+            const wasUnread = isRowUnread(event);
+            markEventsRead([event], resolveEventNodeId);
+            if (wasUnread) {
+                setScopedUnreadSummary({
+                    count: effectiveUnreadSummary.capped
+                        ? effectiveUnreadSummary.count
+                        : Math.max(0, effectiveUnreadSummary.count - 1),
+                    capped: effectiveUnreadSummary.capped,
+                });
+                setScopedUnreadReady(true);
+            }
+        }
         dispatch(setEventPreview({isOpen: true, eventData: event}));
         dispatch(setSelectedRowId(event.id));
         dispatch(setSelectedEvent(event));
@@ -652,16 +1168,209 @@ export default function EventTable({
             return collected;
         });
         return deduplicateEvents(planRows.flat())
+            .filter(event => !effectiveUnreadOnly || isRowUnread(event))
             .filter(event => !excludedKeys.has(eventSelectionKey(event)));
-    }, [bulkQueryPlans, fetchPlanCount, fetchPlanRows, excludedKeys, advanceSnapshotCutoff]);
+    }, [bulkQueryPlans, fetchPlanCount, fetchPlanRows, effectiveUnreadOnly, isRowUnread, excludedKeys, advanceSnapshotCutoff]);
+
+    const computeScopedAcknowledgeTargets = useCallback((): ScopedLaneTarget[] => {
+        let maxVisibleMs = Date.now();
+        for (const row of rows) {
+            const ms = parseAlarmTimestampMs(row);
+            if (ms !== null && ms > maxVisibleMs) {
+                maxVisibleMs = ms;
+            }
+        }
+        const targets: ScopedLaneTarget[] = [];
+        for (const lane of stableLaneMap.values()) {
+            const compiled = compileEventFilterForLane(filter, {
+                nodeId: lane.parentNode.id,
+                nodeName: lane.parentNode.name,
+                laneId: lane.laneName,
+            });
+            if (compiled === false) continue;
+            targets.push({
+                nodeId: lane.parentNode.id,
+                laneId: lane.laneName,
+                acknowledgedThroughMs: maxVisibleMs,
+            });
+        }
+        return targets;
+    }, [filter, rows, stableLaneMap]);
+
+    const acknowledgeAllScopedAlarms = useCallback(async () => {
+        if (!isAlarmTable) return;
+        const useLaneWatermarkAcknowledge = !hasRowContentFilter(filter) && timeWindowPreset === "15d";
+        if (useLaneWatermarkAcknowledge) {
+            const targets = computeScopedAcknowledgeTargets();
+            advanceSnapshotCutoff();
+            acknowledgeLanes(targets);
+            setScopedUnreadSummary({count: 0, capped: false});
+            setScopedUnreadReady(true);
+            if (effectiveUnreadOnly) {
+                setRows([]);
+            }
+            clearSelection();
+            setAckStatusMessage(t("acknowledgedAllScopedStatus"));
+            return;
+        }
+        setLoading(true);
+        try {
+            const matching = await enumerateAllFiltered();
+            markEventsRead(matching, resolveEventNodeId);
+            setScopedUnreadSummary({count: 0, capped: false});
+            setScopedUnreadReady(true);
+            if (effectiveUnreadOnly) {
+                setRows([]);
+                void fetchPage(
+                    0,
+                    advanceSnapshotCutoff(),
+                    postWatermarkReadKeysSummary.totalEstimatedCount + matching.length,
+                );
+            }
+            clearSelection();
+            setAckStatusMessage(t("acknowledgedAlarmsStatus", {count: matching.length}));
+        } catch (error) {
+            console.error("Unable to acknowledge filtered alarms", error);
+            setBulkSelectionError(true);
+        } finally {
+            setLoading(false);
+        }
+    }, [
+        acknowledgeLanes,
+        advanceSnapshotCutoff,
+        clearSelection,
+        computeScopedAcknowledgeTargets,
+        effectiveUnreadOnly,
+        enumerateAllFiltered,
+        fetchPage,
+        filter,
+        isAlarmTable,
+        markEventsRead,
+        postWatermarkReadKeysSummary.totalEstimatedCount,
+        resolveEventNodeId,
+        setLoading,
+        setRows,
+        t,
+        timeWindowPreset,
+    ]);
+
+    const acknowledgeSelectedAlarms = useCallback(async () => {
+        if (!isAlarmTable) return;
+        if (allFilteredSelected && excludedKeys.size === 0) {
+            await acknowledgeAllScopedAlarms();
+            return;
+        }
+        if (allFilteredSelected) {
+            setLoading(true);
+            try {
+                const matching = await enumerateAllFiltered();
+                const newlyReadCount = matching.filter(isRowUnread).length;
+                markEventsRead(matching, resolveEventNodeId);
+                if (newlyReadCount > 0) {
+                    setScopedUnreadSummary({
+                        count: effectiveUnreadSummary.capped
+                            ? effectiveUnreadSummary.count
+                            : Math.max(0, effectiveUnreadSummary.count - newlyReadCount),
+                        capped: effectiveUnreadSummary.capped,
+                    });
+                    setScopedUnreadReady(true);
+                }
+                if (effectiveUnreadOnly) {
+                    setRows(previous => previous.filter(row => excludedKeys.has(eventSelectionKey(row))));
+                    void fetchPage(
+                        currentPageRef.current,
+                        advanceSnapshotCutoff(),
+                        postWatermarkReadKeysSummary.totalEstimatedCount + newlyReadCount,
+                    );
+                }
+                clearSelection();
+                setAckStatusMessage(t("acknowledgedAlarmsStatus", {count: matching.length}));
+            } catch (error) {
+                console.error("Unable to acknowledge selected filtered alarms", error);
+                setBulkSelectionError(true);
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+        const rowsByKey = new Map(rows.map(row => [eventSelectionKey(row), row]));
+        const selectedEvents = Array.from(selectedKeys).flatMap(key => {
+            const event = eventCacheRef.current.get(key) ?? rowsByKey.get(key);
+            return event ? [event] : [];
+        });
+        const newlyReadCount = selectedEvents.filter(isRowUnread).length;
+        markEventsRead(selectedEvents, resolveEventNodeId);
+        if (newlyReadCount > 0) {
+            setScopedUnreadSummary({
+                count: effectiveUnreadSummary.capped
+                    ? effectiveUnreadSummary.count
+                    : Math.max(0, effectiveUnreadSummary.count - newlyReadCount),
+                capped: effectiveUnreadSummary.capped,
+            });
+            setScopedUnreadReady(true);
+        }
+        if (effectiveUnreadOnly && selectedEvents.length > 0) {
+            const acknowledgedKeySet = new Set(selectedKeys);
+            setRows(previous => previous.filter(row => !acknowledgedKeySet.has(eventSelectionKey(row))));
+            void fetchPage(
+                currentPageRef.current,
+                advanceSnapshotCutoff(),
+                postWatermarkReadKeysSummary.totalEstimatedCount + newlyReadCount,
+            );
+        }
+        clearSelection();
+        setAckStatusMessage(t("acknowledgedAlarmsStatus", {count: selectedEvents.length}));
+    }, [
+        acknowledgeAllScopedAlarms,
+        advanceSnapshotCutoff,
+        allFilteredSelected,
+        clearSelection,
+        currentPageRef,
+        effectiveUnreadOnly,
+        effectiveUnreadSummary,
+        enumerateAllFiltered,
+        excludedKeys,
+        fetchPage,
+        isAlarmTable,
+        isRowUnread,
+        markEventsRead,
+        postWatermarkReadKeysSummary.totalEstimatedCount,
+        resolveEventNodeId,
+        rows,
+        selectedKeys,
+        setLoading,
+        setRows,
+        t,
+    ]);
+
+    useEffect(() => {
+        if (dashboardAcknowledgeNonce === lastHandledAckNonceRef.current) return;
+        lastHandledAckNonceRef.current = dashboardAcknowledgeNonce;
+        if (!isAlarmTable) return;
+        void acknowledgeAllScopedAlarms();
+    }, [dashboardAcknowledgeNonce, isAlarmTable, acknowledgeAllScopedAlarms]);
 
     const selectAllFilteredAlarms = async () => {
         const cutoff = advanceSnapshotCutoff();
         setLoading(true);
         try {
             const counts = await runWithConcurrency(bulkQueryPlans, 6, plan => fetchPlanCount(plan, cutoff, true));
+            let total = counts.reduce((sum, count) => sum + count, 0);
+            if (
+                effectiveUnreadOnly
+                && postWatermarkReadKeysSummary.hasPostWatermarkKeys
+                && total > 0
+                && total <= BULK_FETCH_SIZE
+            ) {
+                const planRows = await runWithConcurrency(bulkQueryPlans, 4, async (plan, index) => {
+                    const count = counts[index] ?? 0;
+                    if (count <= 0) return [];
+                    return fetchPlanRows(plan, count, 0, cutoff, undefined, false);
+                });
+                total = deduplicateEvents(planRows.flat()).filter(isRowUnread).length;
+            }
             allFilteredCutoffRef.current = cutoff;
-            setAllFilteredTotal(counts.reduce((sum, count) => sum + count, 0));
+            setAllFilteredTotal(total);
             setAllFilteredSelected(true);
             setSelectedKeys(new Set());
             setExcludedKeys(new Set());
@@ -699,10 +1408,14 @@ export default function EventTable({
         failedBulkRef.current = failed.map(outcome => outcome.event);
         const successfulKeys = new Set(successful.map(outcome => eventSelectionKey(outcome.event)));
         if (tableMode === "alarmtable") {
+            if (successful.length > 0) {
+                markEventsRead(successful.map(outcome => outcome.event), resolveEventNodeId);
+            }
             setRows(previous => previous.filter(event => !successfulKeys.has(eventSelectionKey(event))));
             setRowCount(previous => Math.max(0, previous - successful.length));
             if (successful.length > 0) {
                 const cutoff = advanceSnapshotCutoff();
+                setUnreadReconcileEpoch(previous => previous + 1);
                 void refreshCounts(cutoff);
                 void fetchPage(currentPageRef.current, cutoff);
             }
@@ -767,7 +1480,7 @@ export default function EventTable({
         if (Number.isNaN(date.getTime())) return String(rawValue);
         return (
             <Box sx={{display: "flex", flexDirection: "column", justifyContent: "center", py: 0.25, minWidth: 0, fontVariantNumeric: "tabular-nums"}}>
-                <Box component="span" sx={{fontWeight: 500, fontSize: "0.81rem", lineHeight: 1.2, whiteSpace: "nowrap"}}>
+                <Box component="span" className="alarm-cell-primary" sx={{fontWeight: 500, fontSize: "0.81rem", lineHeight: 1.2, whiteSpace: "nowrap"}}>
                     {date.toLocaleTimeString(locale)}
                 </Box>
                 <Box component="span" sx={{fontSize: "0.71rem", color: "text.secondary", lineHeight: 1.15, whiteSpace: "nowrap"}}>
@@ -784,12 +1497,39 @@ export default function EventTable({
             minWidth: 76,
             flex: 0.7,
             renderHeader: () => renderCompactHeader(t("laneId")),
-            renderCell: params => (
-                <Box sx={{display: "flex", flexDirection: "column", justifyContent: "center", py: 0.5, minWidth: 0}}>
-                    <Box component="span" sx={{fontWeight: 600, fontSize: "0.83rem", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis"}}>{params.row.laneId}</Box>
-                    <Box component="span" sx={{fontSize: "0.71rem", color: "text.secondary", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis"}}>{params.row.parentNode}</Box>
-                </Box>
-            ),
+            renderCell: params => {
+                const unread = isRowUnread(params.row);
+                return (
+                    <Box sx={{display: "flex", flexDirection: "column", justifyContent: "center", py: 0.5, minWidth: 0}}>
+                        <Box sx={{display: "flex", alignItems: "center", gap: 0.65, minWidth: 0}}>
+                            {unread && (
+                                <>
+                                    <Box
+                                        component="span"
+                                        className="unread-alarm-dot"
+                                        aria-hidden="true"
+                                        sx={{
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: "50%",
+                                            bgcolor: "primary.main",
+                                            border: "1px solid transparent",
+                                            flexShrink: 0,
+                                        }}
+                                    />
+                                    <Box component="span" className="visually-hidden">
+                                        {`${t("unreadAlarm")} `}
+                                    </Box>
+                                </>
+                            )}
+                            <Box component="span" className="alarm-cell-primary" sx={{fontWeight: 600, fontSize: "0.83rem", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis"}}>
+                                {params.row.laneId}
+                            </Box>
+                        </Box>
+                        <Box component="span" sx={{fontSize: "0.71rem", color: "text.secondary", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis"}}>{params.row.parentNode}</Box>
+                    </Box>
+                );
+            },
         },
         {
             field: "occupancyCount",
@@ -798,7 +1538,7 @@ export default function EventTable({
             flex: 0.58,
             renderHeader: () => renderCompactHeader(t("occupancyId")),
             renderCell: params => (
-                <Box component="span" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
+                <Box component="span" className="alarm-cell-primary" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
                     {params.value}
                 </Box>
             ),
@@ -832,7 +1572,7 @@ export default function EventTable({
             flex: 0.68,
             renderHeader: () => renderCompactHeader(t("maxGamma")),
             renderCell: params => (
-                <Box component="span" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
+                <Box component="span" className="alarm-cell-primary" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
                     {params.value}
                 </Box>
             ),
@@ -844,7 +1584,7 @@ export default function EventTable({
             flex: 0.72,
             renderHeader: () => renderCompactHeader(t("maxNeutron")),
             renderCell: params => (
-                <Box component="span" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
+                <Box component="span" className="alarm-cell-primary" sx={{fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.83rem"}}>
                     {params.value}
                 </Box>
             ),
@@ -960,7 +1700,7 @@ export default function EventTable({
             disableColumnMenu: true,
             getActions: params => [<GridActionsCellItem key="details" icon={<VisibilityRoundedIcon />} label={t("details")} onClick={() => previewEvent(params.row, true)} showInMenu />],
         },
-    ], [formatAdjudicationCodeLabel, locale, renderCompactHeader, renderCompactTimestamp, t]);
+    ], [formatAdjudicationCodeLabel, isRowUnread, locale, renderCompactHeader, renderCompactTimestamp, t]);
 
     const getColumnList = () => columns
         .filter(column => viewAdjudicated || (column.field !== "adjudicatedIds" && column.field !== "adjudicationCode"))
@@ -968,17 +1708,29 @@ export default function EventTable({
 
     const retryEventQueries = () => {
         const cutoff = advanceSnapshotCutoff();
+        setUnreadReconcileEpoch(previous => previous + 1);
         void refreshCounts(cutoff);
         void fetchPage(paginationModel.page, cutoff);
     };
 
     return (
         <Box sx={{height: 800, width: "100%"}}>
+            {isAlarmTable && (
+                <Box
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className="visually-hidden"
+                    data-testid="alarm-acknowledge-status"
+                >
+                    {ackStatusMessage}
+                </Box>
+            )}
             {(countQueryError || pageQueryError) && (
                 <Alert
                     severity="error"
                     role="alert"
-                    action={<Button color="inherit" size="small" onClick={retryEventQueries}>{t("retry")}</Button>}
+                    action={<Button type="button" color="inherit" size="small" onClick={retryEventQueries}>{t("retry")}</Button>}
                     sx={{mb: 1}}
                 >
                     {t("eventQueryLoadFailed")}
@@ -996,7 +1748,7 @@ export default function EventTable({
                 filterMode="server"
                 paginationModel={paginationModel}
                 onPaginationModelChange={model => setPaginationModel(model)}
-                rowCount={rowCount}
+                rowCount={effectiveRowCount}
                 pageSizeOptions={[PAGE_SIZE]}
                 checkboxSelection
                 isRowSelectable={params => params.row.status !== "None" && !params.row.adjudicatedIds?.length}
@@ -1015,16 +1767,35 @@ export default function EventTable({
                     toolbar: {
                         activeFilterCount: countEventFilterRules(filter),
                         selectedCount,
-                        rowCount,
+                        rowCount: effectiveRowCount,
                         allFilteredSelected,
                         filterLabel: t("advancedFilters"),
                         selectAllFilteredLabel: t("selectAllFiltered"),
                         clearSelectionLabel: t("clearSelection"),
                         bulkAdjudicateLabel: t("bulkAdjudicateSelected", {count: selectedCount}),
+                        acknowledgeSelectedLabel: t("acknowledgeSelected", {count: selectedCount}),
+                        acknowledgeAllLabel: t("acknowledgeAll"),
                         onOpenFilters: () => setFilterDialogOpen(true),
                         onSelectAllFiltered: selectAllFilteredAlarms,
                         onClearSelection: clearSelection,
                         onBulkAdjudicate: () => setBulkDialogOpen(true),
+                        ...(isAlarmTable
+                            ? {
+                                unreadOnly: effectiveUnreadOnly,
+                                unreadOnlyLabel: t("unreadOnly"),
+                                onToggleUnreadOnly: handleToggleUnreadOnly,
+                                timeWindowPreset,
+                                timeWindowOptions,
+                                timeWindowGroupLabel: t("alarmTimeWindow"),
+                                onSelectTimeWindowPreset: handleSelectTimeWindowPreset,
+                                onAcknowledgeSelected: () => {
+                                    void acknowledgeSelectedAlarms();
+                                },
+                                onAcknowledgeAll: () => {
+                                    void acknowledgeAllScopedAlarms();
+                                },
+                            }
+                            : {}),
                     },
                     columnsManagement: {getTogglableColumns: getColumnList},
                 }}
@@ -1038,9 +1809,40 @@ export default function EventTable({
                     if (params.value === "Gamma & Neutron" || (params.value !== "None" && params.field === "status")) return "highlightGammaNeutron";
                     return "";
                 }}
-                getRowClassName={params => params.row.id === selectedRowId ? "preview-row" : ""}
+                getRowClassName={params => {
+                    const classes: string[] = [];
+                    if (params.row.id === selectedRowId) classes.push("preview-row");
+                    if (isAlarmTable) {
+                        classes.push(isRowUnread(params.row) ? "unread-alarm-row" : "read-alarm-row");
+                    }
+                    return classes.join(" ");
+                }}
                 sx={{
-                    [`.${gridClasses.row}.preview-row`]: {boxShadow: "inset 3px 0 0 #1976d2"},
+                    [`.${gridClasses.row}.preview-row`]: {
+                        boxShadow: "inset 3px 0 0 #1976d2",
+                        "@media (forced-colors: active)": {
+                            outline: "2px solid Highlight",
+                            outlineOffset: "-2px",
+                        },
+                    },
+                    [`.${gridClasses.row}.unread-alarm-row`]: {
+                        fontWeight: 700,
+                    },
+                    [`.${gridClasses.row}.unread-alarm-row .alarm-cell-primary`]: {
+                        fontWeight: 700,
+                    },
+                    [`.${gridClasses.row}.read-alarm-row`]: {
+                        fontWeight: 400,
+                    },
+                    [`.${gridClasses.row}.read-alarm-row .alarm-cell-primary`]: {
+                        fontWeight: 400,
+                    },
+                    [`& .unread-alarm-dot`]: {
+                        "@media (forced-colors: active)": {
+                            backgroundColor: "Highlight",
+                            borderColor: "Highlight",
+                        },
+                    },
                     [`& .${gridClasses.columnHeader}, & .${gridClasses.cell}`]: {px: 0.75},
                     [`& .${gridClasses.cell}`]: {display: "flex", alignItems: "center"},
                     [`& .${gridClasses.columnHeaderTitleContainer}`]: {flex: 1, minWidth: 0, overflow: "visible"},

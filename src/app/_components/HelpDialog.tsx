@@ -76,7 +76,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Dashboard (`/`)',
-                summary: 'Real-time lane status grid, site map, live alarm feed, Customize Dashboard layout control, and quick adjudication preview drawer. Click a lane to view live video and combined/separate detector charts; click an alarm row to inspect the 5-frame filmstrip and adjudicate.',
+                summary: 'Real-time lane status grid, site map, live alarm feed, Customize Dashboard layout control, and quick adjudication preview drawer. Unread Dashboard alarms appear in bold with an indicator dot and are shared per lane across workstations; use the ephemeral Unread only toggle (in the banner or toolbar) or quick time-window presets (`15m`, `1h`, `24h`, `15d`) to focus the active queue, click an alarm row, Acknowledge Selected, or Acknowledge All (scoped to the active Operational View, time window, and filters) to mark read, and optionally enable Unread alarm banner (with full watermark-scoped counts and `100+` cap) or Latching alarm audio in Settings.',
             },
             {
                 title: 'Events (`/event-log`)',
@@ -222,7 +222,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Panel (`/`)',
-                summary: 'Cuadrícula en tiempo real del estado de carriles, mapa del sitio, flujo de alarmas, control Personalizar panel y adjudicación rápida.',
+                summary: 'Cuadrícula en tiempo real del estado de carriles, mapa del sitio, flujo de alarmas, control Personalizar panel y adjudicación rápida. Las alarmas no leídas se muestran en negrita con punto indicador (compartidas por carril entre estaciones); use el conmutador efímero Solo no leídas o las ventanas temporales rápidas (`15m`, `1h`, `24h`, `15d`) en la barra de herramientas, pulse una fila, Reconocer seleccionadas o Reconocer todas para marcarlas como leídas, y active opcionalmente el aviso visual (con recuento completo y límite `100+`) o el audio continuo en Configuración.',
             },
             {
                 title: 'Eventos (`/event-log`)',
@@ -368,7 +368,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Tableau de bord (`/`)',
-                summary: 'Grille d’état des voies en temps réel, carte du site, flux d’alarmes en direct, personnalisation des cartes et tiroir d’adjudication rapide.',
+                summary: 'Grille d’état des voies en temps réel, carte du site, flux d’alarmes en direct, personnalisation des cartes et tiroir d’adjudication rapide. Les alarmes non lues s’affichent en gras avec un point indicateur (état partagé par voie entre les postes) ; utilisez le filtre temporaire Non lues uniquement ou les fenêtres temporelles rapides (`15m`, `1h`, `24h`, `15j`), cliquez sur une ligne, Acquitter la sélection ou Tout acquitter pour marquer comme lu, et activez en option le bandeau (avec décompte complet et plafond `100+`) ou l’audio continu dans Paramètres.',
             },
             {
                 title: 'Événements (`/event-log`)',
@@ -514,7 +514,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         pages: [
             {
                 title: 'Πίνακας ελέγχου (`/`)',
-                summary: 'Πλέγμα κατάστασης λωρίδων σε πραγματικό χρόνο, χάρτης εγκατάστασης, ροή συναγερμών, προσαρμογή καρτών και γρήγορη αξιολόγηση.',
+                summary: 'Πλέγμα κατάστασης λωρίδων σε πραγματικό χρόνο, χάρτης εγκατάστασης, ροή συναγερμών, προσαρμογή καρτών και γρήγορη αξιολόγηση. Οι μη αναγνωσμένοι συναγερμοί εμφανίζονται με έντονη γραφή και κουκκίδα ένδειξης (κοινόχρηστοι ανά λωρίδα μεταξύ σταθμών)· χρησιμοποιήστε το προσωρινό φίλτρο Μόνο μη αναγνωσμένοι ή τα γρήγορα χρονικά παράθυρα (`15λ`, `1ώ`, `24ώ`, `15η`), επιλέξτε γραμμή, Επιβεβαίωση επιλεγμένων ή Επιβεβαίωση όλων για επισήμανση ως αναγνωσμένων, και ενεργοποιήστε προαιρετικά την ειδοποίηση (με πλήρη καταμέτρηση και όριο `100+`) ή τον συνεχή ήχο στις Ρυθμίσεις.',
             },
             {
                 title: 'Συμβάντα (`/event-log`)',

@@ -1,7 +1,9 @@
 "use client";
 
-import {Button, Grid, Paper, Stack, Typography} from "@mui/material";
+import {Alert, Button, Grid, Paper, Stack, Typography} from "@mui/material";
 import {
+    MarkEmailReadOutlined,
+    MarkEmailUnreadOutlined,
     RestartAltOutlined,
     TuneOutlined,
     VisibilityOffOutlined,
@@ -14,7 +16,18 @@ import {useSelector} from "react-redux";
 import {EventType} from "osh-js/source/core/event/EventType";
 import {RootState} from "@/lib/state/Store";
 import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
-import {setAlarmTrigger} from "@/lib/state/EventDataSlice";
+import {
+    requestDashboardAcknowledgeAll,
+    selectDashboardUnreadAlarmCount,
+    selectDashboardUnreadCountCapped,
+    selectDashboardUnreadOnly,
+    setAlarmTrigger,
+    toggleDashboardUnreadOnly,
+} from "@/lib/state/EventDataSlice";
+import {
+    selectContinuousAlarmAudio,
+    selectVisualUnreadAlert,
+} from "@/lib/state/OSCARClientSlice";
 import {useAppDispatch} from "@/lib/state/Hooks";
 import EventTable from "@/app/_components/event-table/EventTable";
 import {
@@ -37,16 +50,23 @@ import {
     setStoredDashboardWidgetVisibility,
 } from "@/app/utils/ChartUtils";
 import {useLanguage} from "@/app/contexts/LanguageContext";
+import {getIntlLocale} from "@/app/utils/LocaleUtils";
 import dynamic from "next/dynamic";
 import { useBreakpoint } from "../providers";
 import SuspenseLoad from "@/app/_components/SuspenseLoad";
 
 export default function DashboardPage() {
     const { isDesktop } = useBreakpoint();
-    const { t } = useLanguage();
+    const { language, t } = useLanguage();
+    const locale = getIntlLocale(language);
     const dispatch = useAppDispatch();
 
     const laneMap = useSelector((state: RootState) => selectLaneMap(state));
+    const unreadAlarmCount = useSelector((state: RootState) => selectDashboardUnreadAlarmCount(state));
+    const unreadCountCapped = useSelector((state: RootState) => selectDashboardUnreadCountCapped(state));
+    const unreadOnly = useSelector((state: RootState) => selectDashboardUnreadOnly(state));
+    const visualUnreadAlert = useSelector((state: RootState) => selectVisualUnreadAlert(state));
+    const continuousAlarmAudio = useSelector((state: RootState) => selectContinuousAlarmAudio(state));
     const [dataSourcesByLane, setDataSourcesByLane] = useState<Map<string, LaneDSColl>>(new Map<string, LaneDSColl>());
     const laneCollectionsRef = useRef<Map<string, {lane: LaneMapEntry, collection: LaneDSColl}>>(new Map());
     const [widgetVisibility, setWidgetVisibility] = useState<DashboardWidgetVisibility>(
@@ -72,6 +92,25 @@ export default function DashboardPage() {
     const resetWidgets = useCallback(() => {
         updateWidgetVisibility({...DEFAULT_DASHBOARD_WIDGET_VISIBILITY});
     }, [updateWidgetVisibility]);
+
+    const showUnreadBanner = (visualUnreadAlert || continuousAlarmAudio) && unreadAlarmCount > 0;
+    const formattedUnreadCount = unreadCountCapped
+        ? `${unreadAlarmCount.toLocaleString(locale)}+`
+        : unreadAlarmCount.toLocaleString(locale);
+
+    const handleBannerAcknowledgeAll = useCallback(() => {
+        if (!widgetVisibility.eventTable) {
+            updateWidgetVisibility({...widgetVisibility, eventTable: true});
+        }
+        dispatch(requestDashboardAcknowledgeAll());
+    }, [dispatch, updateWidgetVisibility, widgetVisibility]);
+
+    const handleBannerToggleUnreadOnly = useCallback(() => {
+        if (!unreadOnly && !widgetVisibility.eventTable) {
+            updateWidgetVisibility({...widgetVisibility, eventTable: true});
+        }
+        dispatch(toggleDashboardUnreadOnly());
+    }, [dispatch, unreadOnly, updateWidgetVisibility, widgetVisibility]);
 
     const datasourceSetup = useCallback(() => {
         const laneDSMap = new Map<string, LaneDSColl>();
@@ -176,6 +215,70 @@ export default function DashboardPage() {
 
     return (
         <Grid container spacing={2} sx={{ minInlineSize: 0, height: "auto" }}>
+            {showUnreadBanner && (
+                <Grid item xs={12} sx={{ minInlineSize: 0 }}>
+                    <Alert
+                        severity="warning"
+                        data-testid="dashboard-unread-alert-banner"
+                        sx={{ alignItems: "center", py: 0.5 }}
+                        action={
+                            <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                                <Button
+                                    type="button"
+                                    color="inherit"
+                                    size="small"
+                                    variant="outlined"
+                                    aria-pressed={unreadOnly}
+                                    startIcon={<MarkEmailUnreadOutlined fontSize="small" aria-hidden="true" />}
+                                    onClick={handleBannerToggleUnreadOnly}
+                                    data-testid="dashboard-banner-unread-only"
+                                    sx={{
+                                        textTransform: "none",
+                                        whiteSpace: "nowrap",
+                                        minInlineSize: "24px",
+                                        minBlockSize: "24px",
+                                        "@media (pointer: coarse)": { minBlockSize: "44px", minInlineSize: "44px" },
+                                        "&[aria-pressed='true']": {
+                                            bgcolor: "warning.dark",
+                                            color: "warning.contrastText",
+                                            borderColor: "warning.dark",
+                                            boxShadow: "inset 0 0 0 1px currentColor",
+                                            fontWeight: 700,
+                                            "@media (forced-colors: active)": {
+                                                bgcolor: "Highlight",
+                                                color: "HighlightText",
+                                                borderColor: "Highlight",
+                                            },
+                                        },
+                                    }}
+                                >
+                                    {t("unreadOnly")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    color="inherit"
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={<MarkEmailReadOutlined fontSize="small" aria-hidden="true" />}
+                                    onClick={handleBannerAcknowledgeAll}
+                                    data-testid="dashboard-banner-acknowledge-all"
+                                    sx={{
+                                        textTransform: "none",
+                                        whiteSpace: "nowrap",
+                                        minInlineSize: "24px",
+                                        minBlockSize: "24px",
+                                        "@media (pointer: coarse)": { minBlockSize: "44px", minInlineSize: "44px" },
+                                    }}
+                                >
+                                    {t("acknowledgeAll")}
+                                </Button>
+                            </Stack>
+                        }
+                    >
+                        {t("unreadAlarmsBanner", { count: formattedUnreadCount })}
+                    </Alert>
+                </Grid>
+            )}
             <Grid item xs={12} sx={{ minInlineSize: 0 }}>
                 <Paper
                     variant="outlined"

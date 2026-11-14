@@ -7,6 +7,9 @@ export default defineConfig({
             framework: "react",
             bundler: "vite",
             viteConfig: {
+                define: {
+                    'process.env': {},
+                },
                 optimizeDeps: {
                     rolldownOptions: {
                         // osh-js 3.1.5 contains legacy named imports that are

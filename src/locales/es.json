@@ -550,5 +550,21 @@
   "showMapPreviewWidget": "Mapa / Vista previa",
   "hideWidget": "Ocultar widget",
   "resetDashboardWidgets": "Restaurar todo",
-  "allDashboardWidgetsHidden": "Todos los widgets del panel están ocultos actualmente."
+  "allDashboardWidgetsHidden": "Todos los widgets del panel están ocultos actualmente.",
+  "unreadAlarm": "Alarma no leída",
+  "acknowledgeSelected": "Reconocer {count} seleccionadas",
+  "acknowledgeAll": "Reconocer todas",
+  "acknowledgedAlarmsStatus": "{count} alarmas marcadas como leídas.",
+  "acknowledgedAllScopedStatus": "Todas las alarmas de la vista activa se marcaron como leídas.",
+  "visualUnreadAlert": "Aviso visual de alarmas no leídas",
+  "visualUnreadAlertHint": "Muestra un aviso en el panel mientras queden alarmas no leídas en la vista activa.",
+  "continuousAlarmAudio": "Audio continuo de alarma",
+  "continuousAlarmAudioHint": "Repite el sonido hasta reconocer las alarmas no leídas del panel.",
+  "unreadAlarmsBanner": "{count} alarma(s) no leída(s) en el panel para la vista activa.",
+  "unreadOnly": "Solo no leídas",
+  "alarmTimeWindow": "Ventana temporal de alarmas",
+  "timeWindow15m": "15m",
+  "timeWindow1h": "1h",
+  "timeWindow24h": "24h",
+  "timeWindow15d": "15d"
 }

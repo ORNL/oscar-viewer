@@ -550,5 +550,21 @@
   "showMapPreviewWidget": "Carte / Aperçu",
   "hideWidget": "Masquer le widget",
   "resetDashboardWidgets": "Tout restaurer",
-  "allDashboardWidgetsHidden": "Tous les widgets du tableau de bord sont actuellement masqués."
+  "allDashboardWidgetsHidden": "Tous les widgets du tableau de bord sont actuellement masqués.",
+  "unreadAlarm": "Alarme non lue",
+  "acknowledgeSelected": "Acquitter {count} sélectionnées",
+  "acknowledgeAll": "Tout acquitter",
+  "acknowledgedAlarmsStatus": "{count} alarmes marquées comme lues.",
+  "acknowledgedAllScopedStatus": "Toutes les alarmes de la vue active ont été marquées comme lues.",
+  "visualUnreadAlert": "Bandeau d’alarmes non lues",
+  "visualUnreadAlertHint": "Affiche un bandeau tant que des alarmes non lues subsistent dans la vue active.",
+  "continuousAlarmAudio": "Alarme sonore continue",
+  "continuousAlarmAudioHint": "Répète le son jusqu’à l’acquittement des alarmes non lues du tableau de bord.",
+  "unreadAlarmsBanner": "{count} alarme(s) non lue(s) sur le tableau de bord dans la vue active.",
+  "unreadOnly": "Non lues uniquement",
+  "alarmTimeWindow": "Fenêtre temporelle des alarmes",
+  "timeWindow15m": "15m",
+  "timeWindow1h": "1h",
+  "timeWindow24h": "24h",
+  "timeWindow15d": "15j"
 }

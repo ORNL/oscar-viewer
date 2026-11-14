@@ -550,5 +550,21 @@
   "showMapPreviewWidget": "Χάρτης / Προεπισκόπηση",
   "hideWidget": "Απόκρυψη στοιχείου",
   "resetDashboardWidgets": "Επαναφορά όλων",
-  "allDashboardWidgetsHidden": "Όλα τα στοιχεία του πίνακα είναι επί του παρόντος κρυφά."
+  "allDashboardWidgetsHidden": "Όλα τα στοιχεία του πίνακα είναι επί του παρόντος κρυφά.",
+  "unreadAlarm": "Μη αναγνωσμένος συναγερμός",
+  "acknowledgeSelected": "Επιβεβαίωση {count} επιλεγμένων",
+  "acknowledgeAll": "Επιβεβαίωση όλων",
+  "acknowledgedAlarmsStatus": "{count} συναγερμοί επισημάνθηκαν ως αναγνωσμένοι.",
+  "acknowledgedAllScopedStatus": "Όλοι οι συναγερμοί της ενεργής προβολής επισημάνθηκαν ως αναγνωσμένοι.",
+  "visualUnreadAlert": "Ειδοποίηση μη αναγνωσμένων συναγερμών",
+  "visualUnreadAlertHint": "Εμφανίζει ειδοποίηση στον πίνακα όσο υπάρχουν μη αναγνωσμένοι συναγερμοί στην ενεργή προβολή.",
+  "continuousAlarmAudio": "Συνεχής ήχος συναγερμού",
+  "continuousAlarmAudioHint": "Επαναλαμβάνει τον ήχο έως ότου επιβεβαιωθούν οι μη αναγνωσμένοι συναγερμοί του πίνακα.",
+  "unreadAlarmsBanner": "{count} μη αναγνωσμένοι συναγερμοί στον πίνακα για την ενεργή προβολή.",
+  "unreadOnly": "Μόνο μη αναγνωσμένοι",
+  "alarmTimeWindow": "Χρονικό παράθυρο συναγερμών",
+  "timeWindow15m": "15λ",
+  "timeWindow1h": "1ώ",
+  "timeWindow24h": "24ώ",
+  "timeWindow15d": "15η"
 }
