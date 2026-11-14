@@ -566,5 +566,13 @@
   "timeWindow15m": "15m",
   "timeWindow1h": "1h",
   "timeWindow24h": "24h",
-  "timeWindow15d": "15d"
+  "timeWindow15d": "15d",
+  "ocrSuggestions": "OCR Suggestions",
+  "ocrContainerLabel": "ISO 6346 Container",
+  "ocrPlateLabel": "License Plate",
+  "ocrChecksumValid": "Check digit verified",
+  "ocrConfidence": "Confidence: {confidence}% ({frames} frame(s))",
+  "ocrAutoFilledHelper": "Auto-filled from lane OCR — edit or select another suggestion if needed.",
+  "ocrShort": "OCR",
+  "ocrTablePendingHint": "Suggested by lane OCR (pending operator adjudication)"
 }

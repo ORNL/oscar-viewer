@@ -91,7 +91,17 @@ export default function BulkAdjudicationDialog({open, count, allFiltered, nodes 
                     </Alert>
                     <AdjudicationSelect onSelect={setCode} adjCode={code} nodes={open ? nodes : []} />
                     <SecondaryInspectionSelect onSelect={setSecondaryInspection} secondarySelectVal={secondaryInspection} />
-                    <TextField label={t("vehicleId")} value={vehicleId} onChange={event => setVehicleId(event.target.value)} helperText={t("bulkVehicleIdHelp")} />
+                    <TextField
+                        label={t("vehicleId")}
+                        value={vehicleId}
+                        onChange={event => setVehicleId(event.target.value)}
+                        helperText={t("bulkVehicleIdHelp")}
+                        inputProps={{
+                            autoCorrect: "off",
+                            autoCapitalize: "none",
+                            spellCheck: false,
+                        }}
+                    />
                     <TextField label={t("notes")} value={feedback} onChange={event => setFeedback(event.target.value)} multiline minRows={3} />
                     {running && (
                         <Stack spacing={0.5}>

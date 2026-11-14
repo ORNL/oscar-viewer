@@ -81,9 +81,21 @@ export class EventTableData implements IEventTableData {
 
     adjudicatedUser?: string;
     adjudicatedCode?: number;
+    vehicleId?: string;
+    vehicleIdFromOcr?: boolean;
 
     setAdjudicationData(aData: AdjudicationData) {
         this.adjudicatedData = aData;
+    }
+
+    setVehicleId(vehicleId: string | undefined, fromOcr = false) {
+        this.vehicleId = vehicleId;
+        this.vehicleIdFromOcr = fromOcr;
+    }
+
+    clone(): EventTableData {
+        const cloned = Object.create(Object.getPrototypeOf(this)) as EventTableData;
+        return Object.assign(cloned, this);
     }
 
     // addSecondaryInspection(aDataSecondary: AdjudicationData) {

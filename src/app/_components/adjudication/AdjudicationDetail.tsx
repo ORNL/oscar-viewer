@@ -59,6 +59,11 @@ import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
 import {randomUUID} from "osh-js/source/core/utils/Utils";
 import { useBreakpoint } from "@/app/providers";
 import N42Detail from "@/app/_components/n42/N42Detail";
+import VehicleIdOcr from "@/app/_components/adjudication/VehicleIdOcr";
+import {
+    IVehicleOcrResult,
+    selectAutoFillCandidate,
+} from "@/lib/data/oscar/adjudication/VehicleOcr";
 import {useLanguage} from '@/app/contexts/LanguageContext';
 import {getIntlLocale} from '@/app/utils/LocaleUtils';
 
@@ -82,7 +87,11 @@ interface ScannedDataWithWebId {
     serverPath?: string;
 }
 
-export default function AdjudicationDetail(props: { event: EventTableData }) {
+export default function AdjudicationDetail(props: {
+    event: EventTableData;
+    ocrInitialResults?: readonly IVehicleOcrResult[];
+    ocrFetchImpl?: typeof fetch;
+}) {
     const { isMobile, isSmallTablet } = useBreakpoint();
     const {language, t} = useLanguage();
     const dispatch = useAppDispatch();
@@ -93,6 +102,9 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
     const [secondaryInspection, setSecondaryInspection] = useState('');
 
     const [vehicleId, setVehicleId] = useState<string>("");
+    const [vehicleIdTouched, setVehicleIdTouched] = useState<boolean>(false);
+    const [vehicleIdAutoFilled, setVehicleIdAutoFilled] = useState<boolean>(false);
+    const [ocrResults, setOcrResults] = useState<IVehicleOcrResult[]>([]);
     const [feedback, setFeedback] = useState<string>("");
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -106,6 +118,44 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
 
     const adjudication = props.event ? new AdjudicationData(new Date().toISOString(), props.event.occupancyCount, props.event.occupancyObsId) : null;
     const [adjData, setAdjData] = useState<AdjudicationData>(adjudication);
+
+    // Key per-occupancy reset on laneId|occupancyCount|startTime rather than occupancyObsId
+    // so live-event UUID resolution does not clear operator-entered Vehicle ID input.
+    const eventIdentityKey = `${props.event?.laneId ?? ""}|${props.event?.occupancyCount ?? ""}|${props.event?.startTime ?? ""}`;
+    const [syncedEventIdentityKey, setSyncedEventIdentityKey] = useState<string>(eventIdentityKey);
+    if (syncedEventIdentityKey !== eventIdentityKey) {
+        setSyncedEventIdentityKey(eventIdentityKey);
+        setVehicleId("");
+        setVehicleIdTouched(false);
+        setVehicleIdAutoFilled(false);
+        setOcrResults([]);
+        setAdjData(
+            props.event
+                ? new AdjudicationData(
+                    new Date().toISOString(),
+                    props.event.occupancyCount,
+                    props.event.occupancyObsId,
+                )
+                : null,
+        );
+    }
+
+    useEffect(() => {
+        if (vehicleIdTouched || vehicleId.trim().length > 0) return;
+        const candidate = selectAutoFillCandidate(ocrResults);
+        if (!candidate) return;
+        setVehicleId(candidate.value);
+        setVehicleIdAutoFilled(true);
+        setAdjData(previous => {
+            if (!previous) return previous;
+            const updated = Object.assign(
+                Object.create(Object.getPrototypeOf(previous)),
+                previous,
+            ) as AdjudicationData;
+            updated.setVehicleId(candidate.value);
+            return updated;
+        });
+    }, [ocrResults, vehicleId, vehicleIdTouched]);
 
     const [adjSnackMsg, setAdjSnackMsg] = useState('');
     const [colorStatus, setColorStatus] = useState('');
@@ -309,21 +359,52 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const {name, value} = e.target;
 
-        let tempAdjData = adjData;
-
         if (name === 'vehicleId') {
             setVehicleId(value);
-            tempAdjData.vehicleId = value;
-        } else if (name === 'notes') {
-            setFeedback(value)
-            tempAdjData.feedback = value;
+            setVehicleIdTouched(true);
+            setVehicleIdAutoFilled(false);
+            setAdjData(previous => {
+                if (!previous) return previous;
+                const updated = Object.assign(
+                    Object.create(Object.getPrototypeOf(previous)),
+                    previous,
+                ) as AdjudicationData;
+                updated.setVehicleId(value);
+                return updated;
+            });
+            return;
+        }
+
+        let tempAdjData = adjData;
+        if (name === 'notes') {
+            setFeedback(value);
+            if (tempAdjData) {
+                tempAdjData.feedback = value;
+            }
         }
 
         setAdjData(tempAdjData);
     }
 
+    const handleOcrSelect = (selected: string) => {
+        setVehicleId(selected);
+        setVehicleIdTouched(true);
+        setVehicleIdAutoFilled(false);
+        setAdjData(previous => {
+            if (!previous) return previous;
+            const updated = Object.assign(
+                Object.create(Object.getPrototypeOf(previous)),
+                previous,
+            ) as AdjudicationData;
+            updated.setVehicleId(selected);
+            return updated;
+        });
+    };
+
     function resetForm() {
-        setVehicleId('')
+        setVehicleId('');
+        setVehicleIdTouched(true);
+        setVehicleIdAutoFilled(false);
         setAdjData(adjudication);
         setUploadedFiles([]);
         setScannedData([]);
@@ -1095,16 +1176,32 @@ export default function AdjudicationDetail(props: { event: EventTableData }) {
                                 {t('adjudicationForm')}
                             </Typography>
                         </Grid>
-                        <Grid item xs={12} sm={3} lg={2}>
+                        <Grid item xs={12} sm={6} lg={5}>
                             <TextField
                                 label={t('vehicleId')}
                                 name="vehicleId"
                                 value={vehicleId}
                                 onChange={handleChange}
+                                helperText={vehicleIdAutoFilled ? t('ocrAutoFilledHelper') : undefined}
+                                inputProps={{
+                                    autoCorrect: 'off',
+                                    autoCapitalize: 'none',
+                                    spellCheck: false,
+                                }}
                                 fullWidth
                             />
+                            {props.event && (
+                                <VehicleIdOcr
+                                    event={props.event}
+                                    selectedValue={vehicleId}
+                                    onResults={setOcrResults}
+                                    onSelectValue={handleOcrSelect}
+                                    initialResults={props.ocrInitialResults}
+                                    fetchImpl={props.ocrFetchImpl}
+                                />
+                            )}
                         </Grid>
-                        <Grid item xs={12} sm={9} lg={10} />
+                        <Grid item xs={12} sm={6} lg={7} />
                         <Grid item xs={12} sm={6}>
                             <AdjudicationSelect
                                 adjCode={adjudicationCode}

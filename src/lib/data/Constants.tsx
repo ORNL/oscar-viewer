@@ -112,3 +112,5 @@ export const N42_REPORT_DEF = radUri + "ForegroundReports"
 export const DAILY_FILE_DEF = radUri + "RPMMessage"
 export const RAPISCAN_DAILY_FILE_DEF = radUri + "RapiscanMessage"
 export const ASPECT_DAILY_FILE_DEF = radUri + "AspectMessage"
+export const OCR_DEF = radUri + "OCRValue"
+export const OCR_PLATE_AUTOFILL_CONFIDENCE = 0.85

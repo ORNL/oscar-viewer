@@ -217,6 +217,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Parquet Cold Tier (`PARQUET_PRIMARY`)',
                 meaning: 'Default storage mode where completed 30-minute PostgreSQL staging partitions are exported to ZSTD-compressed Apache Parquet files for compact long-term retention.',
             },
+            {
+                term: 'Container & License Plate OCR (`ocrConfig`)',
+                meaning: 'Optional per-lane asynchronous background OCR (disabled by default). When enabled on a lane, OSCAR samples occupancy frames as CPU/heap resources allow, auto-fills ISO 6346 check-digit-verified container codes (or high-confidence plates) into untouched Vehicle ID fields, and displays click-to-apply suggestion chips with crop thumbnails.',
+            },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
         adminLinkLabel: 'Open SensorHub Admin & In-UI Operator Manual (`/sensorhub/admin`)',
@@ -369,6 +373,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 term: 'Nivel frío Parquet (`PARQUET_PRIMARY`)',
                 meaning: 'Modo predeterminado donde las particiones de 30 minutos de PostgreSQL se exportan a archivos Apache Parquet comprimidos con ZSTD.',
+            },
+            {
+                term: 'OCR de contenedores y matrículas (`ocrConfig`)',
+                meaning: 'OCR asíncrono en segundo plano opcional por carril (desactivado de forma predeterminada). Cuando se activa en un carril, muestrea fotogramas según lo permitan los recursos de CPU y memoria, completa automáticamente contenedores ISO 6346 con dígito de control válido (o matrículas de alta confianza) en el campo Vehículo si no se ha editado y muestra sugerencias clicables con recorte de evidencia.',
             },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
@@ -523,6 +531,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Niveau froid Parquet (`PARQUET_PRIMARY`)',
                 meaning: 'Mode par défaut où les partitions PostgreSQL de 30 minutes sont exportées en fichiers Apache Parquet compressés ZSTD.',
             },
+            {
+                term: 'OCR conteneurs et plaques (`ocrConfig`)',
+                meaning: 'OCR asynchrone en arrière-plan optionnel par voie (désactivé par défaut). Lorsqu’il est activé sur une voie, OSCAR analyse les images selon la disponibilité CPU/mémoire, préremplit les codes conteneur ISO 6346 à chiffre de contrôle valide (ou plaques à haute confiance) dans le champ Véhicule non modifié et affiche des suggestions cliquables avec vignette.',
+            },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
         adminLinkLabel: 'Ouvrir l’administration SensorHub et le manuel intégré (`/sensorhub/admin`)',
@@ -675,6 +687,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 term: 'Ψυχρό επίπεδο Parquet (`PARQUET_PRIMARY`)',
                 meaning: 'Προεπιλεγμένη λειτουργία όπου τα τμήματα 30 λεπτών της PostgreSQL εξάγονται σε αρχεία Apache Parquet συμπιεσμένα με ZSTD.',
+            },
+            {
+                term: 'OCR εμπορευματοκιβωτίων & πινακίδων (`ocrConfig`)',
+                meaning: 'Προαιρετικό ασύγχρονο OCR παρασκηνίου ανά λωρίδα (απενεργοποιημένο από προεπιλογή). Όταν ενεργοποιηθεί σε λωρίδα, αναλύει καρέ ανάλογα με τους διαθέσιμους πόρους CPU/μνήμης, συμπληρώνει αυτόματα έγκυρους κωδικούς ISO 6346 (ή πινακίδες υψηλής εμπιστοσύνης) στο πεδίο Οχήματος εφόσον δεν έχει τροποποιηθεί και εμφανίζει επιλέξιμες προτάσεις με μικρογραφία.',
             },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',

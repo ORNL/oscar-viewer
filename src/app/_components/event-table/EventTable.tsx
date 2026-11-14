@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
-import {Alert, Box, Button, Snackbar} from "@mui/material";
+import {Alert, Box, Button, Snackbar, Tooltip} from "@mui/material";
 import {useSelector} from "react-redux";
 import {
     DataGrid,
@@ -10,6 +10,7 @@ import {
     GridCellParams,
     gridClasses,
     GridColDef,
+    GridColumnVisibilityModel,
     GridRowParams,
     GridRowSelectionModel,
 } from "@mui/x-data-grid";
@@ -110,6 +111,8 @@ import {
     isAbortRequestError,
     useAbortableEventQueries,
 } from "@/lib/data/oscar/EventTableRequests";
+import {formatIso6346} from "@/lib/data/oscar/adjudication/Iso6346";
+import {useVehicleOcrMap} from "@/app/_components/event-table/useVehicleOcrMap";
 
 export {fetchCollectionDataWithSignal, isAbortRequestError};
 
@@ -172,6 +175,17 @@ export default function EventTable({
 
     const stableLaneMap = useMemo(() => convertToMap(laneMap), [laneMap]);
     const [paginationModel, setPaginationModel] = useState({page: 0, pageSize: PAGE_SIZE});
+    const [columnVisibilityModel, setColumnVisibilityModel] = useState<GridColumnVisibilityModel>(() => ({
+        adjudicatedIds: viewAdjudicated,
+        adjudicationCode: false,
+        vehicleId: false,
+    }));
+    const [syncedViewAdjudicated, setSyncedViewAdjudicated] = useState(viewAdjudicated);
+    if (syncedViewAdjudicated !== viewAdjudicated) {
+        setSyncedViewAdjudicated(viewAdjudicated);
+        setColumnVisibilityModel(previous => ({...previous, adjudicatedIds: viewAdjudicated}));
+    }
+    const wantsVehicleIdColumn = Boolean(columnVisibilityModel.vehicleId);
     const [filterEpoch, setFilterEpoch] = useState(0);
     const [filter, setFilter] = useState<EventFilterGroup>(() => createEventFilterGroup());
     const [filterDialogOpen, setFilterDialogOpen] = useState(false);
@@ -1447,6 +1461,103 @@ export default function EventTable({
         return {success: successful.length, failed: failed.length};
     };
 
+    const visibleOcrLanes = useMemo<LaneMapEntry[]>(() => {
+        if (!wantsVehicleIdColumn) return [];
+        const result: LaneMapEntry[] = [];
+        for (const lane of stableLaneMap.values()) {
+            if (tableMode === "lanelog" && currentLane && lane.laneName !== currentLane) continue;
+            result.push(lane);
+        }
+        return result;
+    }, [currentLane, stableLaneMap, tableMode, wantsVehicleIdColumn]);
+
+    const ocrWindowStartIso = useMemo(() => {
+        if (!wantsVehicleIdColumn) return pageLoadedTime;
+        let earliestMs = Number.POSITIVE_INFINITY;
+        for (const row of rows) {
+            const ms = Date.parse(row.startTime || row.endTime);
+            if (Number.isFinite(ms) && ms < earliestMs) {
+                earliestMs = ms;
+            }
+        }
+        if (Number.isFinite(earliestMs)) {
+            const bucketedMs = Math.floor(Math.max(0, earliestMs - 60_000) / 900_000) * 900_000;
+            return new Date(bucketedMs).toISOString();
+        }
+        const fallbackBaseMs = Date.parse(pageLoadedTime);
+        const baseMs = Number.isFinite(fallbackBaseMs) ? fallbackBaseMs : Date.now();
+        return new Date(Math.max(0, baseMs - 86_400_000)).toISOString();
+    }, [pageLoadedTime, rows, wantsVehicleIdColumn]);
+
+    const {ocrByObsId, adjudicatedVehicleIdByObsId} = useVehicleOcrMap({
+        enabled: wantsVehicleIdColumn,
+        lanes: visibleOcrLanes,
+        windowStartIso: ocrWindowStartIso,
+    });
+
+    const pendingQuietResolutionIdsRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (!wantsVehicleIdColumn || rows.length === 0) return;
+        const unresolved = rows.filter(
+            row => !row.occupancyObsId && !pendingQuietResolutionIdsRef.current.has(eventSelectionKey(row)),
+        );
+        if (unresolved.length === 0) return;
+        const controller = new AbortController();
+        let active = true;
+        for (const row of unresolved) {
+            const lane = findLaneByDataStreamId(row.dataStreamId) ?? stableLaneMap.get(row.laneId);
+            if (!lane) continue;
+            const rowKey = eventSelectionKey(row);
+            pendingQuietResolutionIdsRef.current.add(rowKey);
+            void resolveRealtimeEventForNotification(row, lane, controller.signal)
+                .then(resolved => {
+                    if (!active || controller.signal.aborted) return;
+                    if (resolved.occupancyObsId && resolved !== row) {
+                        replaceRealtimeEventIdentity(row, resolved);
+                    }
+                })
+                .catch((): void => {})
+                .finally(() => {
+                    pendingQuietResolutionIdsRef.current.delete(rowKey);
+                });
+        }
+        return () => {
+            active = false;
+            controller.abort();
+        };
+    }, [findLaneByDataStreamId, replaceRealtimeEventIdentity, rows, stableLaneMap, wantsVehicleIdColumn]);
+
+    const displayRows = useMemo<EventTableData[]>(() => {
+        if (!wantsVehicleIdColumn) return rows;
+        if (ocrByObsId.size === 0 && adjudicatedVehicleIdByObsId.size === 0) return rows;
+        let changed = false;
+        const mapped = rows.map(row => {
+            const obsId = row.occupancyObsId;
+            if (!obsId) return row;
+            const adjVehicleId = adjudicatedVehicleIdByObsId.get(obsId);
+            if (adjVehicleId) {
+                if (row.vehicleId === adjVehicleId && !row.vehicleIdFromOcr) return row;
+                changed = true;
+                const clone = row.clone();
+                clone.setVehicleId(adjVehicleId, false);
+                return clone;
+            }
+            const ocrCandidate = ocrByObsId.get(obsId);
+            if (ocrCandidate?.value) {
+                const formatted = ocrCandidate.kind === "container" && ocrCandidate.isoChecksumValid
+                    ? formatIso6346(ocrCandidate.value)
+                    : ocrCandidate.value;
+                if (row.vehicleId === formatted && row.vehicleIdFromOcr) return row;
+                changed = true;
+                const clone = row.clone();
+                clone.setVehicleId(formatted, true);
+                return clone;
+            }
+            return row;
+        });
+        return changed ? mapped : rows;
+    }, [adjudicatedVehicleIdByObsId, ocrByObsId, rows, wantsVehicleIdColumn]);
+
     const renderCompactHeader = useCallback((label: string) => {
         const unitMatch = label.match(/^(.*?)\s*(\([^)]+\))$/);
         if (unitMatch) {
@@ -1689,6 +1800,64 @@ export default function EventTable({
             valueFormatter: (value: number | null) => value === null || value === undefined ? "—" : formatAdjudicationCodeLabel(value),
         },
         {
+            field: "vehicleId",
+            headerName: t("vehicleId"),
+            minWidth: 124,
+            flex: 0.9,
+            sortable: false,
+            filterable: false,
+            renderHeader: () => renderCompactHeader(t("vehicleId")),
+            valueGetter: (_value, row) => row.vehicleId ?? "",
+            renderCell: params => {
+                const value = params.row.vehicleId;
+                if (!value) {
+                    return (
+                        <Box component="span" sx={{color: "text.secondary", fontSize: "0.8rem"}}>
+                            —
+                        </Box>
+                    );
+                }
+                if (params.row.vehicleIdFromOcr) {
+                    const label = `${value} (${t("ocrShort")})`;
+                    return (
+                        <Tooltip title={t("ocrTablePendingHint")} arrow enterTouchDelay={0}>
+                            <Box
+                                component="span"
+                                sx={{
+                                    fontFamily: "monospace",
+                                    fontStyle: "italic",
+                                    fontSize: "0.8rem",
+                                    color: "text.secondary",
+                                    minInlineSize: 0,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                }}
+                            >
+                                {label}
+                            </Box>
+                        </Tooltip>
+                    );
+                }
+                return (
+                    <Box
+                        component="span"
+                        sx={{
+                            fontFamily: "monospace",
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            minInlineSize: 0,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                        }}
+                    >
+                        {value}
+                    </Box>
+                );
+            },
+        },
+        {
             field: "Menu",
             headerName: "",
             type: "actions",
@@ -1738,9 +1907,11 @@ export default function EventTable({
             )}
             <DataGrid
                 localeText={getDataGridLocaleText(language)}
-                rows={rows}
+                rows={displayRows}
                 getRowId={eventSelectionKey}
                 columns={columns}
+                columnVisibilityModel={columnVisibilityModel}
+                onColumnVisibilityModelChange={setColumnVisibilityModel}
                 columnHeaderHeight={48}
                 rowHeight={48}
                 loading={loading}
@@ -1801,7 +1972,6 @@ export default function EventTable({
                 }}
                 initialState={{
                     sorting: {sortModel: [{field: "status", sort: "asc"}]},
-                    columns: {columnVisibilityModel: {adjudicatedIds: viewAdjudicated, adjudicationCode: false}},
                 }}
                 getCellClassName={(params: GridCellParams<any, any, string>) => {
                     if (params.value === "Gamma") return "highlightGamma";

@@ -53,6 +53,11 @@ import {useLanguage} from '@/app/contexts/LanguageContext';
 import AlarmQrExportButton from "@/app/_components/alarm-transfer/AlarmQrExportButton";
 import ShareOccupancyButton from "@/app/_components/event-details/ShareOccupancyButton";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
+import VehicleIdOcr from "@/app/_components/adjudication/VehicleIdOcr";
+import {
+    IVehicleOcrResult,
+    selectAutoFillCandidate,
+} from "@/lib/data/oscar/adjudication/VehicleOcr";
 
 export function EventPreview() {
     const { isDesktop } = useBreakpoint();
@@ -82,9 +87,42 @@ export function EventPreview() {
     const [adjFormData, setAdjFormData] = useState<IAdjudicationData | null>();
     const [notes, setNotes] = useState<string>("");
     const [vehicleId, setVehicleId] = useState<string>("");
+    const [vehicleIdTouched, setVehicleIdTouched] = useState<boolean>(false);
+    const [vehicleIdAutoFilled, setVehicleIdAutoFilled] = useState<boolean>(false);
+    const [ocrResults, setOcrResults] = useState<IVehicleOcrResult[]>([]);
     const [adjudicationCode, setAdjudicationCode] = useState<AdjudicationCode>(AdjudicationCodes.codes[0]);
     const [adjudication, setAdjudication] = useState<AdjudicationData | null>();
     const [secondaryInspection, setSecondaryInspection] = useState<"NONE" | "COMPLETED"| "REQUESTED" | "">("");
+
+    const previewEventIdentityKey = eventPreview.eventData
+        ? `${eventPreview.eventData.laneId ?? ""}|${eventPreview.eventData.occupancyCount ?? ""}|${eventPreview.eventData.startTime ?? ""}`
+        : "";
+    const [syncedPreviewIdentityKey, setSyncedPreviewIdentityKey] = useState<string>(previewEventIdentityKey);
+    if (syncedPreviewIdentityKey !== previewEventIdentityKey) {
+        setSyncedPreviewIdentityKey(previewEventIdentityKey);
+        setVehicleId("");
+        setVehicleIdTouched(false);
+        setVehicleIdAutoFilled(false);
+        setOcrResults([]);
+    }
+
+    useEffect(() => {
+        if (vehicleIdTouched || vehicleId.trim().length > 0) return;
+        const candidate = selectAutoFillCandidate(ocrResults);
+        if (!candidate) return;
+        setVehicleId(candidate.value);
+        setVehicleIdAutoFilled(true);
+        setAdjFormData(previous => previous ? {...previous, vehicleId: candidate.value} : previous);
+        setAdjudication(previous => {
+            if (!previous) return previous;
+            const updated = Object.assign(
+                Object.create(Object.getPrototypeOf(previous)),
+                previous,
+            ) as AdjudicationData;
+            updated.setVehicleId(candidate.value);
+            return updated;
+        });
+    }, [ocrResults, vehicleId, vehicleIdTouched]);
 
     //snackbar
     const [adjSnackMsg, setAdjSnackMsg] = useState('');
@@ -128,8 +166,28 @@ export function EventPreview() {
     }
 
     const handleVehicleId = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setVehicleId(event.target.value);
+        const nextValue = event.target.value;
+        setVehicleId(nextValue);
+        setVehicleIdTouched(true);
+        setVehicleIdAutoFilled(false);
+        setAdjFormData(previous => previous ? {...previous, vehicleId: nextValue} : previous);
     }
+
+    const handleOcrSelect = (selected: string) => {
+        setVehicleId(selected);
+        setVehicleIdTouched(true);
+        setVehicleIdAutoFilled(false);
+        setAdjFormData(previous => previous ? {...previous, vehicleId: selected} : previous);
+        setAdjudication(previous => {
+            if (!previous) return previous;
+            const updated = Object.assign(
+                Object.create(Object.getPrototypeOf(previous)),
+                previous,
+            ) as AdjudicationData;
+            updated.setVehicleId(selected);
+            return updated;
+        });
+    };
 
     const sendAdjudicationData = async () => {
         if (!adjudication) {
@@ -247,6 +305,8 @@ export function EventPreview() {
         setAdjudication(null);
         setNotes("");
         setVehicleId("");
+        setVehicleIdTouched(true);
+        setVehicleIdAutoFilled(false);
         setAdjudicationCode(AdjudicationCodes.codes[0]);
     }
 
@@ -444,7 +504,19 @@ export function EventPreview() {
                     name="vehicleId"
                     value={vehicleId}
                     onChange={handleVehicleId}
+                    helperText={vehicleIdAutoFilled ? t('ocrAutoFilledHelper') : undefined}
+                    inputProps={{
+                        autoCorrect: 'off',
+                        autoCapitalize: 'none',
+                        spellCheck: false,
+                    }}
                     fullWidth
+                />
+                <VehicleIdOcr
+                    event={eventPreview.eventData}
+                    selectedValue={vehicleId}
+                    onResults={setOcrResults}
+                    onSelectValue={handleOcrSelect}
                 />
             </Grid>
 

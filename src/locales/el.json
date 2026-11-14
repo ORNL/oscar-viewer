@@ -566,5 +566,13 @@
   "timeWindow15m": "15λ",
   "timeWindow1h": "1ώ",
   "timeWindow24h": "24ώ",
-  "timeWindow15d": "15η"
+  "timeWindow15d": "15η",
+  "ocrSuggestions": "Προτάσεις OCR",
+  "ocrContainerLabel": "Εμπορευματοκιβώτιο ISO 6346",
+  "ocrPlateLabel": "Πινακίδα κυκλοφορίας",
+  "ocrChecksumValid": "Το ψηφίο ελέγχου επαληθεύτηκε",
+  "ocrConfidence": "Εμπιστοσύνη: {confidence}% ({frames} καρέ)",
+  "ocrAutoFilledHelper": "Συμπληρώθηκε αυτόματα από το OCR λωρίδας — επεξεργαστείτε ή επιλέξτε άλλη πρόταση εάν χρειάζεται.",
+  "ocrShort": "OCR",
+  "ocrTablePendingHint": "Προτάθηκε από το OCR λωρίδας (σε αναμονή αξιολόγησης χειριστή)"
 }

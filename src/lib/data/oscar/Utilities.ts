@@ -12,7 +12,7 @@ import {
     CONNECTION_DEF, DAILY_FILE_DEF, DOSE_DEF, DURATION_DEF, END_DEF, GAMMA_COUNT_DEF, HLS_VIDEO_DEF,
     LINEARSPEC_DEF, LOCATION_VECTOR_DEF, NATIONAL_DEF,
     NEUTRON_COUNT_DEF,
-    OCCUPANCY_PILLAR_DEF, OCCUPANCY_STATUS_DEF, OGC_CONNECTION_DEF, RAPISCAN_DAILY_FILE_DEF, RASTER_IMAGE_DEF, N42_DEF, REPORT_DEF, SENSOR_LOCATION_DEF,
+    OCCUPANCY_PILLAR_DEF, OCCUPANCY_STATUS_DEF, OCR_DEF, OGC_CONNECTION_DEF, RAPISCAN_DAILY_FILE_DEF, RASTER_IMAGE_DEF, N42_DEF, REPORT_DEF, SENSOR_LOCATION_DEF,
     SITE_DIAGRAM_DEF, SPEED_DEF, START_DEF,
     TAMPER_STATUS_DEF,
     THRESHOLD_DEF, VIDEO_FRAME_DEF, WEB_ID_DEF
@@ -184,6 +184,20 @@ export function isDailyFileDataStream(datastream: typeof DataStream): boolean {
     return includesDefinition(definitions, DAILY_FILE_DEF)
         || includesDefinition(definitions, RAPISCAN_DAILY_FILE_DEF)
         || includesDefinition(definitions, ASPECT_DAILY_FILE_DEF);
+}
+
+export function isVehicleOcrDataStream(datastream: typeof DataStream): boolean {
+    const definitions = getObservedDefinitions(datastream);
+    const outputName = String(datastream?.properties?.outputName ?? "").toLowerCase();
+    return outputName === "vehicleocr"
+        || includesDefinition(definitions, OCR_DEF);
+}
+
+export function isAdjudicationDataStream(datastream: typeof DataStream): boolean {
+    const definitions = getObservedDefinitions(datastream);
+    const outputName = String(datastream?.properties?.outputName ?? "").toLowerCase();
+    return outputName === "adjudication"
+        || includesDefinition(definitions, ADJ_DEF);
 }
 
 

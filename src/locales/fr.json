@@ -566,5 +566,13 @@
   "timeWindow15m": "15m",
   "timeWindow1h": "1h",
   "timeWindow24h": "24h",
-  "timeWindow15d": "15j"
+  "timeWindow15d": "15j",
+  "ocrSuggestions": "Suggestions OCR",
+  "ocrContainerLabel": "Conteneur ISO 6346",
+  "ocrPlateLabel": "Plaque d’immatriculation",
+  "ocrChecksumValid": "Chiffre de contrôle vérifié",
+  "ocrConfidence": "Confiance : {confidence} % ({frames} image(s))",
+  "ocrAutoFilledHelper": "Prérempli par l’OCR de la voie — modifiez ou choisissez une autre suggestion si nécessaire.",
+  "ocrShort": "OCR",
+  "ocrTablePendingHint": "Suggéré par l’OCR de la voie (en attente d’adjudication opérateur)"
 }

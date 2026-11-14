@@ -23,6 +23,8 @@ export interface IEventTableData {
   foiId: string;
   videoPaths: string[]
   adjudicatedIds: string[]
+  vehicleId?: string;
+  vehicleIdFromOcr?: boolean;
 }
 
 export interface INationalTableData {

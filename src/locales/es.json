@@ -566,5 +566,13 @@
   "timeWindow15m": "15m",
   "timeWindow1h": "1h",
   "timeWindow24h": "24h",
-  "timeWindow15d": "15d"
+  "timeWindow15d": "15d",
+  "ocrSuggestions": "Sugerencias de OCR",
+  "ocrContainerLabel": "Contenedor ISO 6346",
+  "ocrPlateLabel": "Matrícula",
+  "ocrChecksumValid": "Dígito de control verificado",
+  "ocrConfidence": "Confianza: {confidence}% ({frames} fotograma(s))",
+  "ocrAutoFilledHelper": "Completado automáticamente por OCR del carril — edite o elija otra sugerencia si es necesario.",
+  "ocrShort": "OCR",
+  "ocrTablePendingHint": "Sugerido por el OCR del carril (pendiente de adjudicación del operador)"
 }
