@@ -248,11 +248,21 @@ export async function lookupEventByObservationId(
     throw new EventLookupError("not-found", "The occupancy was not found.");
 }
 
+function sameTimestampInstant(left: unknown, right: unknown): boolean {
+    if (typeof left !== "string" || typeof right !== "string") return false;
+    if (left === right) return true;
+    const leftMs = Date.parse(left);
+    const rightMs = Date.parse(right);
+    return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs;
+}
+
 /**
  * Resolves the durable ID for a freshly received realtime event. Realtime
- * messages can arrive before the REST resource ID is known, but they retain
- * the occupancy datastream and exact start/end values needed for this bounded
- * lookup.
+ * messages can arrive before the REST resource ID is known, and JavaScript
+ * `toISOString()` pads trailing millisecond zeros (`.530Z`, `.000Z`) that
+ * SensorHub's JSON serializer trims (`.53Z`, `Z`). Try the exact `filter`
+ * lookup first and fall back to a bounded `phenomenonTime` scan matched by
+ * parsed epoch milliseconds when trailing-zero formatting differs.
  */
 export async function resolveEventObservationId(
     event: EventTableData,
@@ -270,7 +280,37 @@ export async function resolveEventObservationId(
     if (!stream)
         throw new EventLookupError("unavailable", "The occupancy datastream is unavailable.");
 
-    const params = new URLSearchParams({
+    const findMatchingObservation = (items: unknown): any => {
+        const observations = Array.isArray(items) ? items : [];
+        return observations.find((observation: any) => {
+            const properties = observation?.properties ?? observation;
+            const result = properties?.result ?? observation?.result;
+            return properties?.["datastream@id"] === stream.properties.id
+                && sameTimestampInstant(result?.startTime, event.startTime)
+                && sameTimestampInstant(result?.endTime, event.endTime);
+        });
+    };
+
+    const fetchObservationsPage = async (params: URLSearchParams, requestSignal: AbortSignal) => {
+        const response = await fetchImpl(
+            `${lane.parentNode.getConnectedSystemsEndpoint(false)}/observations?${params}`,
+            {
+                credentials: "include",
+                headers: {
+                    ...lane.parentNode.getBasicAuthHeader(),
+                    Accept: "application/om+json",
+                },
+                signal: requestSignal,
+            },
+        );
+        if (NOT_FOUND_HTTP_STATUSES.has(response.status))
+            throw new EventLookupError("not-found", "The occupancy observation is not available yet.");
+        if (!response.ok)
+            throw new EventLookupError("unavailable", `Observation lookup returned HTTP ${response.status}`);
+        return response.json();
+    };
+
+    const exactParams = new URLSearchParams({
         dataStream: stream.properties.id,
         filter: `startTime='${event.startTime}' AND endTime='${event.endTime}'`,
         format: "application/om+json",
@@ -279,31 +319,27 @@ export async function resolveEventObservationId(
     });
     return runWithRequestDeadline(
         async requestSignal => {
-            const response = await fetchImpl(
-                `${lane.parentNode.getConnectedSystemsEndpoint(false)}/observations?${params}`,
-                {
-                    credentials: "include",
-                    headers: {
-                        ...lane.parentNode.getBasicAuthHeader(),
-                        Accept: "application/om+json",
-                    },
-                    signal: requestSignal,
-                },
-            );
-            if (NOT_FOUND_HTTP_STATUSES.has(response.status))
-                throw new EventLookupError("not-found", "The occupancy observation is not available yet.");
-            if (!response.ok)
-                throw new EventLookupError("unavailable", `Observation lookup returned HTTP ${response.status}`);
+            const payload = await fetchObservationsPage(exactParams, requestSignal);
+            let matching = findMatchingObservation(payload?.items);
 
-            const payload = await response.json();
-            const observations = Array.isArray(payload?.items) ? payload.items : [];
-            const matching = observations.find((observation: any) => {
-                const properties = observation?.properties ?? observation;
-                const result = properties?.result ?? observation?.result;
-                return properties?.["datastream@id"] === stream.properties.id
-                    && result?.startTime === event.startTime
-                    && result?.endTime === event.endTime;
-            });
+            if (!matching?.id) {
+                const startMs = Date.parse(event.startTime);
+                const endMs = Date.parse(event.endTime);
+                if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+                    const lowIso = new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString();
+                    const highIso = new Date(Math.max(startMs, endMs) + 5000).toISOString();
+                    const rangeParams = new URLSearchParams({
+                        dataStream: stream.properties.id,
+                        phenomenonTime: `${lowIso}/${highIso}`,
+                        format: "application/om+json",
+                        order: "desc",
+                        limit: "25",
+                    });
+                    const rangePayload = await fetchObservationsPage(rangeParams, requestSignal);
+                    matching = findMatchingObservation(rangePayload?.items);
+                }
+            }
+
             if (!matching?.id)
                 throw new EventLookupError("not-found", "The occupancy observation is not available yet.");
 

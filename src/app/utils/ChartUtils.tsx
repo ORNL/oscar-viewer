@@ -100,6 +100,140 @@ export const EVENT_CHART_MAX_VALUES = 1500;
 export const LIVE_CHART_MAX_VALUES = 60;
 const MULTI_CURVE_COALESCE_DELAY_MS = 16;
 
+export interface EventChartBoundsMs {
+    minMs: number;
+    maxMs: number;
+}
+
+export type SafeTimeScaleUnit = 'second' | 'minute' | 'hour' | 'day' | false;
+
+/**
+ * Expands an occupancy `[startTime, endTime]` window to whole-second boundaries plus padding so
+ * 1 Hz RPM count/threshold samples emitted on whole seconds just before sub-second occupancy
+ * start times (for example `16:57:36.000Z` for an occupancy starting at `16:57:36.501Z`) are
+ * retained in historical event detail and preview queries.
+ */
+export function expandEventSampleWindow(
+    startTime: unknown,
+    endTime: unknown,
+    padBeforeMs = 1000,
+    padAfterMs = 1000,
+): {startTime: string; endTime: string} {
+    const rawStart = typeof startTime === 'string' ? startTime : String(startTime ?? '');
+    const rawEnd = typeof endTime === 'string' ? endTime : String(endTime ?? '');
+    const startMs = Date.parse(rawStart);
+    const endMs = Date.parse(rawEnd);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+        return {startTime: rawStart, endTime: rawEnd};
+    }
+    const lowMs = Math.min(startMs, endMs);
+    const highMs = Math.max(startMs, endMs);
+    const expandedStartMs = Math.max(0, Math.floor(lowMs / 1000) * 1000 - Math.max(0, padBeforeMs));
+    const expandedEndMs = Math.max(
+        expandedStartMs + 1000,
+        Math.ceil(highMs / 1000) * 1000 + Math.max(0, padAfterMs),
+    );
+    return {
+        startTime: new Date(expandedStartMs).toISOString(),
+        endTime: new Date(expandedEndMs).toISOString(),
+    };
+}
+
+/**
+ * Computes finite epoch-millisecond bounds for an event chart's X axis so empty datastreams never
+ * cause Chart.js TimeScale to default its upper bound to `Date.now()`.
+ */
+export function getEventChartBoundsMs(
+    startTime: unknown,
+    endTime: unknown,
+    padBeforeMs = 1000,
+    padAfterMs = 1000,
+): EventChartBoundsMs | null {
+    const startMs = typeof startTime === 'number'
+        ? startTime
+        : Date.parse(typeof startTime === 'string' ? startTime : String(startTime ?? ''));
+    const endMs = typeof endTime === 'number'
+        ? endTime
+        : Date.parse(typeof endTime === 'string' ? endTime : String(endTime ?? ''));
+
+    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+        const lowMs = Math.min(startMs, endMs);
+        const highMs = Math.max(startMs, endMs);
+        const minMs = Math.max(0, Math.floor(lowMs / 1000) * 1000 - Math.max(0, padBeforeMs));
+        const maxMs = Math.max(
+            minMs + 1000,
+            Math.ceil(highMs / 1000) * 1000 + Math.max(0, padAfterMs),
+        );
+        return {minMs, maxMs};
+    }
+
+    const anchorMs = Number.isFinite(startMs) ? startMs : (Number.isFinite(endMs) ? endMs : NaN);
+    if (Number.isFinite(anchorMs)) {
+        const minMs = Math.max(0, Math.floor(anchorMs / 1000) * 1000 - Math.max(0, padBeforeMs));
+        return {minMs, maxMs: minMs + 10_000};
+    }
+
+    return null;
+}
+
+/**
+ * Selects a Chart.js TimeScale unit guaranteed to stay far below Chart.js's `100,000 * stepSize`
+ * tick generation cap, overriding `osh-js` ChartJsView's hardcoded `time.unit = 'second'`.
+ */
+export function selectSafeTimeScaleUnit(spanMs: number): SafeTimeScaleUnit {
+    if (!Number.isFinite(spanMs) || spanMs < 0) return false;
+    if (spanMs <= 300_000) return 'second';       // <= 5 minutes (<= 300 ticks)
+    if (spanMs <= 18_000_000) return 'minute';    // <= 5 hours (<= 300 ticks)
+    if (spanMs <= 604_800_000) return 'hour';     // <= 7 days (<= 168 ticks)
+    if (spanMs <= 31_536_000_000) return 'day';   // <= 365 days (<= 365 ticks)
+    return false;
+}
+
+export function buildEventTimeScaleOptions(
+    startTime: unknown,
+    endTime: unknown,
+    titleText: string,
+    titleExtra: Record<string, any> = {},
+): Record<string, any> {
+    const bounds = getEventChartBoundsMs(startTime, endTime);
+    const unit = bounds ? selectSafeTimeScaleUnit(bounds.maxMs - bounds.minMs) : false;
+    return {
+        type: 'time',
+        ...(bounds ? {min: bounds.minMs, max: bounds.maxMs} : {}),
+        time: {
+            unit,
+            minUnit: 'second',
+        },
+        title: {
+            display: true,
+            text: titleText,
+            ...titleExtra,
+        },
+    };
+}
+
+export function clampEventAnnotationTime(
+    currentTime: unknown,
+    bounds: EventChartBoundsMs | null,
+): Date | null {
+    if (currentTime === null || currentTime === undefined || currentTime === '') {
+        return null;
+    }
+    const ms = currentTime instanceof Date
+        ? currentTime.getTime()
+        : typeof currentTime === 'number'
+            ? currentTime
+            : Date.parse(String(currentTime));
+    if (!Number.isFinite(ms)) {
+        return null;
+    }
+    if (!bounds) {
+        return new Date(ms);
+    }
+    const clampedMs = Math.min(bounds.maxMs, Math.max(bounds.minMs, ms));
+    return new Date(clampedMs);
+}
+
 /**
  * Patches a ChartJsView instance so that:
  * 1. Every buffered CurveLayer series (`chartView.buffer[curveId]`) is flushed to
@@ -111,6 +245,9 @@ const MULTI_CURVE_COALESCE_DELAY_MS = 16;
  *    (16 ms), keeping 24/7 operator wallboards flat in CPU usage.
  * 3. When `sortPointsChronologically` is enabled, each dataset's points are sorted
  *    by timestamp (`a.x - b.x`) so historical replays render in chronological order.
+ * 4. Single-sample datasets on `pointRadius: 0` detector charts promote `pointRadius`
+ *    to `4` so 1-second occupancies remain visible, and any Chart.js TimeScale range
+ *    overflow self-heals by switching `scales.x.time.unit` to `false` (auto-unit).
  */
 export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronologically = false): void {
     if (!chartView?.chart?.update) return;
@@ -121,6 +258,7 @@ export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronolog
         chartView.datasetOptions = {};
     }
 
+    const hideMultiPointMarkers = chartView.datasetOptions?.pointRadius === 0;
     const originalUpdate = chartView.chart.update.bind(chartView.chart);
     let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
     let destroyed = false;
@@ -133,12 +271,40 @@ export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronolog
                 }
             }
         }
-        if (shouldSort && Array.isArray(chartView.chart?.data?.datasets)) {
+        if (Array.isArray(chartView.chart?.data?.datasets)) {
             for (const dataset of chartView.chart.data.datasets) {
-                if (dataset.data?.length > 1) {
+                if (shouldSort && dataset.data?.length > 1) {
                     dataset.data.sort((a: any, b: any) => a.x - b.x);
                 }
+                if (hideMultiPointMarkers) {
+                    dataset.pointRadius = dataset.data?.length === 1 ? 4 : 0;
+                }
             }
+        }
+    };
+
+    const safeOriginalUpdate = (mode?: any) => {
+        try {
+            originalUpdate(mode);
+        } catch (error) {
+            const xScale = chartView.chart?.options?.scales?.x;
+            if (xScale?.time && xScale.time.unit !== false) {
+                console.warn('Chart TimeScale update overflowed fixed unit; falling back to auto unit:', error);
+                xScale.time.unit = false;
+                delete xScale.min;
+                delete xScale.max;
+                if (chartView.chart?.options?.plugins?.annotation) {
+                    chartView.chart.options.plugins.annotation = {annotations: {}};
+                }
+                try {
+                    originalUpdate(mode);
+                    return;
+                } catch (retryError) {
+                    console.warn('Chart update retry failed:', retryError);
+                    return;
+                }
+            }
+            console.warn('Chart update failed:', error);
         }
     };
 
@@ -152,7 +318,7 @@ export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronolog
                 coalesceTimer = null;
                 if (destroyed) return;
                 syncBuffersAndSort(sortPointsChronologically);
-                originalUpdate('none');
+                safeOriginalUpdate('none');
             }, MULTI_CURVE_COALESCE_DELAY_MS);
             return;
         }
@@ -162,7 +328,7 @@ export function patchChartViewMultiCurveSync(chartView: any, sortPointsChronolog
             coalesceTimer = null;
         }
         syncBuffersAndSort(sortPointsChronologically);
-        originalUpdate(mode);
+        safeOriginalUpdate(mode);
     };
 
     const originalDestroy = typeof chartView.destroy === 'function'
@@ -404,13 +570,23 @@ export function createNSigmaCalcViewCurve(gammaDatasource: typeof ConSysApi, lat
 
 export async function getObservations(startTime: any, endTime: any, datastream: any){
 
-    let lastestGammaBackground: number;
+    let lastestGammaBackground: number | undefined;
 
     let res = await datastream.searchObservations(new ObservationFilter({phenomenonTime: `${startTime}/${endTime}`}), 1);
 
-    let newObs = await res.nextPage();
+    let newObs = (await res.nextPage()) ?? [];
+    if (newObs.length === 0) {
+        const expanded = expandEventSampleWindow(startTime, endTime);
+        if (expanded.startTime !== String(startTime ?? '') || expanded.endTime !== String(endTime ?? '')) {
+            const fallbackRes = await datastream.searchObservations(
+                new ObservationFilter({phenomenonTime: `${expanded.startTime}/${expanded.endTime}`}),
+                1,
+            );
+            newObs = (await fallbackRes.nextPage()) ?? [];
+        }
+    }
 
-    (newObs ?? []).map((ob: any) =>{
+    newObs.map((ob: any) =>{
         const lastGB = ob?.result?.latestGammaBackground;
 
         if(lastGB != null)

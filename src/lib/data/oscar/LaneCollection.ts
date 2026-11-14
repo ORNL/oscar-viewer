@@ -11,6 +11,7 @@ import ControlStream from "osh-js/source/core/consysapi/controlstream/ControlStr
 import {INode} from "@/lib/data/osh/Node";
 import {Mode} from "osh-js/source/core/datasource/Mode";
 import {EventType} from "osh-js/source/core/event/EventType";
+import {expandEventSampleWindow} from "@/app/utils/ChartUtils";
 
 type SharedConnectionState = {
     originalConnect: () => any;
@@ -252,19 +253,31 @@ export class LaneMapEntry {
     }
 
     addSystem(system: any) {
+        const id = system?.properties?.id;
+        if (id && this.systems.some((existing: any) => existing?.properties?.id === id)) {
+            return;
+        }
         this.systems.push(system);
     }
 
     addSystems(systems: any[]) {
-        this.systems.push(...systems);
+        for (const system of systems) {
+            this.addSystem(system);
+        }
     }
 
     addDataStream(datastream: typeof DataStream) {
+        const id = datastream?.properties?.id;
+        if (id && this.datastreams.some((existing: any) => existing?.properties?.id === id)) {
+            return;
+        }
         this.datastreams.push(datastream);
     }
 
     addDataStreams(datastreams: typeof DataStream[]) {
-        this.datastreams.push(...datastreams);
+        for (const datastream of datastreams) {
+            this.addDataStream(datastream);
+        }
     }
 
     addDataSource(datasource: typeof ConSysApi) {
@@ -280,11 +293,17 @@ export class LaneMapEntry {
     }
 
     addControlStream(controlStream: typeof ControlStream[]) {
+        const id = (controlStream as any)?.properties?.id;
+        if (id && this.controlStreams.some((existing: any) => existing?.properties?.id === id)) {
+            return;
+        }
         this.controlStreams.push(controlStream);
     }
 
     addControlStreams(controlStreams: typeof ControlStream[]) {
-        this.controlStreams.push(...controlStreams)
+        for (const controlStream of controlStreams) {
+            this.addControlStream(controlStream);
+        }
     }
 
     setIsRS350Backpack(value: boolean) {
@@ -489,39 +508,39 @@ export class LaneMapEntry {
         dsMap.set('gammaTrshld', []);
         dsMap.set('connection', []);
 
+        const sampleWindow = expandEventSampleWindow(startTime, endTime);
+        const seenIds = new Set<string>();
+
         for (const ds of this.datastreams) {
-
-            const datasourceBatch = this.createBatchConSysApiFromDataStream(ds, startTime, endTime);
-
-            if (isOccupancyDataStream(ds)) {
-                let occArray = dsMap.get('occ')!;
-
-                occArray.push(datasourceBatch);
+            const dsId = ds?.properties?.id;
+            if (dsId) {
+                if (seenIds.has(dsId)) continue;
+                seenIds.add(dsId);
             }
 
-            if (isGammaDataStream(ds)) {
-                let gammaArray = dsMap.get('gamma')!;
-                gammaArray.push(datasourceBatch);
+            const isGamma = isGammaDataStream(ds);
+            const isNeutron = isNeutronDataStream(ds);
+            const isThreshold = isThresholdDataStream(ds);
+            if (!isGamma && !isNeutron && !isThreshold) {
+                continue;
             }
 
-            if (isNeutronDataStream(ds)) {
-                let neutronArray = dsMap.get('neutron')!;
-                neutronArray.push(datasourceBatch);
+            const datasourceBatch = this.createBatchConSysApiFromDataStream(
+                ds,
+                sampleWindow.startTime,
+                sampleWindow.endTime,
+            );
+
+            if (isGamma) {
+                dsMap.get('gamma')!.push(datasourceBatch);
             }
 
-            if (isTamperDataStream(ds)) {
-                let tamperArray = dsMap.get('tamper')!;
-                tamperArray.push(datasourceBatch);
+            if (isNeutron) {
+                dsMap.get('neutron')!.push(datasourceBatch);
             }
 
-            if (isThresholdDataStream(ds)) {
-                let gammaTrshldArray = dsMap.get('gammaTrshld')!;
-                gammaTrshldArray.push(datasourceBatch);
-            }
-
-            if (isConnectionDataStream(ds)) {
-                let connectionArray = dsMap.get('connection')!;
-                connectionArray.push(datasourceBatch);
+            if (isThreshold) {
+                dsMap.get('gammaTrshld')!.push(datasourceBatch);
             }
         }
         return dsMap;

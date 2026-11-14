@@ -374,4 +374,38 @@ describe("event UUID lookup", () => {
             expect((failure as EventLookupError).code).to.equal("unavailable");
         });
     });
+
+    it("resolves a live event when SensorHub trims trailing millisecond zeros (.53Z vs .530Z)", () => {
+        const lane50 = lane("node-50", "Lane50", "0i2g6");
+        const liveGammaEvent = {
+            occupancyObsId: null,
+            dataStreamId: "0i2g6",
+            startTime: "2026-11-14T20:55:55.530Z",
+            endTime: "2026-11-14T20:56:04.491Z",
+        } as any;
+
+        const fetcher = cy.stub()
+            .onFirstCall().resolves(response(200, {items: []}))
+            .onSecondCall().resolves(response(200, {
+                items: [{
+                    id: "0j1c5m3g",
+                    "datastream@id": "0i2g6",
+                    result: {
+                        occupancyCount: 1,
+                        startTime: "2026-11-14T20:55:55.53Z",
+                        endTime: "2026-11-14T20:56:04.491Z",
+                    },
+                }],
+            }));
+
+        cy.wrap(resolveEventObservationId(liveGammaEvent, lane50, fetcher)).then((eventId: any) => {
+            expect(eventId).to.equal("0j1c5m3g");
+            expect(fetcher).to.have.been.calledTwice;
+            const fallbackUrl = new URL(fetcher.secondCall.args[0]);
+            expect(fallbackUrl.searchParams.get("dataStream")).to.equal("0i2g6");
+            expect(fallbackUrl.searchParams.get("phenomenonTime")).to.equal(
+                "2026-11-14T20:55:53.530Z/2026-11-14T20:56:09.491Z",
+            );
+        });
+    });
 });

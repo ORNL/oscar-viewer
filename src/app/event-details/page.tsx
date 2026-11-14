@@ -12,6 +12,7 @@ import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {PictureAsPdfRounded} from "@mui/icons-material";
 import {useReactToPrint} from "react-to-print";
 import EventMedia from "../_components/event-preview/EventMedia";
+import {getEventPreviewIdentityKey} from "../_components/event-preview/EventPreview";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import AdjudicationDetail from "../_components/adjudication/AdjudicationDetail";
 import SuspenseLoad from "@/app/_components/SuspenseLoad";
@@ -282,18 +283,18 @@ export default function EventDetailsPage() {
     ]);
 
     useEffect(() => {
-        if (!sharedRequested) return;
+        if (!sharedRequested && !lookupRequested) return;
         let active = true;
         dispatch(setLatestGB(null));
         const threshold = laneEntry?.datastreams.find((stream: any) => isThresholdDataStream(stream)
-            && stream.properties["system@id"] === eventData?.rpmSystemId);
-        if (threshold && eventData) {
+            && (!eventData?.rpmSystemId || stream.properties["system@id"] === eventData.rpmSystemId));
+        if (threshold?.searchObservations && eventData) {
             getObservations(eventData.startTime, eventData.endTime, threshold).then(value => {
                 if (active) dispatch(setLatestGB(value ?? null));
-            }).catch(error => console.error("Failed to load shared occupancy background:", error));
+            }).catch(error => console.error("Failed to load occupancy background:", error));
         }
         return () => { active = false; };
-    }, [eventData, laneEntry, sharedRequested, dispatch]);
+    }, [eventData, laneEntry, lookupRequested, sharedRequested, dispatch]);
 
     useEffect(() => {
         setDatasourcesReady(false);
@@ -466,7 +467,7 @@ export default function EventDetailsPage() {
                                 <Alert severity="error">{t('eventDataLoadFailed')}</Alert>
                             ) : datasourcesReady && loadedEvent === eventData ? (
                                 <EventMedia
-                                    key={eventData.id}
+                                    key={getEventPreviewIdentityKey(eventData) || String(eventData.id)}
                                     selectedNode={laneEntry.parentNode}
                                     datasources={{
                                         gamma: gammaDatasources[0],

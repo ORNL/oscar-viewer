@@ -71,13 +71,28 @@ export async function loadSharedOccupancy(
 /** Live MQTT records may not yet include their persisted observation ID. */
 export async function resolveOccupancyId(event: EventTableData, lane: LaneMapEntry): Promise<string> {
     if (event.occupancyObsId) return event.occupancyObsId;
+    const startMs = new Date(event.startTime).getTime();
+    const endMs = new Date(event.endTime).getTime();
     const streams = lane.datastreams.filter((stream: any) => isOccupancyDataStream(stream)
         && (!event.dataStreamId || stream.properties.id === event.dataStreamId));
     const matches = await Promise.all(streams.map(async (stream: any) => {
         const query = await stream.searchObservations(new ObservationFilter({
             filter: `startTime='${new Date(event.startTime).toISOString()}' AND endTime='${new Date(event.endTime).toISOString()}'`,
         }), 2);
-        return (await query.nextPage()).filter((observation: any) => {
+        let items: any[] = (await query.nextPage()) ?? [];
+        if (items.length === 0 && Number.isFinite(startMs) && Number.isFinite(endMs)) {
+            const lowIso = new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString();
+            const highIso = new Date(Math.max(startMs, endMs) + 5000).toISOString();
+            const rangeQuery = await stream.searchObservations(new ObservationFilter({
+                phenomenonTime: `${lowIso}/${highIso}`,
+            }), 25);
+            items = ((await rangeQuery.nextPage()) ?? []).filter((observation: any) => {
+                const data = observation.properties ?? observation;
+                return Date.parse(data.result?.startTime ?? "") === startMs
+                    && Date.parse(data.result?.endTime ?? "") === endMs;
+            });
+        }
+        return items.filter((observation: any) => {
             const data = observation.properties ?? observation;
             return String(data.result?.occupancyCount) === String(event.occupancyCount);
         }).map((observation: any) => observation.properties?.id ?? observation.id);

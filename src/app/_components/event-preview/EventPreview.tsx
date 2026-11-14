@@ -52,12 +52,23 @@ import SuspenseLoad from "@/app/_components/SuspenseLoad";
 import {useLanguage} from '@/app/contexts/LanguageContext';
 import AlarmQrExportButton from "@/app/_components/alarm-transfer/AlarmQrExportButton";
 import ShareOccupancyButton from "@/app/_components/event-details/ShareOccupancyButton";
-import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
+import {buildEventDetailsHref, EventLookupError, resolveEventObservationId} from "@/lib/data/oscar/EventLookup";
 import VehicleIdOcr from "@/app/_components/adjudication/VehicleIdOcr";
 import {
     IVehicleOcrResult,
     selectAutoFillCandidate,
 } from "@/lib/data/oscar/adjudication/VehicleOcr";
+
+export function getEventPreviewIdentityKey(
+    eventData: Pick<EventTableData, "laneId" | "occupancyCount" | "startTime" | "endTime"> | null | undefined,
+): string {
+    if (!eventData) return "";
+    const startMs = Date.parse(eventData.startTime ?? "");
+    const endMs = Date.parse(eventData.endTime ?? "");
+    const normStart = Number.isFinite(startMs) ? String(startMs) : (eventData.startTime ?? "");
+    const normEnd = Number.isFinite(endMs) ? String(endMs) : (eventData.endTime ?? "");
+    return `${eventData.laneId ?? ""}|${eventData.occupancyCount ?? ""}|${normStart}|${normEnd}`;
+}
 
 export function EventPreview() {
     const { isDesktop } = useBreakpoint();
@@ -67,8 +78,6 @@ export function EventPreview() {
     const router = useRouter();
     const eventPreview = useSelector(selectEventPreview);
 
-    const prevEventIdRef = useRef<string | null>(null);
-
     const {laneMapRef, laneMapReady, readyLaneNames, scopedHref} = useContext(DataSourceContext);
     const laneReady = Boolean(
         eventPreview.eventData?.laneId && readyLaneNames.has(eventPreview.eventData.laneId));
@@ -77,6 +86,7 @@ export function EventPreview() {
         : undefined;
 
     const [datasourcesReady, setDatasourcesReady] = useState<boolean>(false);
+    const [loadedPreviewKey, setLoadedPreviewKey] = useState<string>("");
 
     // Chart Specifics
     const [gammaDatasources, setGammaDatasources] = useState<typeof ConSysApi[]>([]);
@@ -94,9 +104,7 @@ export function EventPreview() {
     const [adjudication, setAdjudication] = useState<AdjudicationData | null>();
     const [secondaryInspection, setSecondaryInspection] = useState<"NONE" | "COMPLETED"| "REQUESTED" | "">("");
 
-    const previewEventIdentityKey = eventPreview.eventData
-        ? `${eventPreview.eventData.laneId ?? ""}|${eventPreview.eventData.occupancyCount ?? ""}|${eventPreview.eventData.startTime ?? ""}`
-        : "";
+    const previewEventIdentityKey = getEventPreviewIdentityKey(eventPreview.eventData);
     const [syncedPreviewIdentityKey, setSyncedPreviewIdentityKey] = useState<string>(previewEventIdentityKey);
     if (syncedPreviewIdentityKey !== previewEventIdentityKey) {
         setSyncedPreviewIdentityKey(previewEventIdentityKey);
@@ -237,26 +245,33 @@ export function EventPreview() {
                 return;
             }
 
-            // If no occupancy obs ID (from live data) we can fetch it before adjudicating based on the latest occupancyCount match
+            // If no occupancy obs ID (from live data) resolve it via canonical epoch-ms lookup before adjudicating
             if (comboData.occupancyObsId == null) {
+                let resolvedObsId: string | null = null;
+                try {
+                    resolvedObsId = await resolveEventObservationId(eventPreview.eventData, currLaneEntry);
+                } catch (lookupErr) {
+                    if (!(lookupErr instanceof EventLookupError && lookupErr.code === "not-found") && ds?.searchObservations) {
+                        const query = await ds.searchObservations(new ObservationFilter({
+                            filter: `startTime='${eventPreview.eventData.startTime}' AND endTime='${eventPreview.eventData.endTime}'`
+                        }), 1);
+                        const occupancyObservation: any[] = (await query.nextPage()) ?? [];
+                        resolvedObsId = occupancyObservation[0]?.id ?? null;
+                    }
+                }
 
-                let query = await ds.searchObservations(new ObservationFilter({
-                    filter: `startTime='${eventPreview.eventData.startTime}' AND endTime='${eventPreview.eventData.endTime}'`
-                }), 1);
-
-                const occupancyObservation: any[] = await query.nextPage();
-
-                if (occupancyObservation.length == 0) {
+                if (!resolvedObsId) {
                     setAdjSnackMsg(t('failedToAdjudicateRefresh'));
                     setColorStatus('error')
                     setOpenSnack(true);
                     return;
                 }
 
-                eventPreview.eventData.occupancyObsId = occupancyObservation[0].id;
-                eventPreview.eventData.rpmSystemId = ds.properties["system@id"];
-                comboData.occupancyObsId = occupancyObservation[0].id;
-
+                eventPreview.eventData.occupancyObsId = resolvedObsId;
+                if (ds?.properties?.["system@id"]) {
+                    eventPreview.eventData.rpmSystemId = ds.properties["system@id"];
+                }
+                comboData.occupancyObsId = resolvedObsId;
             }
 
             const response = await sendCommand(
@@ -335,50 +350,50 @@ export function EventPreview() {
         router.push(scopedHref(href));
     }
 
+    const currentEventRef = useRef<EventTableData | null>(eventPreview.eventData);
+    currentEventRef.current = eventPreview.eventData;
+
     useEffect(() => {
-        if (eventPreview.eventData?.occupancyCount !== prevEventIdRef.current) {
+        setDatasourcesReady(false);
+        setLoadedPreviewKey("");
+        setGammaDatasources([]);
+        setNeutronDatasources([]);
+        setThresholdDatasources([]);
 
-            if (prevEventIdRef.current) {
-                setDatasourcesReady(false);
+        const activeEvent = currentEventRef.current;
+        if (!previewEventIdentityKey || !activeEvent?.laneId || !laneReady || !laneEntry) {
+            return;
+        }
+
+        let cancelled = false;
+        dispatch(setEventData(activeEvent));
+
+        (async () => {
+            try {
+                const datasources = await laneEntry.getDatastreamsForEventDetail(
+                    activeEvent.startTime,
+                    activeEvent.endTime,
+                );
+                if (cancelled) return;
+
+                setGammaDatasources(datasources.get("gamma") || []);
+                setNeutronDatasources(datasources.get("neutron") || []);
+                setThresholdDatasources(datasources.get("gammaTrshld") || []);
+                setLoadedPreviewKey(previewEventIdentityKey);
+                setDatasourcesReady(true);
+            } catch (error) {
+                if (cancelled) return;
+                console.error("Failed to load event preview data sources:", error);
+                setAdjSnackMsg(t('eventDataLoadFailed'));
+                setColorStatus('error');
+                setOpenSnack(true);
             }
+        })();
 
-            prevEventIdRef.current = eventPreview.eventData?.occupancyCount;
-        }
-
-        if (eventPreview.eventData?.laneId && laneReady && laneEntry && !datasourcesReady) {
-            callCollectDataSources();
-            dispatch(setEventData(eventPreview.eventData));
-        }
-
-    }, [eventPreview.eventData?.occupancyCount, laneEntry, laneReady, datasourcesReady]);
-
-    const collectDataSources = useCallback(async() => {
-        if (!eventPreview.eventData?.laneId || !laneEntry) return;
-
-        let datasources = await laneEntry.getDatastreamsForEventDetail(eventPreview.eventData.startTime, eventPreview.eventData.endTime);
-
-        const updatedGamma = datasources.get("gamma") || [];
-        const updatedNeutron = datasources.get("neutron") || [];
-        const updatedThreshold = datasources.get("gammaTrshld") || [];
-
-        setGammaDatasources(updatedGamma);
-        setNeutronDatasources(updatedNeutron);
-        setThresholdDatasources(updatedThreshold);
-
-        setDatasourcesReady(true);
-    }, [eventPreview, laneEntry]);
-
-
-    async function callCollectDataSources(){
-        try {
-            await collectDataSources();
-        } catch (error) {
-            console.error("Failed to load event preview data sources:", error);
-            setAdjSnackMsg(t('eventDataLoadFailed'));
-            setColorStatus('error');
-            setOpenSnack(true);
-        }
-    }
+        return () => {
+            cancelled = true;
+        };
+    }, [previewEventIdentityKey, laneEntry, laneReady, dispatch, t]);
 
     useEffect(() => {
         if (!datasourcesReady)
@@ -477,9 +492,10 @@ export function EventPreview() {
 
             {/* MEDIA */}
             <Grid item xs={12}>
-                { datasourcesReady ? (
+                { datasourcesReady && loadedPreviewKey === previewEventIdentityKey ? (
                         <Box>
                             <EventMedia
+                                key={previewEventIdentityKey}
                                 selectedNode={laneEntry.parentNode}
                                 datasources={{
                                     gamma: gammaDatasources[0],

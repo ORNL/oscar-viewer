@@ -409,7 +409,7 @@ export class Node implements INode {
                 let laneName = system.properties.properties.name;
 
                 if (laneMap.has(laneName)) {
-                    laneMap.get(laneName).systems.push(system);
+                    laneMap.get(laneName).addSystem(system);
                     laneMap.get(laneName).setLaneSystem(system);
                 } else {
                     let tLaneEntry = new LaneMapEntry(this);

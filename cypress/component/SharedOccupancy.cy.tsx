@@ -130,6 +130,30 @@ describe("shared occupancies", () => {
         cy.wrap(resolveOccupancyId(event, lane)).should("equal", "obs-37");
     });
 
+    it("resolves the stored ID when server JSON trims trailing millisecond zeros (.53Z vs .530Z)", () => {
+        const {lane, stream} = fixtures();
+        const liveEvent: any = {
+            occupancyObsId: null,
+            dataStreamId: "stream",
+            occupancyCount: 1,
+            startTime: "2026-11-14T20:55:55.530Z",
+            endTime: "2026-11-14T20:56:04.491Z",
+        };
+        stream.searchObservations = cy.stub()
+            .onFirstCall().resolves({nextPage: async () => []})
+            .onSecondCall().resolves({
+                nextPage: async () => [{
+                    id: "0j1c5m3g",
+                    result: {
+                        occupancyCount: 1,
+                        startTime: "2026-11-14T20:55:55.53Z",
+                        endTime: "2026-11-14T20:56:04.491Z",
+                    },
+                }],
+            });
+        cy.wrap(resolveOccupancyId(liveEvent, lane)).should("equal", "0j1c5m3g");
+    });
+
     it("offers retry when a live occupancy has not yet been stored", () => {
         const {event, lane, stream} = fixtures();
         event.occupancyObsId = null;

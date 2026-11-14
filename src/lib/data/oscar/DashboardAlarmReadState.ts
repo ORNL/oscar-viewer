@@ -171,6 +171,26 @@ export function isDashboardAlarmRead(
             return true;
         }
     }
+    const laneToken = sanitizePrintableToken(event.laneId, 96);
+    if (laneToken) {
+        const occToken = sanitizePrintableToken(event.occupancyCount ?? "", 32);
+        const startMs = Date.parse(event.startTime ?? "");
+        const endMs = Date.parse(event.endTime ?? "");
+        if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+            const paddedStart = new Date(startMs).toISOString();
+            const paddedEnd = new Date(endMs).toISOString();
+            const trimmedStart = paddedStart.replace(/\.?0+Z$/, "Z");
+            const trimmedEnd = paddedEnd.replace(/\.?0+Z$/, "Z");
+            for (const s of [paddedStart, trimmedStart]) {
+                for (const e of [paddedEnd, trimmedEnd]) {
+                    const altKey = `t:${laneToken}|${occToken}|${s}|${e}`.slice(0, MAX_DASHBOARD_READ_KEY_LENGTH);
+                    if (laneState.readKeySet.has(altKey)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
     return false;
 }
 

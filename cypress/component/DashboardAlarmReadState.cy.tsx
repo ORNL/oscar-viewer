@@ -94,6 +94,18 @@ describe("Site-shared per-lane Dashboard alarm read state and latching audio", (
         // Live event marked read BEFORE occupancyObsId existed remains read AFTER occupancyObsId resolves!
         expect(isDashboardAlarmRead(resolvedEvent, parsedNodeState!.lanes.get("Lane21"))).to.equal(true);
 
+        // Live event marked read with .100Z/.900Z also matches REST-reloaded .1Z/.9Z trimmed timestamps!
+        const trimmedRestEvent = new EventTableData(
+            3,
+            "Lane21",
+            {...msgValue, startTime: "2026-11-13T20:00:01.1Z", endTime: "2026-11-13T20:00:05.9Z"},
+            "",
+            "foi-lane21",
+            "Node-A",
+            false,
+        );
+        expect(isDashboardAlarmRead(trimmedRestEvent, parsedNodeState!.lanes.get("Lane21"))).to.equal(true);
+
         expect(hasRowContentFilter(createEventFilterWithRuleForTest("laneId", "equals", "Lane21"))).to.equal(false);
         expect(hasRowContentFilter(createEventFilterWithRuleForTest("node", "equals", "Node-A"))).to.equal(false);
         expect(hasRowContentFilter(createEventFilterWithRuleForTest("status", "isAnyOf", ["Gamma"]))).to.equal(true);
