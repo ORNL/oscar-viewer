@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import {
+    Alert,
     Box,
     Button,
     Chip,
@@ -10,6 +11,7 @@ import {
     DialogContent,
     DialogTitle,
     Divider,
+    LinearProgress,
     Paper,
     Stack,
     Tab,
@@ -22,8 +24,15 @@ import {
     Tabs,
     Typography,
 } from '@mui/material';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
+import {
+    exportSupportBundle,
+    SupportBundleExportResult,
+    SupportBundleNode,
+    SupportClientStateSummary,
+} from '@/lib/data/oscar/SupportDiagnostics';
 
 interface HelpSectionItem {
     title: string;
@@ -59,6 +68,13 @@ interface LocalizedHelpContent {
     adminLinkDesc: string;
     videoGuidesLinkLabel: string;
     videoGuidesLinkDesc: string;
+    supportBundleTitle: string;
+    supportBundleDesc: string;
+    supportBundlePrivacyNote: string;
+    supportBundleButtonLabel: string;
+    supportBundleCombinedSuccess: (fileName: string) => string;
+    supportBundleClientFallback: (fileName: string) => string;
+    supportBundleUnexpectedError: string;
     closeLabel: string;
 }
 
@@ -207,6 +223,13 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         adminLinkDesc: 'Requires administrator sign-in. Select OSCAR Service or any sensor module and open its README tab for the localized manual.',
         videoGuidesLinkLabel: 'Open OSCAR How-To Video Guides (`ORNL/oscar-video-guides`)',
         videoGuidesLinkDesc: '16 bite-sized (< 2 min) narrated/captioned screen recordings covering certificate trust, lane setup, adjudication, EML, health monitoring, and multi-format reports.',
+        supportBundleTitle: 'Troubleshooting & Support Bundle (`.zip`)',
+        supportBundleDesc: 'Downloads a single diagnostic `.zip` combining recent browser console/network diagnostics with OSCAR server logs, module states, and JVM/storage health. If the server cannot be reached or fails to start, run `./oscar.sh support-bundle` (Linux) or `oscar.bat support-bundle` (Windows) on the host.',
+        supportBundlePrivacyNote: 'Privacy & security: collected only to diagnose technical issues; passwords, tokens, session cookies, RTSP credentials, and private keys are automatically scrubbed.',
+        supportBundleButtonLabel: 'Export Support Bundle',
+        supportBundleCombinedSuccess: (fileName: string) => `Downloaded ${fileName} (client + server diagnostics, secrets redacted).`,
+        supportBundleClientFallback: (fileName: string) => `Server bundle unreachable; downloaded client diagnostics (${fileName}). Run ./oscar.sh support-bundle or oscar.bat support-bundle on the server for host/container logs.`,
+        supportBundleUnexpectedError: 'Unable to export the browser support bundle. Run ./oscar.sh support-bundle or oscar.bat support-bundle on the server.',
         closeLabel: 'Close',
     },
     es: {
@@ -353,6 +376,13 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         adminLinkDesc: 'Requiere cuenta de administrador. Seleccione el Servicio OSCAR o cualquier módulo y abra la pestaña README.',
         videoGuidesLinkLabel: 'Abrir videoguías prácticas de OSCAR (`ORNL/oscar-video-guides`)',
         videoGuidesLinkDesc: '16 vídeos cortos (< 2 min) con subtítulos sobre certificados, carriles, adjudicación, EML, estado de salud e informes.',
+        supportBundleTitle: 'Diagnóstico y paquete de soporte (`.zip`)',
+        supportBundleDesc: 'Descarga un archivo `.zip` de diagnóstico que combina eventos recientes del navegador con registros del servidor OSCAR, estado de módulos y salud de JVM/almacenamiento. Si el servidor no responde o no arranca, ejecute `./oscar.sh support-bundle` (Linux) u `oscar.bat support-bundle` (Windows) en el servidor.',
+        supportBundlePrivacyNote: 'Privacidad y seguridad: se recopila únicamente para diagnosticar incidencias técnicas; contraseñas, tokens, cookies de sesión, credenciales RTSP y claves privadas se redactan automáticamente.',
+        supportBundleButtonLabel: 'Exportar paquete de soporte',
+        supportBundleCombinedSuccess: (fileName: string) => `Se descargó ${fileName} (diagnóstico de cliente y servidor con secretos redactados).`,
+        supportBundleClientFallback: (fileName: string) => `Servidor no disponible; se descargó el diagnóstico del navegador (${fileName}). Ejecute ./oscar.sh support-bundle u oscar.bat support-bundle en el servidor.`,
+        supportBundleUnexpectedError: 'No se pudo exportar el paquete de soporte del navegador. Ejecute ./oscar.sh support-bundle u oscar.bat support-bundle en el servidor.',
         closeLabel: 'Cerrar',
     },
     fr: {
@@ -499,6 +529,13 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         adminLinkDesc: 'Connexion administrateur requise. Sélectionnez le Service OSCAR ou un module et ouvrez l’onglet README.',
         videoGuidesLinkLabel: 'Ouvrir les guides vidéo pratiques OSCAR (`ORNL/oscar-video-guides`)',
         videoGuidesLinkDesc: '16 courtes vidéos (< 2 min) sous-titrées couvrant certificats, voies, adjudication, EML, état de santé et rapports.',
+        supportBundleTitle: 'Dépannage et archive d’assistance (`.zip`)',
+        supportBundleDesc: 'Télécharge une archive `.zip` réunissant les diagnostics récents du navigateur et les journaux du serveur OSCAR, l’état des modules et la santé JVM/stockage. Si le serveur est injoignable ou ne démarre pas, exécutez `./oscar.sh support-bundle` (Linux) ou `oscar.bat support-bundle` (Windows) sur l’hôte.',
+        supportBundlePrivacyNote: 'Confidentialité et sécurité : collecté uniquement pour le diagnostic technique ; mots de passe, jetons, cookies de session, identifiants RTSP et clés privées sont automatiquement masqués.',
+        supportBundleButtonLabel: 'Exporter l’archive d’assistance',
+        supportBundleCombinedSuccess: (fileName: string) => `${fileName} téléchargé (diagnostics client + serveur, secrets masqués).`,
+        supportBundleClientFallback: (fileName: string) => `Serveur injoignable ; diagnostics navigateur téléchargés (${fileName}). Exécutez ./oscar.sh support-bundle ou oscar.bat support-bundle sur le serveur.`,
+        supportBundleUnexpectedError: 'Impossible d’exporter l’archive d’assistance du navigateur. Exécutez ./oscar.sh support-bundle ou oscar.bat support-bundle sur le serveur.',
         closeLabel: 'Fermer',
     },
     el: {
@@ -645,20 +682,91 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         adminLinkDesc: 'Απαιτείται σύνδεση διαχειριστή. Επιλέξτε την Υπηρεσία OSCAR ή οποιαδήποτε μονάδα και ανοίξτε την καρτέλα README.',
         videoGuidesLinkLabel: 'Άνοιγμα βιντεοοδηγών εργασιών OSCAR (`ORNL/oscar-video-guides`)',
         videoGuidesLinkDesc: '16 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για πιστοποιητικά, λωρίδες, αξιολόγηση, EML, κατάσταση υγείας και αναφορές.',
+        supportBundleTitle: 'Αντιμετώπιση προβλημάτων & πακέτο υποστήριξης (`.zip`)',
+        supportBundleDesc: 'Λήψη ενιαίου διαγνωστικού αρχείου `.zip` που συνδυάζει συμβάντα του περιηγητή με αρχεία καταγραφής διακομιστή OSCAR, κατάσταση μονάδων και υγεία JVM/αποθήκευσης. Εάν ο διακομιστής δεν αποκρίνεται ή δεν εκκινεί, εκτελέστε `./oscar.sh support-bundle` (Linux) ή `oscar.bat support-bundle` (Windows) στον κεντρικό υπολογιστή.',
+        supportBundlePrivacyNote: 'Απόρρητο & ασφάλεια: συλλέγονται αποκλειστικά για τεχνική διάγνωση· κωδικοί, διακριτικά, cookies συνεδρίας, διαπιστευτήρια RTSP και ιδιωτικά κλειδιά αφαιρούνται αυτόματα.',
+        supportBundleButtonLabel: 'Εξαγωγή πακέτου υποστήριξης',
+        supportBundleCombinedSuccess: (fileName: string) => `Ελήφθη το ${fileName} (διαγνωστικά πελάτη + διακομιστή, με απόκρυψη μυστικών).`,
+        supportBundleClientFallback: (fileName: string) => `Ο διακομιστής δεν είναι προσβάσιμος· ελήφθησαν τα διαγνωστικά περιηγητή (${fileName}). Εκτελέστε ./oscar.sh support-bundle ή oscar.bat support-bundle στον διακομιστή.`,
+        supportBundleUnexpectedError: 'Αδυναμία εξαγωγής πακέτου υποστήριξης περιηγητή. Εκτελέστε ./oscar.sh support-bundle ή oscar.bat support-bundle στον διακομιστή.',
         closeLabel: 'Κλείσιμο',
     },
 };
 
+const touchSafeButtonSx = {
+    minInlineSize: 24,
+    minBlockSize: 24,
+    '@media (pointer: coarse)': {
+        minInlineSize: 44,
+        minBlockSize: 44,
+    },
+} as const;
+
 export default function HelpDialog({
     open,
     onClose,
+    nodes,
+    stateSummary,
+    fetchImpl,
+    skipBrowserDownload,
+    onBundleExported,
 }: {
     open: boolean;
     onClose: () => void;
+    nodes?: readonly SupportBundleNode[];
+    stateSummary?: SupportClientStateSummary;
+    fetchImpl?: typeof fetch;
+    skipBrowserDownload?: boolean;
+    onBundleExported?: (result: SupportBundleExportResult) => void;
 }) {
     const { language } = useLanguage();
     const content = HELP_CONTENT[language] || HELP_CONTENT.en;
     const [tabIndex, setTabIndex] = React.useState(0);
+    const [exporting, setExporting] = React.useState(false);
+    const [exportOutcome, setExportOutcome] = React.useState<{
+        severity: 'success' | 'warning' | 'error';
+        message: string;
+    } | null>(null);
+
+    React.useEffect(() => {
+        if (!open) {
+            setExportOutcome(null);
+            setExporting(false);
+        }
+    }, [open]);
+
+    const handleExportSupportBundle = React.useCallback(async () => {
+        if (exporting) return;
+        setExporting(true);
+        setExportOutcome(null);
+        try {
+            const result = await exportSupportBundle({
+                nodes,
+                stateSummary,
+                fetchImpl,
+                skipBrowserDownload,
+            });
+            onBundleExported?.(result);
+            if (result.backendIncluded) {
+                setExportOutcome({
+                    severity: 'success',
+                    message: content.supportBundleCombinedSuccess(result.fileName),
+                });
+            } else {
+                setExportOutcome({
+                    severity: 'warning',
+                    message: content.supportBundleClientFallback(result.fileName),
+                });
+            }
+        } catch {
+            setExportOutcome({
+                severity: 'error',
+                message: content.supportBundleUnexpectedError,
+            });
+        } finally {
+            setExporting(false);
+        }
+    }, [content, exporting, fetchImpl, nodes, onBundleExported, skipBrowserDownload, stateSummary]);
 
     return (
         <Dialog
@@ -820,16 +928,87 @@ export default function HelpDialog({
                                     href="https://github.com/ORNL/oscar-video-guides"
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    sx={touchSafeButtonSx}
                                 >
                                     ORNL/oscar-video-guides
+                                </Button>
+                            </Stack>
+                        </Paper>
+                        <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-support-bundle-card">
+                            <Stack spacing={1} alignItems="flex-start">
+                                <Typography variant="subtitle2" fontWeight={700}>
+                                    {content.supportBundleTitle}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {content.supportBundleDesc}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {content.supportBundlePrivacyNote}
+                                </Typography>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<DownloadRoundedIcon fontSize="small" />}
+                                    disabled={exporting}
+                                    onClick={handleExportSupportBundle}
+                                    data-testid="help-card-export-support-bundle"
+                                    sx={touchSafeButtonSx}
+                                >
+                                    {content.supportBundleButtonLabel}
                                 </Button>
                             </Stack>
                         </Paper>
                     </Stack>
                 )}
             </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} variant="contained">
+            {exporting && (
+                <LinearProgress
+                    data-testid="help-support-bundle-progress"
+                    sx={{ minHeight: 4, flexShrink: 0 }}
+                />
+            )}
+            <Box
+                aria-live="polite"
+                aria-atomic="true"
+                data-testid="help-support-bundle-status"
+                sx={{ px: 3, pt: exportOutcome ? 1.5 : 0 }}
+            >
+                {exportOutcome && (
+                    <Alert
+                        severity={exportOutcome.severity}
+                        role={exportOutcome.severity === 'error' ? 'alert' : 'status'}
+                        onClose={() => setExportOutcome(null)}
+                    >
+                        {exportOutcome.message}
+                    </Alert>
+                )}
+            </Box>
+            <DialogActions
+                sx={{
+                    px: 3,
+                    py: 1.5,
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                }}
+            >
+                <Stack spacing={0.25} alignItems="flex-start" sx={{ flex: '1 1 280px' }}>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadRoundedIcon fontSize="small" />}
+                        disabled={exporting}
+                        onClick={handleExportSupportBundle}
+                        data-testid="help-export-support-bundle"
+                        sx={touchSafeButtonSx}
+                    >
+                        {content.supportBundleButtonLabel}
+                    </Button>
+                    <Typography variant="caption" color="text.secondary">
+                        {content.supportBundlePrivacyNote}
+                    </Typography>
+                </Stack>
+                <Button onClick={onClose} variant="contained" sx={touchSafeButtonSx}>
                     {content.closeLabel}
                 </Button>
             </DialogActions>

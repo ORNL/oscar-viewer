@@ -1,8 +1,27 @@
 "use client";
 
+import {useEffect} from "react";
 import NextError from "next/error";
+import {recordSupportDiagnosticEvent} from "@/lib/data/oscar/SupportDiagnostics";
 
-export default function GlobalError() {
+export default function GlobalError({
+  error,
+}: {
+  error?: Error & {digest?: string};
+}) {
+  useEffect(() => {
+    if (error) {
+      recordSupportDiagnosticEvent({
+        category: "runtime",
+        level: "error",
+        message: `Global React boundary error: ${error.name}: ${error.message}`,
+        details: {
+          digest: error.digest ?? null,
+        },
+      });
+    }
+  }, [error]);
+
   return (
     <html>
       <body>

@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - Added keyboard-accessible per-camera galleries, isolated missing/corrupt-frame handling, localized loading and error feedback, and focused API/fallback/rendering regression tests.
 - Added strict catalog-transfer, per-frame, and event-wide byte, dimension, and decoded-pixel budgets. Response bodies are stopped at their streaming limits even when `Content-Length` is absent or incorrect.
 - Added **EML Non-Threat** automated adjudication support across the Viewer (`en`, `es`, `fr`, `el`): non-threat EML occupancies (`eml-non-threat` / disposition code `9999`) are suppressed from Dashboard alarm notifications, queryable in the Event Log (`Adjudicated = EML Non-Threat`), and rendered in Event Details with an **EML Automated Analysis** summary card (verdict, release/investigate probabilities, model, collimation, lane width, fallback state, and per-source scores) plus formatted `EML_METADATA` feedback in the Adjudication Log.
+- Added site-shared per-lane Dashboard alarm read/unread state (`/sensorhub/buckets/adjudication/dashboard-read-state`), watermark-scoped unread alarm banner counts (`100+` cap), synchronized **Unread only** toggle, quick temporal window presets (`15m`, `1h`, `24h`, `15d`), and optional latching alarm audio (`en`, `es`, `fr`, `el`).
+- Added a bounded browser diagnostic flight recorder (`SupportDiagnostics.ts`) and 1-click **Export Support Bundle** action in **Help (`?`)** (`HelpDialog.tsx`, `en`, `es`, `fr`, `el`) that merges redacted client diagnostics with `/sensorhub/buckets/reports/support-bundle` into `oscar-support-<UTC>.zip` (or downloads `oscar-client-support-<UTC>.zip` with CLI fallback guidance when the backend is unreachable).
 
 ### Changed
 

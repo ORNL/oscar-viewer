@@ -7,14 +7,19 @@ import {
   useTheme,
   useMediaQuery,
 } from "@mui/material";
-import { ReactNode, Suspense, useMemo } from "react";
+import { ReactNode, Suspense, useEffect, useMemo } from "react";
 import CssBaseline from "@mui/material/CssBaseline";
 import { getTheme } from "@/app/style/theme";
 import "@/app/style/global.css";
 import SuspenseLoad from "./_components/SuspenseLoad";
 import {LanguageProvider} from "@/app/contexts/LanguageContext";
+import {installSupportDiagnosticsRecorder} from "@/lib/data/oscar/SupportDiagnostics";
 
 export default function Providers({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    installSupportDiagnosticsRecorder();
+  }, []);
+
   // Get system preference for dark/light mode
   const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
 

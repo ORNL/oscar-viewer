@@ -52,6 +52,7 @@ import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
 import HelpDialog from "@/app/_components/HelpDialog";
+import {RootState} from "@/lib/state/Store";
 
 const drawerWidth = 276;
 const drawerWidthMobile = 236;
@@ -154,6 +155,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const continuousAlarmAudio = useSelector(selectContinuousAlarmAudio);
     const visualUnreadAlert = useSelector(selectVisualUnreadAlert);
     const unreadAlarmCount = useSelector(selectDashboardUnreadAlarmCount);
+    const configuredNodes = useSelector((state: RootState) => state.oshSlice?.nodes ?? []);
     const [authenticatedUsername, setAuthenticatedUsername] = useState<string | null>(null);
 
     useEffect(() => {
@@ -448,6 +450,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 <IconButton
                                     color="inherit"
                                     aria-label={t('operatorHelp')}
+                                    data-testid="navbar-help-button"
                                     onClick={() => setHelpDialogOpen(true)}
                                 >
                                     <HelpOutlineRoundedIcon />
@@ -474,7 +477,18 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     </Stack>
                 </Toolbar>
             </AppBar>
-            <HelpDialog open={helpDialogOpen} onClose={() => setHelpDialogOpen(false)} />
+            <HelpDialog
+                open={helpDialogOpen}
+                onClose={() => setHelpDialogOpen(false)}
+                nodes={configuredNodes}
+                stateSummary={{
+                    configuredNodeCount: configuredNodes.length,
+                    activeViewKey: activeViewKey ?? null,
+                    viewError: viewError ?? null,
+                    unreadAlarmCount,
+                    authenticatedUserPresent: Boolean(authenticatedUsername),
+                }}
+            />
             <Menu
                 id="settings-menu"
                 anchorEl={settingsAnchorEl}
