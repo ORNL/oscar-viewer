@@ -11,6 +11,7 @@ import {
     Typography,
     Box,
     Button,
+    Chip,
     Paper,
     Snackbar,
     TextField, FormControlLabel, Checkbox, DialogTitle,
@@ -24,7 +25,8 @@ import {
     FormControl,
     InputLabel, SelectChangeEvent,
 } from "@mui/material";
-import React, {ChangeEvent, useContext, useEffect, useRef, useState} from "react";
+import React, {ChangeEvent, useContext, useEffect, useMemo, useRef, useState} from "react";
+import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
 import AdjudicationLog from "./AdjudicationLog"
 import EmlAnalysisCard from "./EmlAnalysisCard";
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
@@ -60,10 +62,17 @@ import {randomUUID} from "osh-js/source/core/utils/Utils";
 import { useBreakpoint } from "@/app/providers";
 import N42Detail from "@/app/_components/n42/N42Detail";
 import VehicleIdOcr from "@/app/_components/adjudication/VehicleIdOcr";
+import VehiclePassComparisonDialog from "@/app/_components/vehicle/VehiclePassComparisonDialog";
 import {
     IVehicleOcrResult,
     selectAutoFillCandidate,
 } from "@/lib/data/oscar/adjudication/VehicleOcr";
+import {
+    FederatedVehicleSearchResult,
+    normalizeVehicleId,
+    searchVehiclePassesAcrossNodes,
+    VEHICLE_SEARCH_WINDOW_MS,
+} from "@/lib/data/oscar/VehicleSearch";
 import {useLanguage} from '@/app/contexts/LanguageContext';
 import {getIntlLocale} from '@/app/utils/LocaleUtils';
 
@@ -114,10 +123,20 @@ export default function AdjudicationDetail(props: {
     const [scannedData, setScannedData] = useState<ScannedDataWithWebId[]>([]);
     const scanner = useRef<QrScanner | null>(null);
 
-    const laneMapRef = useContext(DataSourceContext).laneMapRef;
+    const {laneMapRef, activeViewKey} = useContext(DataSourceContext);
+    const laneMap = useSelector((state: RootState) => selectLaneMap(state));
+    const laneUid = laneMap.get(props.event?.laneId)?.laneSystem?.properties?.properties?.uid;
+    const effectiveLaneMap = laneMapRef?.current && laneMapRef.current.size > 0
+        ? laneMapRef.current
+        : laneMap;
 
     const adjudication = props.event ? new AdjudicationData(new Date().toISOString(), props.event.occupancyCount, props.event.occupancyObsId) : null;
     const [adjData, setAdjData] = useState<AdjudicationData>(adjudication);
+
+    const [debouncedVehicleId, setDebouncedVehicleId] = useState<string>("");
+    const [relatedVehicleResult, setRelatedVehicleResult] = useState<FederatedVehicleSearchResult | null>(null);
+    const [relatedSearchNonce, setRelatedSearchNonce] = useState<number>(0);
+    const [openVehicleComparison, setOpenVehicleComparison] = useState<boolean>(false);
 
     // Key per-occupancy reset on laneId|occupancyCount|startTime rather than occupancyObsId
     // so live-event UUID resolution does not clear operator-entered Vehicle ID input.
@@ -126,9 +145,11 @@ export default function AdjudicationDetail(props: {
     if (syncedEventIdentityKey !== eventIdentityKey) {
         setSyncedEventIdentityKey(eventIdentityKey);
         setVehicleId("");
+        setDebouncedVehicleId("");
         setVehicleIdTouched(false);
         setVehicleIdAutoFilled(false);
         setOcrResults([]);
+        setRelatedVehicleResult(null);
         setAdjData(
             props.event
                 ? new AdjudicationData(
@@ -139,6 +160,18 @@ export default function AdjudicationDetail(props: {
                 : null,
         );
     }
+
+    useEffect(() => {
+        const trimmed = vehicleId.trim();
+        if (!trimmed) {
+            setDebouncedVehicleId("");
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            setDebouncedVehicleId(trimmed);
+        }, vehicleIdTouched ? 350 : 0);
+        return () => window.clearTimeout(timer);
+    }, [vehicleId, vehicleIdTouched]);
 
     useEffect(() => {
         if (vehicleIdTouched || vehicleId.trim().length > 0) return;
@@ -169,6 +202,73 @@ export default function AdjudicationDetail(props: {
     function onFetchComplete() {
         setShouldFetchLogs(false);
     }
+
+    const effectiveCorrelationVehicleId = useMemo(() => {
+        if (normalizeVehicleId(debouncedVehicleId).length >= 3) {
+            return debouncedVehicleId;
+        }
+        for (let idx = loggedAdjudications.length - 1; idx >= 0; idx -= 1) {
+            const candidate = loggedAdjudications[idx]?.vehicleId?.trim() ?? "";
+            if (normalizeVehicleId(candidate).length >= 3) {
+                return candidate;
+            }
+        }
+        const ocrCandidate = selectAutoFillCandidate(ocrResults)?.value ?? ocrResults[0]?.value ?? "";
+        if (normalizeVehicleId(ocrCandidate).length >= 3) {
+            return ocrCandidate;
+        }
+        const eventVehicleId = props.event?.vehicleId?.trim() ?? "";
+        if (normalizeVehicleId(eventVehicleId).length >= 3) {
+            return eventVehicleId;
+        }
+        return "";
+    }, [debouncedVehicleId, loggedAdjudications, ocrResults, props.event?.vehicleId]);
+
+    useEffect(() => {
+        const normalized = normalizeVehicleId(effectiveCorrelationVehicleId);
+        if (normalized.length < 3 || !effectiveLaneMap || effectiveLaneMap.size === 0) {
+            setRelatedVehicleResult(null);
+            return;
+        }
+        const controller = new AbortController();
+        const startTimeIso = new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS["30d"]).toISOString();
+        void searchVehiclePassesAcrossNodes({
+            laneMap: effectiveLaneMap,
+            vehicleId: effectiveCorrelationVehicleId,
+            matchMode: "equals",
+            activeViewKey,
+            startTimeIso,
+            signal: controller.signal,
+            fetchImpl: props.ocrFetchImpl,
+        })
+            .then(res => {
+                if (!controller.signal.aborted) {
+                    setRelatedVehicleResult(res);
+                }
+            })
+            .catch((): void => {
+                if (!controller.signal.aborted) {
+                    setRelatedVehicleResult(null);
+                }
+            });
+        return () => controller.abort();
+    }, [
+        activeViewKey,
+        effectiveCorrelationVehicleId,
+        effectiveLaneMap,
+        props.ocrFetchImpl,
+        relatedSearchNonce,
+    ]);
+
+    const showRelatedPassesBanner = useMemo(() => {
+        if (!relatedVehicleResult || relatedVehicleResult.passes.length === 0) return false;
+        if (relatedVehicleResult.passes.length > 1) return true;
+        const onlyPass = relatedVehicleResult.passes[0];
+        return (
+            Boolean(props.event?.occupancyObsId && onlyPass.occupancyObsId !== props.event.occupancyObsId)
+            || Boolean(props.event?.laneId && onlyPass.laneName !== props.event.laneId)
+        );
+    }, [props.event?.laneId, props.event?.occupancyObsId, relatedVehicleResult]);
 
     // Event Details owns live-event identity resolution. Keep the editable
     // adjudication model in sync when that page supplies a newly identified
@@ -545,6 +645,7 @@ export default function AdjudicationDetail(props: {
             dispatch(setAdjudicatedEventId(props.event.id));
 
             setShouldFetchLogs(true);
+            setRelatedSearchNonce(previous => previous + 1);
             setOpenSnack(true);
             resetForm();
         } catch (error) {
@@ -553,10 +654,6 @@ export default function AdjudicationDetail(props: {
             setOpenSnack(true);
         }
     }
-
-    const laneMap = useSelector((state: RootState) => selectLaneMap(state));
-
-    const laneUid = laneMap.get(props.event?.laneId)?.laneSystem?.properties?.properties?.uid;
 
     function createFilesForQRCode(qrCodeData: ScannedDataWithWebId[]) {
         let newFiles: FileWithWebId[] = [];
@@ -1167,6 +1264,87 @@ export default function AdjudicationDetail(props: {
                     </Grid>
                 </Grid>
             </Paper>
+            {showRelatedPassesBanner && relatedVehicleResult && (
+                <Paper
+                    variant="outlined"
+                    data-testid="vehicle-related-passes-banner"
+                    sx={{
+                        p: 2,
+                        borderColor: "secondary.main",
+                        bgcolor: "action.hover",
+                    }}
+                >
+                    <Stack
+                        direction={{xs: "column", md: "row"}}
+                        spacing={1.5}
+                        alignItems={{xs: "flex-start", md: "center"}}
+                        justifyContent="space-between"
+                    >
+                        <Stack spacing={0.75}>
+                            <Typography variant="subtitle1" fontWeight={700}>
+                                {t("vehicleCorrelationBannerTitle", {
+                                    vehicleId:
+                                        relatedVehicleResult.formattedVehicleId
+                                        || effectiveCorrelationVehicleId,
+                                })}
+                            </Typography>
+                            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+                                <Chip
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                    label={t("vehicleSearchSummaryChip", {
+                                        passes: relatedVehicleResult.summary.totalPasses,
+                                        lanes: relatedVehicleResult.summary.distinctLanes,
+                                        nodes: relatedVehicleResult.summary.distinctNodes,
+                                    })}
+                                />
+                                {relatedVehicleResult.summary.openAlarmPasses > 0 && (
+                                    <Chip
+                                        size="small"
+                                        color="warning"
+                                        label={t("vehicleCorrelationOpenAlarms", {
+                                            count: relatedVehicleResult.summary.openAlarmPasses,
+                                        })}
+                                    />
+                                )}
+                                {relatedVehicleResult.summary.spectroscopicPasses > 0 && (
+                                    <Chip
+                                        size="small"
+                                        color="info"
+                                        variant="outlined"
+                                        label={t("vehicleCorrelationSpectroscopic", {
+                                            count: relatedVehicleResult.summary.spectroscopicPasses,
+                                        })}
+                                    />
+                                )}
+                                {relatedVehicleResult.summary.confirmedIsotopes.length > 0 && (
+                                    <Chip
+                                        size="small"
+                                        color="secondary"
+                                        variant="outlined"
+                                        label={relatedVehicleResult.summary.confirmedIsotopes.join(", ")}
+                                    />
+                                )}
+                            </Stack>
+                        </Stack>
+                        <Button
+                            type="button"
+                            variant="contained"
+                            color="secondary"
+                            size="small"
+                            startIcon={<CompareArrowsRoundedIcon />}
+                            onClick={() => setOpenVehicleComparison(true)}
+                            data-testid="open-vehicle-pass-comparison"
+                            sx={{whiteSpace: "nowrap"}}
+                        >
+                            {t("vehicleComparePassesButton", {
+                                count: relatedVehicleResult.passes.length,
+                            })}
+                        </Button>
+                    </Stack>
+                </Paper>
+            )}
             {/*Adjudication FORM*/}
             <Paper variant='outlined' sx={{ p: 2, displayPrint: 'none' }}>
                 <Grid container spacing={2} sx={{ width: '100%' }}>
@@ -1190,6 +1368,21 @@ export default function AdjudicationDetail(props: {
                                 }}
                                 fullWidth
                             />
+                            {normalizeVehicleId(effectiveCorrelationVehicleId).length >= 3 && (
+                                <Box sx={{mt: 0.75}}>
+                                    <Button
+                                        type="button"
+                                        size="small"
+                                        variant="text"
+                                        color="secondary"
+                                        startIcon={<CompareArrowsRoundedIcon fontSize="small" />}
+                                        onClick={() => setOpenVehicleComparison(true)}
+                                        data-testid="vehicle-id-history-btn"
+                                    >
+                                        {t("vehicleOpenPassHistory")}
+                                    </Button>
+                                </Box>
+                            )}
                             {props.event && (
                                 <VehicleIdOcr
                                     event={props.event}
@@ -1418,7 +1611,23 @@ export default function AdjudicationDetail(props: {
                     />
                 </Grid>
             </Paper>
-
+            {openVehicleComparison && effectiveCorrelationVehicleId && (
+                <VehiclePassComparisonDialog
+                    open={openVehicleComparison}
+                    onClose={() => setOpenVehicleComparison(false)}
+                    vehicleId={effectiveCorrelationVehicleId}
+                    matchMode="equals"
+                    laneMap={effectiveLaneMap}
+                    activeViewKey={activeViewKey}
+                    initialResult={relatedVehicleResult}
+                    highlightOccupancyObsId={props.event?.occupancyObsId ?? null}
+                    onAdjudicationComplete={() => {
+                        setShouldFetchLogs(true);
+                        setRelatedSearchNonce(previous => previous + 1);
+                    }}
+                    fetchImpl={props.ocrFetchImpl}
+                />
+            )}
         </Stack>
     );
 }

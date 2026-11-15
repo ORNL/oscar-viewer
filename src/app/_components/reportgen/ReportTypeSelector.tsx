@@ -22,6 +22,10 @@ export const reportTypes = [
         value: "ADJUDICATION_DETAILS",
     },
     {
+        labelKey: "vehicleIncidentReport",
+        value: "VEHICLE_INCIDENT",
+    },
+    {
         labelKey: "eventReport",
         value: "EVENT",
     }

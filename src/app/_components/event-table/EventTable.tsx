@@ -1,7 +1,20 @@
 "use client";
 
 import {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
-import {Alert, Box, Button, Snackbar, Tooltip} from "@mui/material";
+import {
+    Alert,
+    Box,
+    Button,
+    Chip,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Select,
+    Snackbar,
+    Stack,
+    TextField,
+    Tooltip,
+} from "@mui/material";
 import {useSelector} from "react-redux";
 import {
     DataGrid,
@@ -15,6 +28,9 @@ import {
     GridRowSelectionModel,
 } from "@mui/x-data-grid";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
+import ClearRoundedIcon from "@mui/icons-material/ClearRounded";
 import DataStream from "osh-js/source/core/sweapi/datastream/DataStream.js";
 import ObservationFilter from "osh-js/source/core/sweapi/observation/ObservationFilter";
 import Observations from "osh-js/source/core/consysapi/observation/Observations";
@@ -84,7 +100,18 @@ import {
     EventFilterGroup,
     eventMatchesFilter,
     eventSelectionKey,
+    extractPrimaryVehicleIdRule,
+    hasVehicleIdFilterRule,
 } from "@/lib/data/oscar/EventFilter";
+import VehiclePassComparisonDialog from "@/app/_components/vehicle/VehiclePassComparisonDialog";
+import {
+    FederatedVehicleSearchResult,
+    normalizeVehicleId,
+    searchVehiclePassesAcrossNodes,
+    VEHICLE_SEARCH_WINDOW_MS,
+    VehicleSearchMatchMode,
+    VehicleSearchWindowPreset,
+} from "@/lib/data/oscar/VehicleSearch";
 import {
     adjudicateEvents,
     BulkAdjudicationOutcome,
@@ -150,6 +177,7 @@ export default function EventTable({
     readStateFetch,
 }: TableProps) {
     const isAlarmTable = tableMode === "alarmtable";
+    const isEventLog = tableMode === "eventlog";
     const selectedRowId = useSelector(selectSelectedRowId);
     const adjudicatedEventId = useSelector(selectAdjudicatedEventId);
     const dashboardAcknowledgeNonce = useSelector(selectDashboardAcknowledgeNonce);
@@ -185,7 +213,6 @@ export default function EventTable({
         setSyncedViewAdjudicated(viewAdjudicated);
         setColumnVisibilityModel(previous => ({...previous, adjudicatedIds: viewAdjudicated}));
     }
-    const wantsVehicleIdColumn = Boolean(columnVisibilityModel.vehicleId);
     const [filterEpoch, setFilterEpoch] = useState(0);
     const [filter, setFilter] = useState<EventFilterGroup>(() => createEventFilterGroup());
     const [filterDialogOpen, setFilterDialogOpen] = useState(false);
@@ -196,6 +223,57 @@ export default function EventTable({
     const [allFilteredTotal, setAllFilteredTotal] = useState(0);
     const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
     const [postSelectionKeys, setPostSelectionKeys] = useState<Set<string>>(new Set());
+
+    // Vehicle ID search & multi-pass comparison state
+    const [vehicleSearchInput, setVehicleSearchInput] = useState("");
+    const [vehicleSearchMatchMode, setVehicleSearchMatchMode] = useState<"contains" | "equals" | "startsWith">("contains");
+    const [vehicleSearchWindow, setVehicleSearchWindow] = useState<VehicleSearchWindowPreset>("30d");
+    const [submittedVehicleQuery, setSubmittedVehicleQuery] = useState<{
+        query: string;
+        matchMode: VehicleSearchMatchMode;
+        window: VehicleSearchWindowPreset;
+        nonce: number;
+    } | null>(null);
+    const [vehicleSearchResult, setVehicleSearchResult] = useState<FederatedVehicleSearchResult | null>(null);
+    const [vehicleSearchLoading, setVehicleSearchLoading] = useState(false);
+    const [vehicleSearchError, setVehicleSearchError] = useState<string | null>(null);
+    const [comparisonDialogState, setComparisonDialogState] = useState<{
+        vehicleId: string;
+        matchMode: VehicleSearchMatchMode;
+        highlightObsId?: string | null;
+        initialResult?: FederatedVehicleSearchResult | null;
+    } | null>(null);
+
+    const filterVehicleRule = useMemo(() => extractPrimaryVehicleIdRule(filter), [filter]);
+    const hasFilterVehicleRule = useMemo(() => hasVehicleIdFilterRule(filter), [filter]);
+    const activeVehicleQuery = useMemo(() => {
+        if (submittedVehicleQuery) {
+            return {
+                vehicleId: submittedVehicleQuery.query,
+                matchMode: submittedVehicleQuery.matchMode,
+                window: submittedVehicleQuery.window,
+                nonce: submittedVehicleQuery.nonce,
+            };
+        }
+        if (filterVehicleRule) {
+            return {
+                vehicleId: filterVehicleRule.value,
+                matchMode: filterVehicleRule.matchMode,
+                window: "all" as VehicleSearchWindowPreset,
+                nonce: filterEpoch,
+            };
+        }
+        return null;
+    }, [filterEpoch, filterVehicleRule, submittedVehicleQuery]);
+
+    const isVehicleSearchMode = Boolean(activeVehicleQuery);
+    const wantsVehicleIdColumn = Boolean(columnVisibilityModel.vehicleId) || isVehicleSearchMode || hasFilterVehicleRule;
+
+    useEffect(() => {
+        if ((isVehicleSearchMode || hasFilterVehicleRule) && !columnVisibilityModel.vehicleId) {
+            setColumnVisibilityModel(previous => ({...previous, vehicleId: true}));
+        }
+    }, [columnVisibilityModel.vehicleId, hasFilterVehicleRule, isVehicleSearchMode]);
 
     const [syncedUnreadOnly, setSyncedUnreadOnly] = useState(effectiveUnreadOnly);
     if (syncedUnreadOnly !== effectiveUnreadOnly) {
@@ -897,19 +975,128 @@ export default function EventTable({
         [t],
     );
 
-    const visibleSelectionModel = useMemo<GridRowSelectionModel>(() => rows
+    useEffect(() => {
+        if (!activeVehicleQuery) {
+            setVehicleSearchResult(null);
+            setVehicleSearchLoading(false);
+            setVehicleSearchError(null);
+            return;
+        }
+        if (stableLaneMap.size === 0) return;
+
+        const controller = new AbortController();
+        setVehicleSearchLoading(true);
+        setVehicleSearchError(null);
+
+        const startTimeIso =
+            activeVehicleQuery.window === "all"
+                ? null
+                : new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS[activeVehicleQuery.window]).toISOString();
+
+        void searchVehiclePassesAcrossNodes({
+            vehicleId: activeVehicleQuery.vehicleId,
+            matchMode: activeVehicleQuery.matchMode,
+            laneMap: stableLaneMap,
+            activeViewKey,
+            startTimeIso,
+            signal: controller.signal,
+        })
+            .then((res) => {
+                if (controller.signal.aborted) return;
+                for (const pass of res.passes) {
+                    cacheEventBounded(eventSelectionKey(pass.eventRow), pass.eventRow);
+                }
+                setVehicleSearchResult(res);
+            })
+            .catch((err) => {
+                if (controller.signal.aborted || (err instanceof Error && err.name === "AbortError")) return;
+                setVehicleSearchError(err instanceof Error ? err.message : String(err));
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setVehicleSearchLoading(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, stableLaneMap]);
+
+    const vehicleFilteredRows = useMemo<EventTableData[]>(() => {
+        if (!isVehicleSearchMode || !vehicleSearchResult) return [];
+        const matched: EventTableData[] = [];
+        for (const pass of vehicleSearchResult.passes) {
+            if (tableMode === "lanelog" && currentLane && pass.laneName !== currentLane) continue;
+            if (
+                tableMode === "alarmtable"
+                && (pass.eventRow.status === "None" || (pass.eventRow.adjudicatedIds?.length ?? 0) > 0)
+            ) {
+                continue;
+            }
+            if (
+                !eventMatchesFilter(filter, pass.eventRow, {
+                    nodeId: pass.nodeId,
+                    nodeName: pass.nodeName,
+                    laneId: pass.laneName,
+                })
+            ) {
+                continue;
+            }
+            matched.push(pass.eventRow);
+        }
+        matched.sort((left, right) => right.getStartTimeNum() - left.getStartTimeNum());
+        return matched;
+    }, [currentLane, filter, isVehicleSearchMode, tableMode, vehicleSearchResult]);
+
+    const vehiclePageRows = useMemo<EventTableData[]>(() => {
+        if (!isVehicleSearchMode) return [];
+        const startIdx = paginationModel.page * PAGE_SIZE;
+        return vehicleFilteredRows.slice(startIdx, startIdx + PAGE_SIZE);
+    }, [isVehicleSearchMode, paginationModel.page, vehicleFilteredRows]);
+
+    const activePageSourceRows = isVehicleSearchMode ? vehiclePageRows : rows;
+
+    const handleVehicleSearchSubmit = useCallback(
+        (event?: React.FormEvent) => {
+            event?.preventDefault();
+            const trimmed = vehicleSearchInput.trim();
+            if (!trimmed || normalizeVehicleId(trimmed).length === 0) {
+                setSubmittedVehicleQuery(null);
+                return;
+            }
+            setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
+            clearSelection();
+            setSubmittedVehicleQuery(previous => ({
+                query: trimmed,
+                matchMode: vehicleSearchMatchMode,
+                window: vehicleSearchWindow,
+                nonce: (previous?.nonce ?? 0) + 1,
+            }));
+        },
+        [clearSelection, vehicleSearchInput, vehicleSearchMatchMode, vehicleSearchWindow],
+    );
+
+    const handleVehicleSearchClear = useCallback(() => {
+        setVehicleSearchInput("");
+        setSubmittedVehicleQuery(null);
+        setVehicleSearchResult(null);
+        setVehicleSearchError(null);
+        setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
+        clearSelection();
+    }, [clearSelection]);
+
+    const visibleSelectionModel = useMemo<GridRowSelectionModel>(() => activePageSourceRows
         .filter(row => row.status !== "None" && !row.adjudicatedIds?.length)
         .filter(row => allFilteredSelected
             ? !excludedKeys.has(eventSelectionKey(row)) && !postSelectionKeys.has(eventSelectionKey(row))
             : selectedKeys.has(eventSelectionKey(row)))
-        .map(eventSelectionKey), [rows, allFilteredSelected, excludedKeys, postSelectionKeys, selectedKeys]);
+        .map(eventSelectionKey), [activePageSourceRows, allFilteredSelected, excludedKeys, postSelectionKeys, selectedKeys]);
 
     const handleSelectionChange = (model: GridRowSelectionModel) => {
         const visible = new Set(model.map(String));
         if (allFilteredSelected) {
             setExcludedKeys(previous => {
                 const next = new Set(previous);
-                rows.filter(row => row.status !== "None" && !row.adjudicatedIds?.length).forEach(row => {
+                activePageSourceRows.filter(row => row.status !== "None" && !row.adjudicatedIds?.length).forEach(row => {
                     const key = eventSelectionKey(row);
                     if (visible.has(key)) next.delete(key); else next.add(key);
                 });
@@ -918,7 +1105,7 @@ export default function EventTable({
         } else {
             setSelectedKeys(previous => {
                 const next = new Set(previous);
-                rows.filter(row => row.status !== "None" && !row.adjudicatedIds?.length).forEach(row => {
+                activePageSourceRows.filter(row => row.status !== "None" && !row.adjudicatedIds?.length).forEach(row => {
                     const key = eventSelectionKey(row);
                     if (visible.has(key)) next.add(key); else next.delete(key);
                 });
@@ -1173,6 +1360,12 @@ export default function EventTable({
     };
 
     const enumerateAllFiltered = useCallback(async (): Promise<EventTableData[]> => {
+        if (isVehicleSearchMode) {
+            return vehicleFilteredRows
+                .filter(event => event.status !== "None" && !event.adjudicatedIds?.length)
+                .filter(event => !effectiveUnreadOnly || isRowUnread(event))
+                .filter(event => !excludedKeys.has(eventSelectionKey(event)));
+        }
         const cutoff = allFilteredCutoffRef.current ?? advanceSnapshotCutoff();
         const planRows = await runWithConcurrency(bulkQueryPlans, 4, async plan => {
             const count = await fetchPlanCount(plan, cutoff, true);
@@ -1184,7 +1377,7 @@ export default function EventTable({
         return deduplicateEvents(planRows.flat())
             .filter(event => !effectiveUnreadOnly || isRowUnread(event))
             .filter(event => !excludedKeys.has(eventSelectionKey(event)));
-    }, [bulkQueryPlans, fetchPlanCount, fetchPlanRows, effectiveUnreadOnly, isRowUnread, excludedKeys, advanceSnapshotCutoff]);
+    }, [advanceSnapshotCutoff, bulkQueryPlans, effectiveUnreadOnly, excludedKeys, fetchPlanCount, fetchPlanRows, isRowUnread, isVehicleSearchMode, vehicleFilteredRows]);
 
     const computeScopedAcknowledgeTargets = useCallback((): ScopedLaneTarget[] => {
         let maxVisibleMs = Date.now();
@@ -1366,6 +1559,19 @@ export default function EventTable({
 
     const selectAllFilteredAlarms = async () => {
         const cutoff = advanceSnapshotCutoff();
+        if (isVehicleSearchMode) {
+            const total = vehicleFilteredRows
+                .filter(event => event.status !== "None" && !event.adjudicatedIds?.length)
+                .filter(event => !effectiveUnreadOnly || isRowUnread(event))
+                .length;
+            allFilteredCutoffRef.current = cutoff;
+            setAllFilteredTotal(total);
+            setAllFilteredSelected(true);
+            setSelectedKeys(new Set());
+            setExcludedKeys(new Set());
+            setPostSelectionKeys(new Set());
+            return;
+        }
         setLoading(true);
         try {
             const counts = await runWithConcurrency(bulkQueryPlans, 6, plan => fetchPlanCount(plan, cutoff, true));
@@ -1443,6 +1649,13 @@ export default function EventTable({
                 }
                 return event;
             }));
+        }
+        if (isVehicleSearchMode && successful.length > 0) {
+            if (submittedVehicleQuery) {
+                setSubmittedVehicleQuery(previous => previous ? {...previous, nonce: previous.nonce + 1} : previous);
+            } else {
+                setFilterEpoch(previous => previous + 1);
+            }
         }
         setAllFilteredSelected(false);
         setAllFilteredTotal(0);
@@ -1528,6 +1741,7 @@ export default function EventTable({
     }, [findLaneByDataStreamId, replaceRealtimeEventIdentity, rows, stableLaneMap, wantsVehicleIdColumn]);
 
     const displayRows = useMemo<EventTableData[]>(() => {
+        if (isVehicleSearchMode) return vehiclePageRows;
         if (!wantsVehicleIdColumn) return rows;
         if (ocrByObsId.size === 0 && adjudicatedVehicleIdByObsId.size === 0) return rows;
         let changed = false;
@@ -1556,7 +1770,7 @@ export default function EventTable({
             return row;
         });
         return changed ? mapped : rows;
-    }, [adjudicatedVehicleIdByObsId, ocrByObsId, rows, wantsVehicleIdColumn]);
+    }, [adjudicatedVehicleIdByObsId, isVehicleSearchMode, ocrByObsId, rows, vehiclePageRows, wantsVehicleIdColumn]);
 
     const renderCompactHeader = useCallback((label: string) => {
         const unitMatch = label.match(/^(.*?)\s*(\([^)]+\))$/);
@@ -1817,43 +2031,60 @@ export default function EventTable({
                         </Box>
                     );
                 }
-                if (params.row.vehicleIdFromOcr) {
-                    const label = `${value} (${t("ocrShort")})`;
-                    return (
-                        <Tooltip title={t("ocrTablePendingHint")} arrow enterTouchDelay={0}>
-                            <Box
-                                component="span"
-                                sx={{
-                                    fontFamily: "monospace",
-                                    fontStyle: "italic",
-                                    fontSize: "0.8rem",
-                                    color: "text.secondary",
-                                    minInlineSize: 0,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                }}
-                            >
-                                {label}
-                            </Box>
-                        </Tooltip>
-                    );
-                }
+                const label = params.row.vehicleIdFromOcr ? `${value} (${t("ocrShort")})` : value;
+                const tooltipTitle = params.row.vehicleIdFromOcr
+                    ? `${t("ocrTablePendingHint")} — ${t("vehicleCompareTooltip")}`
+                    : t("vehicleCompareTooltip");
                 return (
-                    <Box
-                        component="span"
-                        sx={{
-                            fontFamily: "monospace",
-                            fontWeight: 600,
-                            fontSize: "0.8rem",
-                            minInlineSize: 0,
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                        }}
-                    >
-                        {value}
-                    </Box>
+                    <Tooltip title={tooltipTitle} arrow enterTouchDelay={0}>
+                        <Box
+                            component="button"
+                            type="button"
+                            aria-label={t("vehicleCompareActionLabel", {vehicleId: value})}
+                            data-testid="event-row-vehicle-id-btn"
+                            onClick={event => {
+                                event.stopPropagation();
+                                setComparisonDialogState({
+                                    vehicleId: value,
+                                    matchMode: "equals",
+                                    highlightObsId: params.row.occupancyObsId,
+                                });
+                            }}
+                            sx={{
+                                appearance: "none",
+                                background: "none",
+                                border: "1px solid transparent",
+                                borderRadius: 1,
+                                px: 0.5,
+                                py: 0.25,
+                                cursor: "pointer",
+                                fontFamily: "monospace",
+                                fontStyle: params.row.vehicleIdFromOcr ? "italic" : "normal",
+                                fontWeight: params.row.vehicleIdFromOcr ? 500 : 600,
+                                fontSize: "0.8rem",
+                                color: params.row.vehicleIdFromOcr ? "text.secondary" : "primary.main",
+                                textDecoration: "underline",
+                                textDecorationStyle: "dotted",
+                                textUnderlineOffset: "2px",
+                                minInlineSize: 0,
+                                maxWidth: "100%",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                "&:hover": {
+                                    bgcolor: "action.hover",
+                                    borderColor: "divider",
+                                },
+                                "&:focus-visible": {
+                                    outline: "2px solid",
+                                    outlineColor: "primary.main",
+                                    outlineOffset: "1px",
+                                },
+                            }}
+                        >
+                            {label}
+                        </Box>
+                    </Tooltip>
                 );
             },
         },
@@ -1880,10 +2111,25 @@ export default function EventTable({
         setUnreadReconcileEpoch(previous => previous + 1);
         void refreshCounts(cutoff);
         void fetchPage(paginationModel.page, cutoff);
+        if (isVehicleSearchMode) {
+            if (submittedVehicleQuery) {
+                setSubmittedVehicleQuery(previous => previous ? {...previous, nonce: previous.nonce + 1} : previous);
+            } else {
+                setFilterEpoch(previous => previous + 1);
+            }
+        }
     };
 
+    const activeVehicleStartTimeIso = useMemo(() => {
+        if (!activeVehicleQuery || activeVehicleQuery.window === "all") return null;
+        return new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS[activeVehicleQuery.window]).toISOString();
+    }, [activeVehicleQuery]);
+
+    const tableRowCount = isVehicleSearchMode ? vehicleFilteredRows.length : effectiveRowCount;
+    const tableLoading = isVehicleSearchMode ? vehicleSearchLoading : loading;
+
     return (
-        <Box sx={{height: 800, width: "100%"}}>
+        <Box sx={{display: "flex", flexDirection: "column", height: isEventLog ? 860 : 800, width: "100%"}}>
             {isAlarmTable && (
                 <Box
                     role="status"
@@ -1895,7 +2141,205 @@ export default function EventTable({
                     {ackStatusMessage}
                 </Box>
             )}
-            {(countQueryError || pageQueryError) && (
+            {isEventLog && (
+                <Box
+                    component="search"
+                    aria-label={t("vehicleSearchLandmark")}
+                    data-testid="vehicle-id-search-bar"
+                    sx={{
+                        mb: 1,
+                        p: 1.25,
+                        borderRadius: 1,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "background.paper",
+                    }}
+                >
+                    <Box
+                        component="form"
+                        onSubmit={handleVehicleSearchSubmit}
+                        sx={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1}}
+                    >
+                        <TextField
+                            size="small"
+                            label={t("vehicleSearchInputLabel")}
+                            placeholder={t("vehicleSearchPlaceholder")}
+                            value={vehicleSearchInput}
+                            onChange={event => setVehicleSearchInput(event.target.value)}
+                            onKeyDown={event => {
+                                if (
+                                    event.key === "Enter"
+                                    && (event.nativeEvent.isComposing || event.keyCode === 229)
+                                ) {
+                                    event.preventDefault();
+                                }
+                            }}
+                            inputProps={{
+                                autoCorrect: "off",
+                                autoCapitalize: "none",
+                                spellCheck: false,
+                                maxLength: 64,
+                                "data-testid": "vehicle-id-search-input",
+                            }}
+                            sx={{
+                                minWidth: {xs: "100%", sm: 240},
+                                flex: {sm: "1 1 240px", md: "0 1 320px"},
+                            }}
+                        />
+                        <FormControl size="small" sx={{minWidth: 144}}>
+                            <InputLabel id="vehicle-search-match-mode-label">
+                                {t("vehicleSearchMatchModeLabel")}
+                            </InputLabel>
+                            <Select
+                                labelId="vehicle-search-match-mode-label"
+                                label={t("vehicleSearchMatchModeLabel")}
+                                value={vehicleSearchMatchMode}
+                                onChange={event =>
+                                    setVehicleSearchMatchMode(
+                                        event.target.value as "contains" | "equals" | "startsWith",
+                                    )
+                                }
+                                data-testid="vehicle-id-match-mode"
+                            >
+                                <MenuItem value="contains">{t("filterOperator.contains")}</MenuItem>
+                                <MenuItem value="equals">{t("filterOperator.equals")}</MenuItem>
+                                <MenuItem value="startsWith">{t("filterOperator.startsWith")}</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <FormControl size="small" sx={{minWidth: 132}}>
+                            <InputLabel id="vehicle-search-window-label">
+                                {t("vehicleSearchWindowLabel")}
+                            </InputLabel>
+                            <Select
+                                labelId="vehicle-search-window-label"
+                                label={t("vehicleSearchWindowLabel")}
+                                value={vehicleSearchWindow}
+                                onChange={event =>
+                                    setVehicleSearchWindow(event.target.value as VehicleSearchWindowPreset)
+                                }
+                                data-testid="vehicle-id-search-window"
+                            >
+                                <MenuItem value="24h">{t("timeWindow24h")}</MenuItem>
+                                <MenuItem value="15d">{t("timeWindow15d")}</MenuItem>
+                                <MenuItem value="30d">{t("timeWindow30d")}</MenuItem>
+                                <MenuItem value="all">{t("timeWindowAll")}</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            size="small"
+                            startIcon={<SearchRoundedIcon />}
+                            disabled={vehicleSearchLoading}
+                            data-testid="vehicle-id-search-submit"
+                        >
+                            {t("vehicleSearchButton")}
+                        </Button>
+                        {(vehicleSearchInput.length > 0 || isVehicleSearchMode) && (
+                            <Button
+                                type="button"
+                                variant="outlined"
+                                size="small"
+                                startIcon={<ClearRoundedIcon />}
+                                onClick={handleVehicleSearchClear}
+                                data-testid="vehicle-id-search-clear"
+                            >
+                                {t("clear")}
+                            </Button>
+                        )}
+                        {isVehicleSearchMode && vehicleSearchResult && (
+                            <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="center"
+                                useFlexGap
+                                flexWrap="wrap"
+                                sx={{ml: {md: "auto"}}}
+                            >
+                                <Chip
+                                    size="small"
+                                    color={vehicleFilteredRows.length > 0 ? "primary" : "default"}
+                                    variant="outlined"
+                                    label={t("vehicleSearchSummaryChip", {
+                                        passes: vehicleFilteredRows.length,
+                                        lanes: vehicleSearchResult.summary.distinctLanes,
+                                        nodes: vehicleSearchResult.summary.distinctNodes,
+                                    })}
+                                    data-testid="vehicle-search-summary-chip"
+                                />
+                                {vehicleSearchResult.passes.length > 0 && (
+                                    <Button
+                                        type="button"
+                                        variant="contained"
+                                        color="secondary"
+                                        size="small"
+                                        startIcon={<CompareArrowsRoundedIcon />}
+                                        onClick={() =>
+                                            setComparisonDialogState({
+                                                vehicleId: activeVehicleQuery?.vehicleId ?? vehicleSearchInput,
+                                                matchMode: activeVehicleQuery?.matchMode ?? vehicleSearchMatchMode,
+                                                initialResult: vehicleSearchResult,
+                                            })
+                                        }
+                                        data-testid="vehicle-search-compare-btn"
+                                    >
+                                        {t("vehicleComparePassesButton", {
+                                            count: vehicleSearchResult.passes.length,
+                                        })}
+                                    </Button>
+                                )}
+                            </Stack>
+                        )}
+                    </Box>
+                    {vehicleSearchError && (
+                        <Alert severity="error" sx={{mt: 1}}>
+                            {vehicleSearchError}
+                        </Alert>
+                    )}
+                    {vehicleSearchResult && vehicleSearchResult.unreachableNodes.length > 0 && (
+                        <Alert severity="warning" sx={{mt: 1}}>
+                            {t("vehicleUnreachableNodesWarning", {
+                                nodes: vehicleSearchResult.unreachableNodes
+                                    .map(node => node.nodeName)
+                                    .join(", "),
+                            })}
+                        </Alert>
+                    )}
+                </Box>
+            )}
+            {!isEventLog && isVehicleSearchMode && vehicleSearchResult && vehicleSearchResult.passes.length > 0 && (
+                <Alert
+                    severity="info"
+                    sx={{mb: 1}}
+                    action={
+                        <Button
+                            type="button"
+                            color="inherit"
+                            size="small"
+                            startIcon={<CompareArrowsRoundedIcon />}
+                            onClick={() =>
+                                setComparisonDialogState({
+                                    vehicleId: activeVehicleQuery?.vehicleId ?? "",
+                                    matchMode: activeVehicleQuery?.matchMode ?? "contains",
+                                    initialResult: vehicleSearchResult,
+                                })
+                            }
+                            data-testid="vehicle-search-compare-btn"
+                        >
+                            {t("vehicleComparePassesButton", {
+                                count: vehicleSearchResult.passes.length,
+                            })}
+                        </Button>
+                    }
+                >
+                    {t("vehicleSearchSummaryChip", {
+                        passes: vehicleFilteredRows.length,
+                        lanes: vehicleSearchResult.summary.distinctLanes,
+                        nodes: vehicleSearchResult.summary.distinctNodes,
+                    })}
+                </Alert>
+            )}
+            {(countQueryError || pageQueryError) && !isVehicleSearchMode && (
                 <Alert
                     severity="error"
                     role="alert"
@@ -1905,151 +2349,173 @@ export default function EventTable({
                     {t("eventQueryLoadFailed")}
                 </Alert>
             )}
-            <DataGrid
-                localeText={getDataGridLocaleText(language)}
-                rows={displayRows}
-                getRowId={eventSelectionKey}
-                columns={columns}
-                columnVisibilityModel={columnVisibilityModel}
-                onColumnVisibilityModelChange={setColumnVisibilityModel}
-                columnHeaderHeight={48}
-                rowHeight={48}
-                loading={loading}
-                paginationMode="server"
-                filterMode="server"
-                paginationModel={paginationModel}
-                onPaginationModelChange={model => setPaginationModel(model)}
-                rowCount={effectiveRowCount}
-                pageSizeOptions={[PAGE_SIZE]}
-                checkboxSelection
-                isRowSelectable={params => params.row.status !== "None" && !params.row.adjudicatedIds?.length}
-                disableRowSelectionOnClick
-                keepNonExistentRowsSelected
-                rowSelectionModel={visibleSelectionModel}
-                onRowSelectionModelChange={handleSelectionChange}
-                onRowClick={(params, event) => {
-                    const cell = (event.target as HTMLElement).closest("[data-field]");
-                    const field = cell?.getAttribute("data-field");
-                    if (field !== GRID_CHECKBOX_SELECTION_FIELD && field !== "Menu") previewEvent(params.row);
-                }}
-                onRowDoubleClick={(params: GridRowParams<EventTableData>) => previewEvent(params.row, true)}
-                slots={{toolbar: CustomToolbar}}
-                slotProps={{
-                    toolbar: {
-                        activeFilterCount: countEventFilterRules(filter),
-                        selectedCount,
-                        rowCount: effectiveRowCount,
-                        allFilteredSelected,
-                        filterLabel: t("advancedFilters"),
-                        selectAllFilteredLabel: t("selectAllFiltered"),
-                        clearSelectionLabel: t("clearSelection"),
-                        bulkAdjudicateLabel: t("bulkAdjudicateSelected", {count: selectedCount}),
-                        acknowledgeSelectedLabel: t("acknowledgeSelected", {count: selectedCount}),
-                        acknowledgeAllLabel: t("acknowledgeAll"),
-                        onOpenFilters: () => setFilterDialogOpen(true),
-                        onSelectAllFiltered: selectAllFilteredAlarms,
-                        onClearSelection: clearSelection,
-                        onBulkAdjudicate: () => setBulkDialogOpen(true),
-                        ...(isAlarmTable
-                            ? {
-                                unreadOnly: effectiveUnreadOnly,
-                                unreadOnlyLabel: t("unreadOnly"),
-                                onToggleUnreadOnly: handleToggleUnreadOnly,
-                                timeWindowPreset,
-                                timeWindowOptions,
-                                timeWindowGroupLabel: t("alarmTimeWindow"),
-                                onSelectTimeWindowPreset: handleSelectTimeWindowPreset,
-                                onAcknowledgeSelected: () => {
-                                    void acknowledgeSelectedAlarms();
-                                },
-                                onAcknowledgeAll: () => {
-                                    void acknowledgeAllScopedAlarms();
-                                },
-                            }
-                            : {}),
-                    },
-                    columnsManagement: {getTogglableColumns: getColumnList},
-                }}
-                initialState={{
-                    sorting: {sortModel: [{field: "status", sort: "asc"}]},
-                }}
-                getCellClassName={(params: GridCellParams<any, any, string>) => {
-                    if (params.value === "Gamma") return "highlightGamma";
-                    if (params.value === "Neutron") return "highlightNeutron";
-                    if (params.value === "Gamma & Neutron" || (params.value !== "None" && params.field === "status")) return "highlightGammaNeutron";
-                    return "";
-                }}
-                getRowClassName={params => {
-                    const classes: string[] = [];
-                    if (params.row.id === selectedRowId) classes.push("preview-row");
-                    if (isAlarmTable) {
-                        classes.push(isRowUnread(params.row) ? "unread-alarm-row" : "read-alarm-row");
-                    }
-                    return classes.join(" ");
-                }}
-                sx={{
-                    [`.${gridClasses.row}.preview-row`]: {
-                        boxShadow: "inset 3px 0 0 #1976d2",
-                        "@media (forced-colors: active)": {
-                            outline: "2px solid Highlight",
-                            outlineOffset: "-2px",
+            <Box sx={{flex: 1, minHeight: 0, width: "100%"}}>
+                <DataGrid
+                    localeText={getDataGridLocaleText(language)}
+                    rows={displayRows}
+                    getRowId={eventSelectionKey}
+                    columns={columns}
+                    columnVisibilityModel={columnVisibilityModel}
+                    onColumnVisibilityModelChange={setColumnVisibilityModel}
+                    columnHeaderHeight={48}
+                    rowHeight={48}
+                    loading={tableLoading}
+                    paginationMode="server"
+                    filterMode="server"
+                    paginationModel={paginationModel}
+                    onPaginationModelChange={model => setPaginationModel(model)}
+                    rowCount={tableRowCount}
+                    pageSizeOptions={[PAGE_SIZE]}
+                    checkboxSelection
+                    isRowSelectable={params => params.row.status !== "None" && !params.row.adjudicatedIds?.length}
+                    disableRowSelectionOnClick
+                    keepNonExistentRowsSelected
+                    rowSelectionModel={visibleSelectionModel}
+                    onRowSelectionModelChange={handleSelectionChange}
+                    onRowClick={(params, event) => {
+                        const cell = (event.target as HTMLElement).closest("[data-field]");
+                        const field = cell?.getAttribute("data-field");
+                        if (
+                            field !== GRID_CHECKBOX_SELECTION_FIELD
+                            && field !== "Menu"
+                            && !(field === "vehicleId" && params.row.vehicleId)
+                        ) {
+                            previewEvent(params.row);
+                        }
+                    }}
+                    onRowDoubleClick={(params: GridRowParams<EventTableData>) => previewEvent(params.row, true)}
+                    slots={{toolbar: CustomToolbar}}
+                    slotProps={{
+                        toolbar: {
+                            activeFilterCount: countEventFilterRules(filter),
+                            selectedCount,
+                            rowCount: tableRowCount,
+                            allFilteredSelected,
+                            filterLabel: t("advancedFilters"),
+                            selectAllFilteredLabel: t("selectAllFiltered"),
+                            clearSelectionLabel: t("clearSelection"),
+                            bulkAdjudicateLabel: t("bulkAdjudicateSelected", {count: selectedCount}),
+                            acknowledgeSelectedLabel: t("acknowledgeSelected", {count: selectedCount}),
+                            acknowledgeAllLabel: t("acknowledgeAll"),
+                            onOpenFilters: () => setFilterDialogOpen(true),
+                            onSelectAllFiltered: selectAllFilteredAlarms,
+                            onClearSelection: clearSelection,
+                            onBulkAdjudicate: () => setBulkDialogOpen(true),
+                            ...(isAlarmTable
+                                ? {
+                                    unreadOnly: effectiveUnreadOnly,
+                                    unreadOnlyLabel: t("unreadOnly"),
+                                    onToggleUnreadOnly: handleToggleUnreadOnly,
+                                    timeWindowPreset,
+                                    timeWindowOptions,
+                                    timeWindowGroupLabel: t("alarmTimeWindow"),
+                                    onSelectTimeWindowPreset: handleSelectTimeWindowPreset,
+                                    onAcknowledgeSelected: () => {
+                                        void acknowledgeSelectedAlarms();
+                                    },
+                                    onAcknowledgeAll: () => {
+                                        void acknowledgeAllScopedAlarms();
+                                    },
+                                }
+                                : {}),
                         },
-                    },
-                    [`.${gridClasses.row}.unread-alarm-row`]: {
-                        fontWeight: 700,
-                    },
-                    [`.${gridClasses.row}.unread-alarm-row .alarm-cell-primary`]: {
-                        fontWeight: 700,
-                    },
-                    [`.${gridClasses.row}.read-alarm-row`]: {
-                        fontWeight: 400,
-                    },
-                    [`.${gridClasses.row}.read-alarm-row .alarm-cell-primary`]: {
-                        fontWeight: 400,
-                    },
-                    [`& .unread-alarm-dot`]: {
-                        "@media (forced-colors: active)": {
-                            backgroundColor: "Highlight",
-                            borderColor: "Highlight",
+                        columnsManagement: {getTogglableColumns: getColumnList},
+                    }}
+                    initialState={{
+                        sorting: {sortModel: [{field: "status", sort: "asc"}]},
+                    }}
+                    getCellClassName={(params: GridCellParams<any, any, string>) => {
+                        if (params.value === "Gamma") return "highlightGamma";
+                        if (params.value === "Neutron") return "highlightNeutron";
+                        if (params.value === "Gamma & Neutron" || (params.value !== "None" && params.field === "status")) return "highlightGammaNeutron";
+                        return "";
+                    }}
+                    getRowClassName={params => {
+                        const classes: string[] = [];
+                        if (params.row.id === selectedRowId) classes.push("preview-row");
+                        if (isAlarmTable) {
+                            classes.push(isRowUnread(params.row) ? "unread-alarm-row" : "read-alarm-row");
+                        }
+                        return classes.join(" ");
+                    }}
+                    sx={{
+                        [`.${gridClasses.row}.preview-row`]: {
+                            boxShadow: "inset 3px 0 0 #1976d2",
+                            "@media (forced-colors: active)": {
+                                outline: "2px solid Highlight",
+                                outlineOffset: "-2px",
+                            },
                         },
-                    },
-                    [`& .${gridClasses.columnHeader}, & .${gridClasses.cell}`]: {px: 0.75},
-                    [`& .${gridClasses.cell}`]: {display: "flex", alignItems: "center"},
-                    [`& .${gridClasses.columnHeaderTitleContainer}`]: {flex: 1, minWidth: 0, overflow: "visible"},
-                    [`& .${gridClasses.columnHeaderTitleContainerContent}`]: {overflow: "visible", minWidth: 0},
-                    [`& .${gridClasses.menuIcon}`]: {
-                        display: "none",
-                        width: 0,
-                        mr: 0,
-                    },
-                    [`& .${gridClasses.columnHeader}:hover .${gridClasses.menuIcon}, & .${gridClasses.menuOpen}`]: {
-                        display: "flex",
-                        width: "auto",
-                        visibility: "visible",
-                    },
-                    [`& .${gridClasses.iconButtonContainer}`]: {
-                        display: "none",
-                        width: 0,
-                    },
-                    [`& .${gridClasses.columnHeader}:hover .${gridClasses.iconButtonContainer}, & .${gridClasses.columnHeader}--sorted .${gridClasses.iconButtonContainer}`]: {
-                        display: "flex",
-                        width: "auto",
-                        visibility: "visible",
-                    },
-                    [`& .${gridClasses.actionsCell}`]: {
-                        gridGap: 0,
-                    },
-                    [`& [data-field="Menu"]`]: {
-                        px: 0,
-                        justifyContent: "center",
-                        overflow: "hidden",
-                    },
-                    [`& .${gridClasses.cellCheckbox}, & .${gridClasses.columnHeaderCheckbox}`]: {
-                        px: 0.5,
-                    },
-                    border: "none",
-                }}
-            />
+                        [`.${gridClasses.row}.unread-alarm-row`]: {
+                            fontWeight: 700,
+                        },
+                        [`.${gridClasses.row}.unread-alarm-row .alarm-cell-primary`]: {
+                            fontWeight: 700,
+                        },
+                        [`.${gridClasses.row}.read-alarm-row`]: {
+                            fontWeight: 400,
+                        },
+                        [`.${gridClasses.row}.read-alarm-row .alarm-cell-primary`]: {
+                            fontWeight: 400,
+                        },
+                        [`& .unread-alarm-dot`]: {
+                            "@media (forced-colors: active)": {
+                                backgroundColor: "Highlight",
+                                borderColor: "Highlight",
+                            },
+                        },
+                        [`& .${gridClasses.columnHeader}, & .${gridClasses.cell}`]: {px: 0.75},
+                        [`& .${gridClasses.cell}`]: {display: "flex", alignItems: "center"},
+                        [`& .${gridClasses.columnHeaderTitleContainer}`]: {flex: 1, minWidth: 0, overflow: "visible"},
+                        [`& .${gridClasses.columnHeaderTitleContainerContent}`]: {overflow: "visible", minWidth: 0},
+                        [`& .${gridClasses.menuIcon}`]: {
+                            display: "none",
+                            width: 0,
+                            mr: 0,
+                        },
+                        [`& .${gridClasses.columnHeader}:hover .${gridClasses.menuIcon}, & .${gridClasses.menuOpen}`]: {
+                            display: "flex",
+                            width: "auto",
+                            visibility: "visible",
+                        },
+                        [`& .${gridClasses.iconButtonContainer}`]: {
+                            display: "none",
+                            width: 0,
+                        },
+                        [`& .${gridClasses.columnHeader}:hover .${gridClasses.iconButtonContainer}, & .${gridClasses.columnHeader}--sorted .${gridClasses.iconButtonContainer}`]: {
+                            display: "flex",
+                            width: "auto",
+                            visibility: "visible",
+                        },
+                        [`& .${gridClasses.actionsCell}`]: {
+                            gridGap: 0,
+                        },
+                        [`& [data-field="Menu"]`]: {
+                            px: 0,
+                            justifyContent: "center",
+                            overflow: "hidden",
+                        },
+                        [`& .${gridClasses.cellCheckbox}, & .${gridClasses.columnHeaderCheckbox}`]: {
+                            px: 0.5,
+                        },
+                        border: "none",
+                    }}
+                />
+            </Box>
+            {comparisonDialogState && (
+                <VehiclePassComparisonDialog
+                    open={Boolean(comparisonDialogState)}
+                    onClose={() => setComparisonDialogState(null)}
+                    vehicleId={comparisonDialogState.vehicleId}
+                    matchMode={comparisonDialogState.matchMode}
+                    laneMap={stableLaneMap}
+                    activeViewKey={activeViewKey}
+                    startTimeIso={comparisonDialogState.initialResult ? activeVehicleStartTimeIso : null}
+                    initialResult={comparisonDialogState.initialResult ?? null}
+                    highlightOccupancyObsId={comparisonDialogState.highlightObsId ?? null}
+                    onAdjudicationComplete={retryEventQueries}
+                />
+            )}
             <NestedEventFilterDialog
                 open={filterDialogOpen}
                 filter={filter}

@@ -63,6 +63,7 @@ const fieldKeys: Record<EventFilterField, string> = {
     status: "status",
     adjudicatedIds: "adjudicated",
     adjudicationCode: "adjudicationCode",
+    vehicleId: "vehicleId",
 };
 
 const operatorKeys: Record<EventFilterOperator, string> = {
@@ -185,7 +186,7 @@ export default function NestedEventFilterDialog({
 
         const inputType = type === "number" ? "number" : type === "date" ? "datetime-local" : "text";
         const nonProseInputProps = inputType === "text"
-            ? {autoCorrect: "off", autoCapitalize: "off", spellCheck: false}
+            ? {autoCorrect: "off", autoCapitalize: "none", spellCheck: false}
             : undefined;
         const valueLabel = rule.operator === "between"
             ? t("filterFrom")

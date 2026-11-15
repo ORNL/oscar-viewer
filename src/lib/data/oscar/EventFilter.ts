@@ -11,6 +11,10 @@ import {
     hasEmlNonThreatMarker,
     parseAdjudicationCodeMarker,
 } from "@/lib/data/oscar/adjudication/EmlMetadata";
+import {
+    matchesVehicleIdNormalized,
+    VehicleSearchMatchMode,
+} from "@/lib/data/oscar/VehicleSearch";
 
 export type EventFilterLogic = "and" | "or";
 export type EventFilterField =
@@ -23,7 +27,8 @@ export type EventFilterField =
     | "maxNeutron"
     | "status"
     | "adjudicatedIds"
-    | "adjudicationCode";
+    | "adjudicationCode"
+    | "vehicleId";
 export type EventFilterOperator =
     | "equals"
     | "notEquals"
@@ -84,7 +89,9 @@ export const createEventFilterRule = (field: EventFilterField = "status"): Event
         ? "isAnyOf"
         : eventFilterFieldType(field) === "number"
             ? "greaterThanOrEqual"
-            : "equals",
+            : field === "vehicleId"
+                ? "contains"
+                : "equals",
     value: field === "status" || field === "adjudicatedIds" || field === "adjudicationCode" ? [] : "",
 });
 
@@ -127,6 +134,8 @@ export const operatorsForEventFilterField = (field: EventFilterField): EventFilt
         return ["equals", "notEquals", "contains", "isAnyOf", "isEmpty", "isNotEmpty"];
     if (field === "adjudicationCode")
         return ["equals", "notEquals", "isAnyOf", "isEmpty", "isNotEmpty"];
+    if (field === "vehicleId")
+        return ["contains", "equals", "startsWith", "notEquals", "isEmpty", "isNotEmpty"];
     const type = eventFilterFieldType(field);
     if (type === "metadata") return ["equals", "notEquals", "contains", "startsWith", "isAnyOf"];
     if (type === "number") return ["greaterThanOrEqual", "lessThanOrEqual", "between", "equals"];
@@ -210,6 +219,12 @@ const compileRule = (rule: EventFilterRule, metadata: EventFilterMetadata): Comp
     const meta = metadataValue(rule.field, metadata);
     if (meta !== null)
         return compareString(meta, rule.operator, rule.value) ? TRUE : FALSE;
+
+    // Occupancy observations do not store vehicleId directly in their binary DataBlock;
+    // vehicleId is resolved across Adjudication and vehicleOcr streams and evaluated client-side.
+    if (rule.field === "vehicleId") {
+        return TRUE;
+    }
 
     if (rule.field === "status") {
         const values = Array.isArray(rule.value) ? rule.value : [rule.value];
@@ -394,6 +409,14 @@ const evaluateRule = (rule: EventFilterRule, event: EventTableData, metadata: Ev
     if (meta !== null) return compareString(meta, rule.operator, rule.value);
 
     if (rule.field === "status") return compareString(event.status ?? "", rule.operator, rule.value);
+    if (rule.field === "vehicleId") {
+        const expected = Array.isArray(rule.value) ? rule.value[0] ?? "" : rule.value;
+        return matchesVehicleIdNormalized(
+            event.vehicleId ?? "",
+            rule.operator as VehicleSearchMatchMode,
+            expected,
+        );
+    }
     if (rule.field === "adjudicatedIds") {
         const hasAdjudication = (event.adjudicatedIds?.length ?? 0) > 0;
         const isEmlNonThreat = hasEmlNonThreatMarker(event.adjudicatedIds);
@@ -489,3 +512,54 @@ export const combineServerFilters = (...filters: Array<string | null | undefined
 
 export const eventSelectionKey = (event: EventTableData): string =>
     `${event.parentNode}\u001f${event.occupancyObsId || `${event.laneId}\u001f${event.startTime}\u001f${event.endTime}`}`;
+
+export const hasVehicleIdFilterRule = (node: EventFilterNode): boolean => {
+    if (node.kind === "rule") {
+        return node.field === "vehicleId" && isRuleComplete(node);
+    }
+    return node.children.some(hasVehicleIdFilterRule);
+};
+
+export const extractPrimaryVehicleIdRule = (
+    filter: EventFilterGroup,
+): {value: string; matchMode: VehicleSearchMatchMode} | null => {
+    const supportedModes = new Set<string>([
+        "equals",
+        "contains",
+        "startsWith",
+        "notEquals",
+        "isNotEmpty",
+    ]);
+
+    const findPositiveRule = (node: EventFilterNode): EventFilterRule | null => {
+        if (node.kind === "rule") {
+            if (
+                node.field === "vehicleId"
+                && isRuleComplete(node)
+                && supportedModes.has(node.operator)
+            ) {
+                return node;
+            }
+            return null;
+        }
+        if (node.logic !== "and") {
+            if (node.children.length === 1) {
+                return findPositiveRule(node.children[0]);
+            }
+            return null;
+        }
+        for (const child of node.children) {
+            const match = findPositiveRule(child);
+            if (match) return match;
+        }
+        return null;
+    };
+
+    const rule = findPositiveRule(filter);
+    if (!rule) return null;
+    const rawVal = Array.isArray(rule.value) ? String(rule.value[0] ?? "") : String(rule.value ?? "");
+    return {
+        value: rawVal,
+        matchMode: rule.operator as VehicleSearchMatchMode,
+    };
+};

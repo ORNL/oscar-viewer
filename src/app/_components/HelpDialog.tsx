@@ -96,7 +96,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Events (`/event-log`)',
-                summary: 'Searchable historical log of all occupancies, alarms, and faults. Filter by Event UUID, lane, time window, Adjudication Code (`Code 9998: Extended Occupancy Gamma Alarm`, `Code 9999: EML Non-Threat`, built-in `1–11`, and custom codes), or nested AND/OR rules, or select multiple alarms for bulk adjudication.',
+                summary: 'Searchable historical log of all occupancies, alarms, and faults. Search by normalized Vehicle / ISO 6346 Container ID across local and federated nodes to open the Multi-Pass Vehicle Comparison & Linked Adjudication dialog, filter by Event UUID, lane, time window, Adjudication Code (`Code 9998: Extended Occupancy Gamma Alarm`, `Code 9999: EML Non-Threat`, built-in `1–11`, and custom codes), or nested AND/OR rules, or select multiple alarms for bulk adjudication.',
             },
             {
                 title: 'Status of Health (`/health`)',
@@ -144,6 +144,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Adjudication Details Extract (`ADJUDICATION_DETAILS`)',
                 summary: 'Complete line-by-line audit table of every submitted adjudication (Submission Time, Lane, Username, Occupancy Count, Code, Feedback, Secondary Inspection, Isotopes, Vehicle ID, File Paths, Occupancy ID).',
+            },
+            {
+                title: 'Vehicle Incident Report (`VEHICLE_INCIDENT`)',
+                summary: 'Consolidated multi-pass incident package correlating confirmation re-scans and gross-count-to-spectroscopic (RS350 / WebID) secondary passes for a Vehicle or ISO 6346 Container ID across local and federated nodes, including Enhanced Machine Learning (EML) classifications, radiation profile charts, OCR evidence, and disposition audit trail.',
             },
         ],
         formatsTitle: 'Supported Export Formats',
@@ -253,7 +257,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Eventos (`/event-log`)',
-                summary: 'Registro histórico de ocupaciones, alarmas y fallos con búsqueda por UUID, filtros por Código de adjudicación (`Código 9998`, `Código 9999`, `1–11` y personalizados) y adjudicación masiva.',
+                summary: 'Registro histórico de ocupaciones, alarmas y fallos con búsqueda normalizada por ID de vehículo / contenedor ISO 6346 (comparación multipasada y adjudicación vinculada en nodos locales y federados), búsqueda por UUID, filtros por Código de adjudicación (`Código 9998`, `Código 9999`, `1–11` y personalizados) y adjudicación masiva.',
             },
             {
                 title: 'Estado de salud (`/health`)',
@@ -301,6 +305,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Extracto detallado de adjudicación (`ADJUDICATION_DETAILS`)',
                 summary: 'Tabla de auditoría línea por línea de cada adjudicación enviada (hora, carril, usuario, conteo, código, notas, inspección secundaria, isótopos, vehículo, archivos e ID de ocupación).',
+            },
+            {
+                title: 'Informe de incidente de vehículo (`VEHICLE_INCIDENT`)',
+                summary: 'Paquete consolidado multipasada que correlaciona reescaneos de confirmación y pasadas secundarias espectroscópicas (RS350 / WebID) para un ID de vehículo o contenedor ISO 6346 en nodos locales y federados, con clasificaciones de Aprendizaje Automático Mejorado (EML), trazas de radiación, evidencia OCR e historial de adjudicación.',
             },
         ],
         formatsTitle: 'Formatos de exportación compatibles',
@@ -410,7 +418,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Événements (`/event-log`)',
-                summary: 'Journal historique consultable des occupations, alarmes et défauts avec recherche par UUID, filtres par Code d’adjudication (`Code 9998`, `Code 9999`, `1–11` et personnalisés) et adjudication groupée.',
+                summary: 'Journal historique consultable des occupations, alarmes et défauts avec recherche normalisée par ID de véhicule / conteneur ISO 6346 (comparaison multipassage et adjudication liée sur nœuds locaux et fédérés), recherche par UUID, filtres par Code d’adjudication (`Code 9998`, `Code 9999`, `1–11` et personnalisés) et adjudication groupée.',
             },
             {
                 title: 'État de santé (`/health`)',
@@ -458,6 +466,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Extraction détaillée des adjudications (`ADJUDICATION_DETAILS`)',
                 summary: 'Tableau d’audit ligne par ligne de chaque décision soumise (heure, voie, utilisateur, compteur, code, notes, inspection secondaire, isotopes, véhicule, fichiers et ID d’occupation).',
+            },
+            {
+                title: 'Rapport d’incident de véhicule (`VEHICLE_INCIDENT`)',
+                summary: 'Dossier consolidé multipassage corrélant les contrôles de confirmation et les passages secondaires spectroscopiques (RS350 / WebID) pour un ID de véhicule ou conteneur ISO 6346 sur les nœuds locaux et fédérés, avec classifications d’Apprentissage Automatique Amélioré (EML), traces radiologiques, preuves OCR et historique d’adjudication.',
             },
         ],
         formatsTitle: 'Formats d’exportation pris en charge',
@@ -567,7 +579,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Συμβάντα (`/event-log`)',
-                summary: 'Ιστορικό διελεύσεων, συναγερμών και βλαβών με αναζήτηση UUID, φίλτρα Κωδικού αξιολόγησης (`Κωδικός 9998`, `Κωδικός 9999`, `1–11` και προσαρμοσμένοι) και μαζική αξιολόγηση.',
+                summary: 'Ιστορικό διελεύσεων, συναγερμών και βλαβών με κανονικοποιημένη αναζήτηση ID οχήματος / εμπορευματοκιβωτίου ISO 6346 (σύγκριση πολλαπλών διελεύσεων και συνδεδεμένη αξιολόγηση σε τοπικούς και ομόσπονδους κόμβους), αναζήτηση UUID, φίλτρα Κωδικού αξιολόγησης (`Κωδικός 9998`, `Κωδικός 9999`, `1–11` και προσαρμοσμένοι) και μαζική αξιολόγηση.',
             },
             {
                 title: 'Κατάσταση υγείας (`/health`)',
@@ -615,6 +627,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Αναλυτική εξαγωγή αξιολογήσεων (`ADJUDICATION_DETAILS`)',
                 summary: 'Πίνακας ελέγχου γραμμή προς γραμμή για κάθε υποβληθείσα αξιολόγηση (ώρα, λωρίδα, χρήστης, αριθμός διέλευσης, κωδικός, σχόλια, δευτερεύων έλεγχος, ισότοπα, όχημα, αρχεία και ID διέλευσης).',
+            },
+            {
+                title: 'Αναφορά συμβάντος οχήματος (`VEHICLE_INCIDENT`)',
+                summary: 'Ενοποιημένο πακέτο πολλαπλών διελεύσεων που συσχετίζει επαναληπτικούς ελέγχους επιβεβαίωσης και φασματοσκοπικές δευτερεύουσες διελεύσεις (RS350 / WebID) για αναγνωριστικό οχήματος ή εμπορευματοκιβωτίου ISO 6346 σε τοπικούς και ομόσπονδους κόμβους, με ταξινομήσεις Ενισχυμένης Μηχανικής Μάθησης (EML), καμπύλες ακτινοβολίας, τεκμήρια OCR και ιστορικό αξιολόγησης.',
             },
         ],
         formatsTitle: 'Υποστηριζόμενες μορφές εξαγωγής',

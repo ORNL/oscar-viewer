@@ -6,6 +6,8 @@ import {
     createEventFilterRule,
     EventFilterGroup,
     eventMatchesFilter,
+    extractPrimaryVehicleIdRule,
+    hasVehicleIdFilterRule,
     operatorsForEventFilterField,
 } from "../../src/lib/data/oscar/EventFilter";
 import {BULK_ADJUDICATION_CONCURRENCY, runWithConcurrency} from "../../src/lib/data/oscar/BulkAdjudication";
@@ -544,5 +546,89 @@ describe("Adjudication Code Event Log filtering and custom code union", () => {
             [{code: 101, label: "Site A", group: "Custom"}, {code: 150, label: "Site Mid", group: "Custom"}],
         ]);
         expect(merged.map(entry => entry.code)).to.deep.equal([101, 150, 205]);
+    });
+});
+
+describe("Vehicle ID Event Log filtering and normalized matching", () => {
+    const metadata = {nodeId: "node-1", nodeName: "Local", laneId: "lane1"};
+    const containerEvent = {vehicleId: "CSQU 305438-3", maxGamma: 1950} as any;
+    const plateEvent = {vehicleId: "TN-8842B", maxGamma: 420} as any;
+    const emptyVehicleEvent = {vehicleId: "", maxGamma: 1950} as any;
+
+    it("supports normalized contains, equals, startsWith, notEquals, isEmpty, and isNotEmpty while keeping Occupancy CQL clean", () => {
+        expect(operatorsForEventFilterField("vehicleId")).to.deep.equal([
+            "contains",
+            "equals",
+            "startsWith",
+            "notEquals",
+            "isEmpty",
+            "isNotEmpty",
+        ]);
+        expect(createEventFilterRule("vehicleId").operator).to.equal("contains");
+
+        const containerFilter: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [
+                {kind: "rule", id: "v1", field: "vehicleId", operator: "equals", value: "csqu3054383"},
+                {kind: "rule", id: "g1", field: "maxGamma", operator: "greaterThanOrEqual", value: "1500"},
+            ],
+        };
+
+        expect(hasVehicleIdFilterRule(containerFilter)).to.equal(true);
+        expect(extractPrimaryVehicleIdRule(containerFilter)).to.deep.equal({
+            value: "csqu3054383",
+            matchMode: "equals",
+        });
+
+        // Occupancy datastream CQL omits vehicleId (which lives on Adjudication + vehicleOcr) while preserving sibling predicates.
+        expect(compileEventFilterForLane(containerFilter, metadata)).to.equal("maxGamma>=1500");
+
+        const vehicleOnlyFilter: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "v-only", field: "vehicleId", operator: "contains", value: "305438"}],
+        };
+        expect(compileEventFilterForLane(vehicleOnlyFilter, metadata)).to.equal(null);
+
+        expect(eventMatchesFilter(containerFilter, containerEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(containerFilter, plateEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(containerFilter, emptyVehicleEvent, metadata)).to.equal(false);
+
+        const startsWithPlate: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "v2", field: "vehicleId", operator: "startsWith", value: "tn88"}],
+        };
+        expect(eventMatchesFilter(startsWithPlate, plateEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(startsWithPlate, containerEvent, metadata)).to.equal(false);
+
+        const emptyRule: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "v3", field: "vehicleId", operator: "isEmpty", value: ""}],
+        };
+        const nonEmptyRule: EventFilterGroup = {
+            kind: "group",
+            id: "root",
+            logic: "and",
+            children: [{kind: "rule", id: "v4", field: "vehicleId", operator: "isNotEmpty", value: ""}],
+        };
+        expect(hasVehicleIdFilterRule(emptyRule)).to.equal(true);
+        // isEmpty cannot be evaluated via the positive vehicle-search endpoint, so extractPrimaryVehicleIdRule returns null.
+        expect(extractPrimaryVehicleIdRule(emptyRule)).to.equal(null);
+        expect(extractPrimaryVehicleIdRule(nonEmptyRule)).to.deep.equal({
+            value: "",
+            matchMode: "isNotEmpty",
+        });
+
+        expect(eventMatchesFilter(emptyRule, emptyVehicleEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(emptyRule, containerEvent, metadata)).to.equal(false);
+        expect(eventMatchesFilter(nonEmptyRule, containerEvent, metadata)).to.equal(true);
+        expect(eventMatchesFilter(nonEmptyRule, emptyVehicleEvent, metadata)).to.equal(false);
     });
 });

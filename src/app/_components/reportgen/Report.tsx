@@ -2,12 +2,19 @@ import {
     Alert,
     Box,
     Button,
+    Checkbox,
     CircularProgress,
+    FormControl,
+    FormControlLabel,
     Grid,
+    InputLabel,
+    MenuItem,
     Paper,
+    Select,
     Snackbar,
     SnackbarCloseReason,
     Stack,
+    TextField,
     Typography
 } from "@mui/material";
 import ReportTypeSelect from "@/app/_components/reportgen/ReportTypeSelector";
@@ -24,6 +31,13 @@ import {
     ReportOutputFormat,
     sendCommand
 } from "@/lib/data/oscar/OSCARCommands";
+import {
+    buildVehicleIncidentReportSpec,
+    normalizeVehicleId,
+    searchVehiclePassesAcrossNodes,
+    serializeFederatedRemotePasses,
+    VehicleSearchMatchMode,
+} from "@/lib/data/oscar/VehicleSearch";
 import EventTypeSelect from "@/app/_components/reportgen/EventTypeSelector";
 import {useSelector} from "react-redux";
 import {RootState} from "@/lib/state/Store";
@@ -144,6 +158,44 @@ function parseCsvPreview(text: string): ExtractPreviewTable {
             ? findIdx("Summary")
             : findIdx("Operator Notes");
 
+    const passNumIdx = findIdx("Pass #");
+    const alarmStatusIdx = findIdx("Alarm Status");
+    if (passNumIdx >= 0 && alarmStatusIdx >= 0) {
+        const nodeIdx = findIdx("Node ID");
+        const sysTypeIdx = findIdx("System Type");
+        const startUtcIdx = findIdx("Start Time (UTC)");
+        const vehIdIdx = findIdx("Vehicle ID");
+        const maxGammaIdx = findIdx("Peak Gamma Counts");
+        const maxNeutronIdx = findIdx("Peak Neutron Counts");
+        const confIsoIdx = findIdx("Confirmed Isotopes");
+        const latestDispCodeIdx = findIdx("Latest Disposition Code");
+        const latestDispLblIdx = findIdx("Latest Disposition Label");
+        return {
+            headers: [
+                "Pass",
+                "Node / Lane",
+                "Start (UTC)",
+                "Vehicle ID",
+                "Alarm Status",
+                "Peak G / N",
+                "Isotopes",
+                "Disposition",
+            ],
+            rows: dataRows.map((r, idx) => [
+                `#${r[passNumIdx] || idx + 1}`,
+                `${nodeIdx >= 0 && r[nodeIdx] ? `${r[nodeIdx]} · ` : ""}${r[laneIdx] || "Lane"}${sysTypeIdx >= 0 && r[sysTypeIdx] ? ` (${r[sysTypeIdx]})` : ""}`,
+                startUtcIdx >= 0 ? (r[startUtcIdx] ?? "") : "",
+                vehIdIdx >= 0 ? (r[vehIdIdx] ?? "") : "",
+                r[alarmStatusIdx] ?? "",
+                `${maxGammaIdx >= 0 ? (r[maxGammaIdx] ?? "0") : "0"} / ${maxNeutronIdx >= 0 ? (r[maxNeutronIdx] ?? "0") : "0"}`,
+                confIsoIdx >= 0 ? (r[confIsoIdx] ?? "") : "",
+                latestDispCodeIdx >= 0 && r[latestDispCodeIdx]
+                    ? `${r[latestDispCodeIdx]}: ${latestDispLblIdx >= 0 ? (r[latestDispLblIdx] ?? "") : ""}`
+                    : (latestDispLblIdx >= 0 ? (r[latestDispLblIdx] ?? "") : ""),
+            ]),
+        };
+    }
+
     if (timeIdx >= 0 && dispIdx >= 0) {
         return {
             headers: ["Record", "Time (UTC)", "Disposition", "Isotopes", "Secondary", "Occupancy ID", "Summary"],
@@ -176,6 +228,39 @@ function parseJsonPreview(text: string): ExtractPreviewTable {
             ? parsed.records
             : [];
     const first = records[0];
+
+    if (reportType === "VEHICLE_INCIDENT" || Array.isArray(parsed?.passes)) {
+        const passes: any[] = Array.isArray(parsed?.passes) ? parsed.passes : records;
+        return {
+            headers: [
+                "Pass",
+                "Node / Lane",
+                "Start (UTC)",
+                "Vehicle ID",
+                "Alarm Status",
+                "Peak G / N",
+                "Isotopes",
+                "Disposition",
+            ],
+            rows: passes.slice(0, MAX_PREVIEW_ROWS).map((pass, idx) => {
+                const latestAdj = Array.isArray(pass?.adjudications) && pass.adjudications.length > 0
+                    ? pass.adjudications[pass.adjudications.length - 1]
+                    : null;
+                return [
+                    `#${idx + 1}`,
+                    `${pass?.nodeId ? `${pass.nodeId} · ` : ""}${pass?.laneName || pass?.laneUid || "Lane"}${pass?.systemType ? ` (${pass.systemType})` : ""}`,
+                    String(pass?.startTime ?? ""),
+                    String(pass?.vehicleId ?? ""),
+                    String(pass?.alarmStatusLabel ?? ""),
+                    `${pass?.maxGammaCount ?? 0} / ${pass?.maxNeutronCount ?? 0}`,
+                    Array.isArray(pass?.confirmedIsotopes) ? pass.confirmedIsotopes.join(", ") : "",
+                    latestAdj
+                        ? `${latestAdj.adjudicationCode ?? ""}: ${latestAdj.dispositionLabel ?? ""}`
+                        : "Open / Unadjudicated",
+                ];
+            }),
+        };
+    }
 
     if (reportType === "RDS_SITE" || (first && first.category !== undefined && first.metric !== undefined)) {
         return {
@@ -306,7 +391,7 @@ export default function ReportGeneratorView() {
     const {t} = useLanguage();
     const formatIdPrefix = useId();
     const extractCaptionId = useId();
-    const {activeViewKey, laneMapReady, viewError} = useContext(DataSourceContext);
+    const {activeViewKey, laneMapReady, laneMapRef, viewError} = useContext(DataSourceContext);
     const [isGenerating, setIsGenerating] = useState(false);
 
     const [selectedReportType, setSelectedReportType] = useState<string | null>("");
@@ -317,6 +402,9 @@ export default function ReportGeneratorView() {
     const [selectedNode, setSelectedNode] = useState<INode | null>(null);
     const [selectedLaneUID, setSelectedLaneUID] = useState<string[]>([]);
     const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
+    const [vehicleIncidentId, setVehicleIncidentId] = useState<string>("");
+    const [vehicleMatchMode, setVehicleMatchMode] = useState<VehicleSearchMatchMode>("equals");
+    const [includeFederatedNodes, setIncludeFederatedNodes] = useState<boolean>(true);
     const [selectedScope, setSelectedScope] = useState<ReportScope>(activeViewKey ? "OPERATIONAL_VIEW" : "NODE");
     const [selectedOperationalView, setSelectedOperationalView] = useState(activeViewKey ?? "");
     const [operationalViewCatalog, setOperationalViewCatalog] = useState<OperationalViewCatalog>(emptyOperationalViewCatalog());
@@ -426,6 +514,17 @@ export default function ReportGeneratorView() {
             return;
         }
 
+        if (
+            selectedReportType === "VEHICLE_INCIDENT"
+            && vehicleMatchMode !== "isNotEmpty"
+            && normalizeVehicleId(vehicleIncidentId).length === 0
+        ) {
+            setSnackMessage(t("vehicleIncidentIdRequired"));
+            setSeverity("error");
+            setOpenSnack(true);
+            return;
+        }
+
         const resolvedScope = resolveReportScope(
             selectedScope,
             selectedReportType,
@@ -482,6 +581,33 @@ export default function ReportGeneratorView() {
 
             const effectiveFormat: ReportOutputFormat = selectedReportFormat;
 
+            let laneUIDArg: string | null = effectiveLaneUIDs.length > 0 ? effectiveLaneUIDs.join(",") : null;
+            if (selectedReportType === "VEHICLE_INCIDENT") {
+                let federatedPasses: Array<Record<string, unknown>> = [];
+                if (includeFederatedNodes && nodes.length > 1) {
+                    const remoteNodes = nodes.filter((candidate: INode) => candidate.id !== nodeSnapshot.id);
+                    if (remoteNodes.length > 0) {
+                        const remoteSearch = await searchVehiclePassesAcrossNodes({
+                            laneMap: laneMapRef?.current ?? new Map(),
+                            nodes: remoteNodes,
+                            vehicleId: vehicleIncidentId,
+                            matchMode: vehicleMatchMode,
+                            activeViewKey: selectedScope === "OPERATIONAL_VIEW" ? selectedOperationalView : null,
+                            startTimeIso: startTime,
+                            endTimeIso: endTime,
+                        });
+                        federatedPasses = serializeFederatedRemotePasses(remoteSearch.passes, nodeSnapshot.id);
+                    }
+                }
+                laneUIDArg = buildVehicleIncidentReportSpec({
+                    vehicleId: vehicleIncidentId,
+                    matchMode: vehicleMatchMode,
+                    laneUIDs: effectiveLaneUIDs,
+                    includeProfiles: true,
+                    federatedPasses,
+                });
+            }
+
             const response = await sendCommand(
                 nodeSnapshot,
                 controlStream.properties.id,
@@ -489,7 +615,7 @@ export default function ReportGeneratorView() {
                     startTime,
                     endTime,
                     selectedReportType,
-                    effectiveLaneUIDs.length > 0 ? effectiveLaneUIDs.join(",") : null,
+                    laneUIDArg,
                     selectedEvent,
                     effectiveFormat,
                 )
@@ -691,6 +817,9 @@ export default function ReportGeneratorView() {
         setOperationalViewLoadFailed(false);
         setCustomEndTime("");
         setCustomStartTime("");
+        setVehicleIncidentId("");
+        setVehicleMatchMode("equals");
+        setIncludeFederatedNodes(true);
     };
 
     const getTimeRange = (timeRange: string): { startTime: string; endTime: string } => {
@@ -874,6 +1003,67 @@ export default function ReportGeneratorView() {
                                     <EventTypeSelect onSelect={handleEventTypeSelect} event={selectedEvent} />
                                 )}
 
+                                {selectedReportType === "VEHICLE_INCIDENT" && (
+                                    <Stack spacing={2}>
+                                        <TextField
+                                            size="small"
+                                            fullWidth
+                                            label={t("vehicleId")}
+                                            placeholder={t("vehicleSearchPlaceholder")}
+                                            value={vehicleIncidentId}
+                                            onChange={event => setVehicleIncidentId(event.target.value)}
+                                            onKeyDown={event => {
+                                                if (
+                                                    event.key === "Enter"
+                                                    && (event.nativeEvent.isComposing || event.keyCode === 229)
+                                                ) {
+                                                    event.preventDefault();
+                                                }
+                                            }}
+                                            inputProps={{
+                                                autoCorrect: "off",
+                                                autoCapitalize: "none",
+                                                spellCheck: false,
+                                                maxLength: 64,
+                                                "data-testid": "report-vehicle-id-input",
+                                            }}
+                                        />
+                                        <FormControl size="small" fullWidth>
+                                            <InputLabel id="report-vehicle-match-mode-label">
+                                                {t("vehicleSearchMatchModeLabel")}
+                                            </InputLabel>
+                                            <Select
+                                                labelId="report-vehicle-match-mode-label"
+                                                label={t("vehicleSearchMatchModeLabel")}
+                                                value={vehicleMatchMode}
+                                                onChange={event =>
+                                                    setVehicleMatchMode(event.target.value as VehicleSearchMatchMode)
+                                                }
+                                                data-testid="report-vehicle-match-mode"
+                                            >
+                                                <MenuItem value="equals">{t("filterOperator.equals")}</MenuItem>
+                                                <MenuItem value="contains">{t("filterOperator.contains")}</MenuItem>
+                                                <MenuItem value="startsWith">{t("filterOperator.startsWith")}</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                        {nodes.length > 1 && (
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        size="small"
+                                                        checked={includeFederatedNodes}
+                                                        onChange={event =>
+                                                            setIncludeFederatedNodes(event.target.checked)
+                                                        }
+                                                        data-testid="report-include-federated-checkbox"
+                                                    />
+                                                }
+                                                label={t("vehicleReportIncludeFederated")}
+                                            />
+                                        )}
+                                    </Stack>
+                                )}
+
                                 <TimeRangeSelect onSelect={handleTimeRange} timeRange={selectedTimeRange} />
 
                                 {selectedTimeRange === "custom" && (
@@ -889,7 +1079,20 @@ export default function ReportGeneratorView() {
                                 fullWidth
                                 startIcon={<Download/>}
                                 onClick={handleGenerateReport}
-                                disabled={isGenerating || isLoadingOperationalViews || !selectedReportType || !selectedTimeRange || !selectedNode || Boolean(viewError) || (Boolean(activeViewKey) && !laneMapReady)}
+                                disabled={
+                                    isGenerating
+                                    || isLoadingOperationalViews
+                                    || !selectedReportType
+                                    || !selectedTimeRange
+                                    || !selectedNode
+                                    || Boolean(viewError)
+                                    || (Boolean(activeViewKey) && !laneMapReady)
+                                    || (
+                                        selectedReportType === "VEHICLE_INCIDENT"
+                                        && vehicleMatchMode !== "isNotEmpty"
+                                        && normalizeVehicleId(vehicleIncidentId).length === 0
+                                    )
+                                }
                                 sx={{
                                     minBlockSize: "48px",
                                     "@media (pointer: coarse)": { minBlockSize: "52px" },

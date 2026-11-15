@@ -63,6 +63,13 @@ describe('Report Page (E2E)', () => {
             selectOption('Event Type', config.eventType, false);
         }
 
+        if (config.vehicleId) {
+            cy.get('[data-testid="report-vehicle-id-input"]')
+                .should('be.visible')
+                .clear()
+                .type(config.vehicleId, { delay: 0 });
+        }
+
         selectOption('Time Range', config.timeRange, false);
 
         if (config.customDates) {
@@ -189,6 +196,16 @@ describe('Report Page (E2E)', () => {
                 lane: 'first',
                 timeRange: 'custom',
                 customDates: { start: '2024-01-01', end: '2025-12-31' }
+            });
+        });
+    });
+
+    describe('Vehicle Incident Reports', () => {
+        it('should generate Vehicle Incident report for 30 days', () => {
+            generateAndVerifyReport({
+                reportType: 'VEHICLE_INCIDENT',
+                vehicleId: 'CSQU3054383',
+                timeRange: 'last30days'
             });
         });
     });

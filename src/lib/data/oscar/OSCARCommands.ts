@@ -66,6 +66,7 @@ const MULTI_FORMAT_REPORT_TYPES = new Set([
     "EVENT",
     "ADJUDICATION",
     "ADJUDICATION_DETAILS",
+    "VEHICLE_INCIDENT",
 ]);
 
 export function resolveEffectiveReportCommandType(
