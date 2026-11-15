@@ -24,8 +24,10 @@ import {
     Tabs,
     Typography,
 } from '@mui/material';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import PlayCircleOutlineRoundedIcon from '@mui/icons-material/PlayCircleOutlineRounded';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
 import {
     exportSupportBundle,
@@ -33,6 +35,18 @@ import {
     SupportBundleNode,
     SupportClientStateSummary,
 } from '@/lib/data/oscar/SupportDiagnostics';
+import {
+    CONSOLE_PAGE_CARD_GUIDE_SLUGS,
+    getContextualVideoGuidesForPath,
+    getVideoGuideBySlug,
+    GLOSSARY_INDEX_GUIDE_SLUGS,
+    REPORT_CARD_GUIDE_SLUGS,
+    resolveVideoGuidesBySlugs,
+    VIDEO_GUIDE_UI_STRINGS,
+    VIDEO_GUIDES_CATALOG,
+    VideoGuideEntry,
+    VideoGuideTrackId,
+} from '@/lib/data/oscar/VideoGuidesCatalog';
 
 interface HelpSectionItem {
     title: string;
@@ -223,7 +237,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Container & License Plate OCR (`ocrConfig`)',
-                meaning: 'Optional per-lane asynchronous background OCR (disabled by default). When enabled on a lane, OSCAR samples occupancy frames as CPU/heap resources allow, tiers `vehicleOcr` candidates to `PARQUET_PRIMARY`, bounds evidence JPEG crops to a 2,000-file FIFO cap (< 100 MiB, deleting transient non-alarm clips immediately when `Alarms Only` is off), auto-fills ISO 6346 check-digit-verified container codes (or high-confidence plates) into untouched Vehicle ID fields, and displays click-to-apply suggestion chips with crop thumbnails.',
+                meaning: 'Optional per-lane asynchronous background OCR (disabled by default). When enabled on a lane, OSCAR samples occupancy frames as CPU/heap resources allow, tiers `vehicleOcr` candidates to `PARQUET_PRIMARY`, retains date-partitioned JPEG evidence crops alongside retained `frame-03.jpg` media (`ocrCropRetentionDays = 365`, preserving held and operator-adjudicated events and deleting transient non-alarm clips immediately when `Alarms Only` is off), auto-fills ISO 6346 check-digit-verified container codes (or high-confidence plates) into untouched Vehicle ID fields, and displays click-to-apply suggestion chips with crop thumbnails.',
             },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
@@ -384,7 +398,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'OCR de contenedores y matrículas (`ocrConfig`)',
-                meaning: 'OCR asíncrono en segundo plano opcional por carril (desactivado de forma predeterminada). Cuando se activa, muestrea fotogramas según CPU y memoria, archiva `vehicleOcr` en `PARQUET_PRIMARY`, limita los recortes JPEG a 2.000 archivos FIFO (< 100 MiB, eliminando al instante clips sin alarma cuando `Solo alarmas` está desactivado), completa automáticamente contenedores ISO 6346 válidos o matrículas de alta confianza en Vehículo si no se ha editado y ofrece sugerencias clicables.',
+                meaning: 'OCR asíncrono en segundo plano opcional por carril (desactivado de forma predeterminada). Cuando se activa, muestrea fotogramas según CPU y memoria, archiva `vehicleOcr` en `PARQUET_PRIMARY`, conserva recortes JPEG particionados por fecha junto con `frame-03.jpg` (`ocrCropRetentionDays = 365`, preservando eventos retenidos o adjudicados por el operador y eliminando al instante clips sin alarma cuando `Solo alarmas` está desactivado), completa automáticamente contenedores ISO 6346 válidos o matrículas de alta confianza en Vehículo si no se ha editado y ofrece sugerencias clicables.',
             },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
@@ -545,7 +559,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'OCR conteneurs et plaques (`ocrConfig`)',
-                meaning: 'OCR asynchrone en arrière-plan optionnel par voie (désactivé par défaut). Lorsqu’il est activé, OSCAR analyse les images selon la disponibilité CPU/mémoire, archive `vehicleOcr` dans `PARQUET_PRIMARY`, plafonne les vignettes JPEG à 2 000 fichiers FIFO (< 100 Mio, en supprimant immédiatement les clips hors alarme lorsque `Alarmes uniquement` est désactivé), préremplit les conteneurs ISO 6346 valides ou plaques à haute confiance et affiche des suggestions cliquables.',
+                meaning: 'OCR asynchrone en arrière-plan optionnel par voie (désactivé par défaut). Lorsqu’il est activé, OSCAR analyse les images selon la disponibilité CPU/mémoire, archive `vehicleOcr` dans `PARQUET_PRIMARY`, conserve les vignettes JPEG partitionnées par date avec `frame-03.jpg` (`ocrCropRetentionDays = 365`, en préservant les événements sous rétention ou adjugés par un opérateur et en supprimant immédiatement les clips hors alarme lorsque `Alarmes uniquement` est désactivé), préremplit les conteneurs ISO 6346 valides ou plaques à haute confiance et affiche des suggestions cliquables.',
             },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
@@ -706,7 +720,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'OCR εμπορευματοκιβωτίων & πινακίδων (`ocrConfig`)',
-                meaning: 'Προαιρετικό ασύγχρονο OCR παρασκηνίου ανά λωρίδα (απενεργοποιημένο από προεπιλογή). Όταν ενεργοποιηθεί, αναλύει καρέ ανάλογα με CPU/μνήμη, αρχειοθετεί το `vehicleOcr` στο `PARQUET_PRIMARY`, περιορίζει τις μικρογραφίες JPEG σε 2.000 αρχεία FIFO (< 100 MiB, διαγράφοντας αμέσως προσωρινά κλιπ εκτός συναγερμού όταν το `Μόνο συναγερμοί` είναι ανενεργό), συμπληρώνει αυτόματα έγκυρους κωδικούς ISO 6346 ή πινακίδες υψηλής εμπιστοσύνης και εμφανίζει επιλέξιμες προτάσεις.',
+                meaning: 'Προαιρετικό ασύγχρονο OCR παρασκηνίου ανά λωρίδα (απενεργοποιημένο από προεπιλογή). Όταν ενεργοποιηθεί, αναλύει καρέ ανάλογα με CPU/μνήμη, αρχειοθετεί το `vehicleOcr` στο `PARQUET_PRIMARY`, διατηρεί μικρογραφίες JPEG ανά ημερομηνία μαζί με το `frame-03.jpg` (`ocrCropRetentionDays = 365`, προστατεύοντας συμβάντα σε δέσμευση ή αξιολογημένα από χειριστή και διαγράφοντας αμέσως προσωρινά κλιπ εκτός συναγερμού όταν το `Μόνο συναγερμοί` είναι ανενεργό), συμπληρώνει αυτόματα έγκυρους κωδικούς ISO 6346 ή πινακίδες υψηλής εμπιστοσύνης και εμφανίζει επιλέξιμες προτάσεις.',
             },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',
@@ -734,9 +748,37 @@ const touchSafeButtonSx = {
     },
 } as const;
 
+const detailsTrackSx = {
+    border: 1,
+    borderColor: 'divider',
+    borderRadius: 1,
+    bgcolor: 'background.paper',
+    '&[open] > summary': {
+        borderBottom: 1,
+        borderColor: 'divider',
+    },
+} as const;
+
+const summaryTrackSx = {
+    px: 2,
+    py: 1.25,
+    cursor: 'pointer',
+    fontWeight: 600,
+    fontSize: '0.875rem',
+    userSelect: 'none',
+    '&:focus-visible': {
+        outline: '2px solid',
+        outlineColor: 'primary.main',
+        outlineOffset: -2,
+    },
+} as const;
+
+const TRACK_ORDER: readonly VideoGuideTrackId[] = ['A', 'B', 'C'];
+
 export default function HelpDialog({
     open,
     onClose,
+    activePathname,
     nodes,
     stateSummary,
     fetchImpl,
@@ -745,6 +787,7 @@ export default function HelpDialog({
 }: {
     open: boolean;
     onClose: () => void;
+    activePathname?: string;
     nodes?: readonly SupportBundleNode[];
     stateSummary?: SupportClientStateSummary;
     fetchImpl?: typeof fetch;
@@ -752,20 +795,116 @@ export default function HelpDialog({
     onBundleExported?: (result: SupportBundleExportResult) => void;
 }) {
     const { language } = useLanguage();
-    const content = HELP_CONTENT[language] || HELP_CONTENT.en;
+    const activeLocale: Locale = HELP_CONTENT[language] ? language : 'en';
+    const content = HELP_CONTENT[activeLocale];
+    const videoUi = VIDEO_GUIDE_UI_STRINGS[activeLocale];
+    const tracksHeadingId = React.useId();
+    const activeVideoHeadingId = React.useId();
     const [tabIndex, setTabIndex] = React.useState(0);
+    const [activeGuideSlug, setActiveGuideSlug] = React.useState<string | null>(null);
+    const [focusPendingSlug, setFocusPendingSlug] = React.useState<string | null>(null);
+    const videoRef = React.useRef<HTMLVideoElement | null>(null);
+    const playerContainerRef = React.useRef<HTMLDivElement | null>(null);
+    const lastTriggerButtonRef = React.useRef<HTMLButtonElement | null>(null);
     const [exporting, setExporting] = React.useState(false);
     const [exportOutcome, setExportOutcome] = React.useState<{
         severity: 'success' | 'warning' | 'error';
         message: string;
     } | null>(null);
 
+    const effectivePathname = React.useMemo(() => {
+        if (activePathname) return activePathname;
+        if (typeof window !== 'undefined') return window.location.pathname;
+        return '/';
+    }, [activePathname]);
+
+    const contextualGuides = React.useMemo(
+        () => getContextualVideoGuidesForPath(effectivePathname),
+        [effectivePathname],
+    );
+
+    const activeGuide = React.useMemo(
+        () => (activeGuideSlug ? getVideoGuideBySlug(activeGuideSlug) ?? null : null),
+        [activeGuideSlug],
+    );
+
     React.useEffect(() => {
         if (!open) {
+            videoRef.current?.pause();
+            setActiveGuideSlug(null);
+            setFocusPendingSlug(null);
             setExportOutcome(null);
             setExporting(false);
         }
     }, [open]);
+
+    React.useEffect(() => {
+        if (open && focusPendingSlug && activeGuide?.slug === focusPendingSlug) {
+            playerContainerRef.current?.focus();
+            setFocusPendingSlug(null);
+        }
+    }, [activeGuide, focusPendingSlug, open]);
+
+    const handleCloseActiveVideo = React.useCallback((restoreTriggerFocus = true) => {
+        videoRef.current?.pause();
+        setActiveGuideSlug(null);
+        setFocusPendingSlug(null);
+        if (restoreTriggerFocus) {
+            const trigger = lastTriggerButtonRef.current;
+            if (trigger && trigger.isConnected) {
+                window.requestAnimationFrame(() => trigger.focus());
+            }
+        }
+    }, []);
+
+    const handleToggleGuide = React.useCallback(
+        (guide: VideoGuideEntry, event: React.MouseEvent<HTMLButtonElement>) => {
+            lastTriggerButtonRef.current = event.currentTarget;
+            if (activeGuideSlug === guide.slug) {
+                videoRef.current?.pause();
+                setActiveGuideSlug(null);
+                setFocusPendingSlug(null);
+                return;
+            }
+            videoRef.current?.pause();
+            setActiveGuideSlug(guide.slug);
+            setFocusPendingSlug(guide.slug);
+        },
+        [activeGuideSlug],
+    );
+
+    const renderWatchButtons = React.useCallback(
+        (guides: readonly VideoGuideEntry[], contextTitle?: string, testIdPrefix = 'help-watch-guide') => {
+            if (guides.length === 0) return null;
+            return (
+                <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mt: 1 }}>
+                    {guides.map((guide) => {
+                        const visibleLabel = videoUi.watchButtonLabel(guide.badge, guide.durationLabel);
+                        const localizedTitle = guide.titles[activeLocale];
+                        const isSelected = activeGuideSlug === guide.slug;
+                        return (
+                            <Button
+                                key={guide.slug}
+                                type="button"
+                                variant={isSelected ? 'contained' : 'outlined'}
+                                size="small"
+                                color="primary"
+                                startIcon={<PlayCircleOutlineRoundedIcon fontSize="small" aria-hidden="true" />}
+                                aria-pressed={isSelected}
+                                aria-label={videoUi.watchButtonAriaLabel(visibleLabel, localizedTitle, contextTitle)}
+                                onClick={(event) => handleToggleGuide(guide, event)}
+                                data-testid={`${testIdPrefix}-${guide.badge}`}
+                                sx={{ ...touchSafeButtonSx, textTransform: 'none' }}
+                            >
+                                {visibleLabel}
+                            </Button>
+                        );
+                    })}
+                </Stack>
+            );
+        },
+        [activeGuideSlug, activeLocale, handleToggleGuide, videoUi],
+    );
 
     const handleExportSupportBundle = React.useCallback(async () => {
         if (exporting) return;
@@ -830,21 +969,164 @@ export default function HelpDialog({
                 </Tabs>
             </Box>
             <DialogContent dividers sx={{ minHeight: 380 }}>
+                {contextualGuides.length > 0 && (
+                    <Paper
+                        variant="outlined"
+                        data-testid="help-contextual-video-strip"
+                        sx={{ px: 1.5, py: 1, mb: 2, bgcolor: 'action.hover' }}
+                    >
+                        <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1}
+                            alignItems={{ xs: 'flex-start', sm: 'center' }}
+                            justifyContent="space-between"
+                        >
+                            <Typography variant="caption" fontWeight={700} color="text.secondary">
+                                {videoUi.contextualStripLabel}
+                            </Typography>
+                            <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                                {contextualGuides.map((guide) => {
+                                    const visibleLabel = `${videoUi.watchButtonLabel(guide.badge, guide.durationLabel)}: ${guide.titles[activeLocale]}`;
+                                    const isSelected = activeGuideSlug === guide.slug;
+                                    return (
+                                        <Button
+                                            key={guide.slug}
+                                            type="button"
+                                            variant={isSelected ? 'contained' : 'outlined'}
+                                            size="small"
+                                            startIcon={<PlayCircleOutlineRoundedIcon fontSize="small" aria-hidden="true" />}
+                                            aria-pressed={isSelected}
+                                            onClick={(event) => handleToggleGuide(guide, event)}
+                                            data-testid={`help-contextual-guide-${guide.badge}`}
+                                            sx={{ ...touchSafeButtonSx, textTransform: 'none', textAlign: 'left' }}
+                                        >
+                                            {visibleLabel}
+                                        </Button>
+                                    );
+                                })}
+                            </Stack>
+                        </Stack>
+                    </Paper>
+                )}
+
+                {activeGuide && (
+                    <Paper
+                        ref={playerContainerRef}
+                        tabIndex={-1}
+                        variant="outlined"
+                        role="region"
+                        aria-labelledby={activeVideoHeadingId}
+                        data-testid="help-inline-video-player"
+                        sx={{
+                            p: 1.75,
+                            mb: 2,
+                            borderColor: 'primary.main',
+                            '&:focus-visible': {
+                                outline: '2px solid',
+                                outlineColor: 'primary.main',
+                                outlineOffset: 2,
+                            },
+                        }}
+                    >
+                        <Stack spacing={1.25}>
+                            <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="flex-start"
+                                justifyContent="space-between"
+                            >
+                                <Box>
+                                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                                        <Chip
+                                            label={`#${activeGuide.badge} · ${activeGuide.durationLabel} · ${activeGuide.sizeLabel}`}
+                                            size="small"
+                                            color="primary"
+                                        />
+                                        <Typography
+                                            id={activeVideoHeadingId}
+                                            variant="subtitle2"
+                                            component="h3"
+                                            fontWeight={700}
+                                        >
+                                            {activeGuide.titles[activeLocale]}
+                                        </Typography>
+                                    </Stack>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                        {activeGuide.summaries[activeLocale]}
+                                    </Typography>
+                                </Box>
+                                <Button
+                                    type="button"
+                                    variant="text"
+                                    size="small"
+                                    startIcon={<CloseRoundedIcon fontSize="small" aria-hidden="true" />}
+                                    onClick={() => handleCloseActiveVideo(true)}
+                                    data-testid="help-close-video-player"
+                                    sx={{ ...touchSafeButtonSx, flexShrink: 0, textTransform: 'none' }}
+                                >
+                                    {videoUi.closeVideoLabel}
+                                </Button>
+                            </Stack>
+                            <Box
+                                sx={{
+                                    '& > video': {
+                                        width: '100%',
+                                        height: 'auto',
+                                        aspectRatio: '16 / 9',
+                                        bgcolor: 'common.black',
+                                        borderRadius: 1,
+                                        display: 'block',
+                                    },
+                                }}
+                            >
+                                <video
+                                    ref={videoRef}
+                                    key={activeGuide.slug}
+                                    controls
+                                    width={1280}
+                                    height={720}
+                                    preload="metadata"
+                                    playsInline
+                                    data-testid="help-video-element"
+                                >
+                                    <source src={activeGuide.mp4Url} type="video/mp4" />
+                                    <track
+                                        kind="captions"
+                                        src={activeGuide.vttUrl}
+                                        srcLang="en"
+                                        label="English"
+                                        default
+                                    />
+                                </video>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                                {videoUi.captionsNote}
+                            </Typography>
+                        </Stack>
+                    </Paper>
+                )}
+
                 {tabIndex === 0 && (
                     <Stack spacing={1.5}>
                         <Typography variant="body2" color="text.secondary">
                             {content.pagesIntro}
                         </Typography>
-                        {content.pages.map((item) => (
-                            <Paper key={item.title} variant="outlined" sx={{ p: 1.5 }}>
-                                <Typography variant="subtitle2" fontWeight={700}>
-                                    {item.title}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                    {item.summary}
-                                </Typography>
-                            </Paper>
-                        ))}
+                        {content.pages.map((item, pageIndex) => {
+                            const pageGuides = resolveVideoGuidesBySlugs(
+                                CONSOLE_PAGE_CARD_GUIDE_SLUGS[pageIndex] ?? [],
+                            );
+                            return (
+                                <Paper key={item.title} variant="outlined" sx={{ p: 1.5 }}>
+                                    <Typography variant="subtitle2" fontWeight={700}>
+                                        {item.title}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                        {item.summary}
+                                    </Typography>
+                                    {renderWatchButtons(pageGuides, item.title, `help-page-${pageIndex}-guide`)}
+                                </Paper>
+                            );
+                        })}
                     </Stack>
                 )}
 
@@ -854,16 +1136,26 @@ export default function HelpDialog({
                             {content.reportsIntro}
                         </Typography>
                         <Stack spacing={1.25}>
-                            {content.reports.map((item) => (
-                                <Paper key={item.title} variant="outlined" sx={{ p: 1.5 }}>
-                                    <Typography variant="subtitle2" fontWeight={700}>
-                                        {item.title}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                        {item.summary}
-                                    </Typography>
-                                </Paper>
-                            ))}
+                            {content.reports.map((item, reportIndex) => {
+                                const reportGuides = resolveVideoGuidesBySlugs(
+                                    REPORT_CARD_GUIDE_SLUGS[reportIndex] ?? [],
+                                );
+                                return (
+                                    <Paper key={item.title} variant="outlined" sx={{ p: 1.5 }}>
+                                        <Typography variant="subtitle2" fontWeight={700}>
+                                            {item.title}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                            {item.summary}
+                                        </Typography>
+                                        {renderWatchButtons(
+                                            reportGuides,
+                                            item.title,
+                                            `help-report-${reportIndex}-guide`,
+                                        )}
+                                    </Paper>
+                                );
+                            })}
                         </Stack>
                         <Divider />
                         <Typography variant="subtitle1" fontWeight={700}>
@@ -904,14 +1196,26 @@ export default function HelpDialog({
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {content.glossary.map((entry) => (
-                                        <TableRow key={entry.term} hover>
-                                            <TableCell sx={{ fontWeight: 600, verticalAlign: 'top' }}>
-                                                {entry.term}
-                                            </TableCell>
-                                            <TableCell>{entry.meaning}</TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {content.glossary.map((entry, glossaryIndex) => {
+                                        const glossaryGuides = resolveVideoGuidesBySlugs(
+                                            GLOSSARY_INDEX_GUIDE_SLUGS[glossaryIndex] ?? [],
+                                        );
+                                        return (
+                                            <TableRow key={entry.term} hover>
+                                                <TableCell sx={{ fontWeight: 600, verticalAlign: 'top' }}>
+                                                    {entry.term}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2">{entry.meaning}</Typography>
+                                                    {renderWatchButtons(
+                                                        glossaryGuides,
+                                                        entry.term,
+                                                        `help-glossary-${glossaryIndex}-guide`,
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
                             </Table>
                         </TableContainer>
@@ -934,36 +1238,158 @@ export default function HelpDialog({
                                 <Button
                                     variant="outlined"
                                     size="small"
-                                    endIcon={<OpenInNewRoundedIcon fontSize="small" />}
+                                    endIcon={<OpenInNewRoundedIcon fontSize="small" aria-hidden="true" />}
                                     component="a"
                                     href="/sensorhub/admin"
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    sx={touchSafeButtonSx}
                                 >
                                     /sensorhub/admin
                                 </Button>
                             </Stack>
                         </Paper>
-                        <Paper variant="outlined" sx={{ p: 2 }}>
-                            <Stack spacing={1} alignItems="flex-start">
-                                <Typography variant="subtitle2" fontWeight={700}>
-                                    {content.videoGuidesLinkLabel}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    {content.videoGuidesLinkDesc}
-                                </Typography>
-                                <Button
-                                    variant="outlined"
-                                    size="small"
-                                    endIcon={<OpenInNewRoundedIcon fontSize="small" />}
-                                    component="a"
-                                    href="https://github.com/ORNL/oscar-video-guides"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    sx={touchSafeButtonSx}
-                                >
-                                    ORNL/oscar-video-guides
-                                </Button>
+                        <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-video-guides-card">
+                            <Stack spacing={1.25} alignItems="stretch">
+                                <Box>
+                                    <Typography variant="subtitle2" fontWeight={700}>
+                                        {videoUi.localCatalogCardTitle}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                        {videoUi.localCatalogCardDesc}
+                                    </Typography>
+                                </Box>
+                                <Stack direction="row" flexWrap="wrap" gap={1}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        endIcon={<OpenInNewRoundedIcon fontSize="small" aria-hidden="true" />}
+                                        component="a"
+                                        href="/video-guides/index.html"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        data-testid="help-open-local-video-guides"
+                                        sx={{ ...touchSafeButtonSx, textTransform: 'none' }}
+                                    >
+                                        {videoUi.openLocalCatalogButtonLabel}
+                                    </Button>
+                                    <Button
+                                        variant="text"
+                                        size="small"
+                                        endIcon={<OpenInNewRoundedIcon fontSize="small" aria-hidden="true" />}
+                                        component="a"
+                                        href="https://github.com/ORNL/oscar-video-guides"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        data-testid="help-open-github-video-guides"
+                                        sx={{ ...touchSafeButtonSx, textTransform: 'none' }}
+                                    >
+                                        {videoUi.openGithubCatalogButtonLabel}
+                                    </Button>
+                                </Stack>
+                                <Divider />
+                                <Box component="section" aria-labelledby={tracksHeadingId}>
+                                    <Typography
+                                        id={tracksHeadingId}
+                                        variant="subtitle2"
+                                        component="h3"
+                                        fontWeight={700}
+                                    >
+                                        {videoUi.inAppCatalogHeading}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                        {videoUi.inAppCatalogHint}
+                                    </Typography>
+                                    <Stack spacing={1}>
+                                        {TRACK_ORDER.map((trackId) => {
+                                            const trackGuides = VIDEO_GUIDES_CATALOG.filter(
+                                                (entry) => entry.track === trackId,
+                                            );
+                                            return (
+                                                <Box
+                                                    key={trackId}
+                                                    component="details"
+                                                    data-testid={`help-video-track-${trackId}`}
+                                                    sx={detailsTrackSx}
+                                                >
+                                                    <Box component="summary" sx={summaryTrackSx}>
+                                                        {videoUi.tracks[trackId]}
+                                                    </Box>
+                                                    <Stack spacing={1.25} sx={{ p: 1.5 }}>
+                                                        {trackGuides.map((guide) => {
+                                                            const visibleLabel = videoUi.watchButtonLabel(
+                                                                guide.badge,
+                                                                guide.durationLabel,
+                                                            );
+                                                            const localizedTitle = guide.titles[activeLocale];
+                                                            const isSelected = activeGuideSlug === guide.slug;
+                                                            return (
+                                                                <Paper
+                                                                    key={guide.slug}
+                                                                    variant="outlined"
+                                                                    sx={{ p: 1.25 }}
+                                                                    data-testid={`help-catalog-item-${guide.badge}`}
+                                                                >
+                                                                    <Stack
+                                                                        direction={{ xs: 'column', sm: 'row' }}
+                                                                        spacing={1}
+                                                                        alignItems={{ xs: 'flex-start', sm: 'center' }}
+                                                                        justifyContent="space-between"
+                                                                    >
+                                                                        <Box sx={{ minInlineSize: 0 }}>
+                                                                            <Typography variant="body2" fontWeight={700}>
+                                                                                #{guide.badge} · {localizedTitle}{' '}
+                                                                                <Typography
+                                                                                    component="span"
+                                                                                    variant="caption"
+                                                                                    color="text.secondary"
+                                                                                >
+                                                                                    ({guide.durationLabel} · {guide.sizeLabel})
+                                                                                </Typography>
+                                                                            </Typography>
+                                                                            <Typography
+                                                                                variant="caption"
+                                                                                color="text.secondary"
+                                                                                sx={{ display: 'block', mt: 0.25 }}
+                                                                            >
+                                                                                {guide.summaries[activeLocale]}
+                                                                            </Typography>
+                                                                        </Box>
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant={isSelected ? 'contained' : 'outlined'}
+                                                                            size="small"
+                                                                            startIcon={
+                                                                                <PlayCircleOutlineRoundedIcon
+                                                                                    fontSize="small"
+                                                                                    aria-hidden="true"
+                                                                                />
+                                                                            }
+                                                                            aria-pressed={isSelected}
+                                                                            aria-label={videoUi.watchButtonAriaLabel(
+                                                                                visibleLabel,
+                                                                                localizedTitle,
+                                                                            )}
+                                                                            onClick={(event) => handleToggleGuide(guide, event)}
+                                                                            data-testid={`help-catalog-watch-${guide.badge}`}
+                                                                            sx={{
+                                                                                ...touchSafeButtonSx,
+                                                                                flexShrink: 0,
+                                                                                textTransform: 'none',
+                                                                            }}
+                                                                        >
+                                                                            {visibleLabel}
+                                                                        </Button>
+                                                                    </Stack>
+                                                                </Paper>
+                                                            );
+                                                        })}
+                                                    </Stack>
+                                                </Box>
+                                            );
+                                        })}
+                                    </Stack>
+                                </Box>
                             </Stack>
                         </Paper>
                         <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-support-bundle-card">
@@ -980,7 +1406,7 @@ export default function HelpDialog({
                                 <Button
                                     variant="outlined"
                                     size="small"
-                                    startIcon={<DownloadRoundedIcon fontSize="small" />}
+                                    startIcon={<DownloadRoundedIcon fontSize="small" aria-hidden="true" />}
                                     disabled={exporting}
                                     onClick={handleExportSupportBundle}
                                     data-testid="help-card-export-support-bundle"
@@ -1028,7 +1454,7 @@ export default function HelpDialog({
                     <Button
                         variant="outlined"
                         size="small"
-                        startIcon={<DownloadRoundedIcon fontSize="small" />}
+                        startIcon={<DownloadRoundedIcon fontSize="small" aria-hidden="true" />}
                         disabled={exporting}
                         onClick={handleExportSupportBundle}
                         data-testid="help-export-support-bundle"

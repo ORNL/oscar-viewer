@@ -44,7 +44,7 @@ import {useDispatch, useSelector} from "react-redux";
 import { useBreakpoint } from '../providers';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '@/app/contexts/LanguageContext';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {setEventPreview, setSelectedRowId} from "@/lib/state/EventPreviewSlice";
 import {selectDashboardUnreadAlarmCount, setSelectedEvent} from "@/lib/state/EventDataSlice";
 import {setEventData} from "@/lib/state/EventDetailsSlice";
@@ -150,6 +150,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
 
     const dispatch = useDispatch();
     const router = useRouter();
+    const pathname = usePathname();
     const {activeViewKey, viewError, scopedHref} = React.useContext(DataSourceContext);
     const savedVolume = useSelector(selectAlarmAudioVolume);
     const continuousAlarmAudio = useSelector(selectContinuousAlarmAudio);
@@ -480,6 +481,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             <HelpDialog
                 open={helpDialogOpen}
                 onClose={() => setHelpDialogOpen(false)}
+                activePathname={pathname ?? undefined}
                 nodes={configuredNodes}
                 stateSummary={{
                     configuredNodeCount: configuredNodes.length,

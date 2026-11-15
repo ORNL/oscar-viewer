@@ -55,6 +55,8 @@ import {
     OperationalViewCatalog,
 } from "@/lib/data/oscar/OperationalView";
 import {ReportScope, resolveReportScope} from "@/lib/data/oscar/ReportScope";
+import UpSetPlot from "@/app/_components/common/UpSetPlot";
+import {UpSetCoOccurrencePayload} from "@/lib/data/oscar/adjudication/IsotopeMapping";
 
 const EXTRACT_FORMAT_OPTIONS: ReadonlyArray<{ value: ReportOutputFormat; label: string }> = [
     { value: "PDF", label: "PDF" },
@@ -387,6 +389,43 @@ function parseJsonPreview(text: string): ExtractPreviewTable {
     };
 }
 
+function parseJsonUpSetCoOccurrence(text: string): UpSetCoOccurrencePayload | null {
+    try {
+        const parsed = JSON.parse(text);
+        const candidate = parsed?.upSetCoOccurrence;
+        if (
+            candidate
+            && Array.isArray(candidate.sets)
+            && Array.isArray(candidate.intersections)
+            && typeof candidate.totalOccupancies === "number"
+        ) {
+            return {
+                totalOccupancies: candidate.totalOccupancies,
+                sets: candidate.sets,
+                intersections: candidate.intersections.map((inter: Record<string, unknown>) => {
+                    const resolvedSets = Array.isArray(inter?.sets)
+                        ? (inter.sets as string[])
+                        : Array.isArray(inter?.activeSets)
+                            ? (inter.activeSets as string[])
+                            : [];
+                    return {
+                        mask: typeof inter?.mask === "number" ? inter.mask : undefined,
+                        label: typeof inter?.label === "string" ? inter.label : resolvedSets.join(" + "),
+                        sets: resolvedSets,
+                        activeSets: resolvedSets,
+                        count: Number(inter?.count ?? 0),
+                        percentPct: typeof inter?.percentPct === "number" ? inter.percentPct : undefined,
+                        snmPresent: Boolean(inter?.snmPresent),
+                    };
+                }),
+            };
+        }
+    } catch {
+        // Ignore malformed JSON
+    }
+    return null;
+}
+
 export default function ReportGeneratorView() {
     const {t} = useLanguage();
     const formatIdPrefix = useId();
@@ -418,6 +457,7 @@ export default function ReportGeneratorView() {
     const [generatedURL, setGeneratedURL] = useState<string | null>("");
     const [commandStatus, setCommandStatus] = useState<string | null>(null);
     const [extractPreview, setExtractPreview] = useState<ExtractPreviewTable | null>(null);
+    const [upSetPreview, setUpSetPreview] = useState<UpSetCoOccurrencePayload | null>(null);
 
     const activeTrackerCleanupRef = useRef<(() => void) | null>(null);
 
@@ -470,6 +510,7 @@ export default function ReportGeneratorView() {
         const fmt = detectReportFormatFromUrl(generatedURL);
         if (!generatedURL || (fmt !== "CSV" && fmt !== "JSON")) {
             setExtractPreview(null);
+            setUpSetPreview(null);
             return;
         }
 
@@ -485,16 +526,21 @@ export default function ReportGeneratorView() {
             .then(async (resp) => {
                 if (!resp.ok) return null;
                 const text = await resp.text();
-                return fmt === "JSON" ? parseJsonPreview(text) : parseCsvPreview(text);
+                return {
+                    table: fmt === "JSON" ? parseJsonPreview(text) : parseCsvPreview(text),
+                    upSet: fmt === "JSON" ? parseJsonUpSetCoOccurrence(text) : null,
+                };
             })
-            .then((table) => {
+            .then((result) => {
                 if (!controller.signal.aborted) {
-                    setExtractPreview(table);
+                    setExtractPreview(result?.table ?? null);
+                    setUpSetPreview(result?.upSet ?? null);
                 }
             })
             .catch(() => {
                 if (!controller.signal.aborted) {
                     setExtractPreview(null);
+                    setUpSetPreview(null);
                 }
             });
 
@@ -557,6 +603,7 @@ export default function ReportGeneratorView() {
             stopActiveTracker();
             setGeneratedURL("");
             setExtractPreview(null);
+            setUpSetPreview(null);
             setIsGenerating(true);
 
             let streams: typeof ControlStream[] = [];
@@ -805,6 +852,7 @@ export default function ReportGeneratorView() {
         setCommandStatus(null);
         setGeneratedURL("");
         setExtractPreview(null);
+        setUpSetPreview(null);
         setSelectedEvent(null);
         setSelectedReportType("");
         setSelectedReportFormat("PDF");
@@ -1221,10 +1269,14 @@ export default function ReportGeneratorView() {
                                     </Typography>
                                 </Box>
                             ) : (
-                                <Box
-                                    tabIndex={0}
-                                    role="region"
-                                    aria-labelledby={extractCaptionId}
+                                <Stack spacing={2}>
+                                    {upSetPreview && upSetPreview.totalOccupancies > 0 && (
+                                        <UpSetPlot data={upSetPreview} testId="report-json-upset-plot" />
+                                    )}
+                                    <Box
+                                        tabIndex={0}
+                                        role="region"
+                                        aria-labelledby={extractCaptionId}
                                     sx={{
                                         overflow: "auto",
                                         maxInlineSize: "100%",
@@ -1360,6 +1412,7 @@ export default function ReportGeneratorView() {
                                         </tbody>
                                     </table>
                                 </Box>
+                                </Stack>
                             )
                         ) : (
                             <Box

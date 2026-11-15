@@ -1,52 +1,79 @@
 "use client";
 
 import {FormControl, InputLabel, MenuItem, Select, SelectChangeEvent} from '@mui/material';
-import {useEffect, useState} from 'react';
+import {useEffect, useId, useState} from 'react';
 import {useLanguage} from '@/app/contexts/LanguageContext';
+
+const DEFAULT_SANDIA_DRFS: readonly string[] = [
+    "auto",
+    "2x2/NaI",
+    "3x3/NaI",
+    "1x1/CsI Side",
+    "Kromek-GR1-CZT",
+    "IdentiFINDER-R300",
+    "IdentiFINDER-LaBr3",
+    "IdentiFINDER-NG",
+    "Verifinder",
+    "Detective-EX",
+    "Falcon 5000",
+];
 
 export default function DetectorResponseFunction(props: {
     onSelect: (value: string) => void, // Return selected value
     selectVal: string
 }) {
     const {t} = useLanguage();
+    const labelId = useId();
+    const selectId = useId();
 
-    const [drfChoices, setDrfChoices] = useState<string[]>([]);
+    const [drfChoices, setDrfChoices] = useState<string[]>([...DEFAULT_SANDIA_DRFS]);
 
     const handleChange = (event: SelectChangeEvent) => {
         const val = event.target.value;
-        props.onSelect(val)
+        props.onSelect(val);
     };
 
     useEffect(() => {
-        fetchDrfValues();
+        let cancelled = false;
+        async function fetchDrfValues() {
+            const url = "https://full-spectrum.sandia.gov/api/v1/info";
+            try {
+                const response = await fetch(url, { method: 'GET' });
+                if (!response.ok) {
+                    return;
+                }
+                const results = await response.json();
+                const remote: string[] = Array.isArray(results?.Options?.[0]?.possibleValues)
+                    ? results.Options[0].possibleValues
+                    : [];
+                if (!cancelled && remote.length > 0) {
+                    const merged = Array.from(new Set(["auto", ...remote, ...DEFAULT_SANDIA_DRFS]));
+                    setDrfChoices(merged);
+                }
+            } catch {
+                // Keep default DRF choices when offline or blocked by CORS/network policy
+            }
+        }
+        void fetchDrfValues();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
-    async function fetchDrfValues(){
-        const url = "https://full-spectrum.sandia.gov/api/v1/info";
-
-        try {
-            const response = await fetch(url, { method: 'GET' });
-
-            if (!response.ok) {
-                console.error('Could not reach Sandia spectrum values.');
-                return;
-            }
-
-            const results = await response.json();
-            setDrfChoices(results?.Options[0].possibleValues ?? []);
-        } catch (error) {
-            console.error('Failed to fetch DRF values:', error);
-        }
-    }
+    const effectiveValue = props.selectVal && drfChoices.includes(props.selectVal)
+        ? props.selectVal
+        : (props.selectVal || "auto");
 
     return (
         <FormControl size="small" fullWidth>
-            <InputLabel id="label">{t('detectorResponseFunction')}</InputLabel>
+            <InputLabel id={labelId}>{t('detectorResponseFunction')}</InputLabel>
             <Select
                 variant="outlined"
-                id="label"
+                labelId={labelId}
+                id={selectId}
+                data-testid="webid-drf-select"
                 label={t('detectorResponseFunction')}
-                value={props.selectVal}
+                value={effectiveValue}
                 onChange={handleChange}
                 MenuProps={{
                     MenuListProps: {
@@ -58,17 +85,11 @@ export default function DetectorResponseFunction(props: {
                 autoWidth
                 style={{minWidth: "12em"}}
             >
-                { drfChoices.length > 0 ? (
-                    drfChoices.map((item) =>(
-                        <MenuItem key={item} value={item}>
-                            {item}
-                        </MenuItem>
-                    ))
-                    ) :
-                    (
-                        <span>{t('noChoices')}</span>
-                    )
-                }
+                {drfChoices.map((item) => (
+                    <MenuItem key={item} value={item}>
+                        {item}
+                    </MenuItem>
+                ))}
             </Select>
         </FormControl>
     );

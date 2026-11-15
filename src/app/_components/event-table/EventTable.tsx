@@ -52,6 +52,11 @@ import {
     extractLatestAdjudicationCode,
     hasEmlNonThreatMarker,
 } from "@/lib/data/oscar/adjudication/EmlMetadata";
+import {
+    buildUpSetCoOccurrenceFromEvents,
+    computeEventUpSetMask,
+} from "@/lib/data/oscar/adjudication/IsotopeMapping";
+import UpSetPlot from "@/app/_components/common/UpSetPlot";
 import {useCustomAdjudicationCodes} from "@/app/hooks/useCustomAdjudicationCodes";
 import {isOccupancyDataStream, isThresholdDataStream} from "@/lib/data/oscar/Utilities";
 import {convertToMap} from "@/app/utils/Utils";
@@ -1781,6 +1786,25 @@ export default function EventTable({
         return changed ? mapped : rows;
     }, [adjudicatedVehicleIdByObsId, isVehicleSearchMode, ocrByObsId, rows, vehiclePageRows, wantsVehicleIdColumn]);
 
+    const [selectedUpSetMask, setSelectedUpSetMask] = useState<number | null>(null);
+
+    const eventLogUpSetData = useMemo(
+        () => (isEventLog ? buildUpSetCoOccurrenceFromEvents(displayRows) : null),
+        [displayRows, isEventLog],
+    );
+
+    useEffect(() => {
+        if (selectedUpSetMask == null) return;
+        if (!eventLogUpSetData || !eventLogUpSetData.intersections.some(col => col.mask === selectedUpSetMask)) {
+            setSelectedUpSetMask(null);
+        }
+    }, [eventLogUpSetData, selectedUpSetMask]);
+
+    const effectiveDisplayRows = useMemo<EventTableData[]>(() => {
+        if (!isEventLog || selectedUpSetMask == null) return displayRows;
+        return displayRows.filter(row => computeEventUpSetMask(row) === selectedUpSetMask);
+    }, [displayRows, isEventLog, selectedUpSetMask]);
+
     const renderCompactHeader = useCallback((label: string) => {
         const unitMatch = label.match(/^(.*?)\s*(\([^)]+\))$/);
         if (unitMatch) {
@@ -2134,11 +2158,13 @@ export default function EventTable({
         return new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS[activeVehicleQuery.window]).toISOString();
     }, [activeVehicleQuery]);
 
-    const tableRowCount = isVehicleSearchMode ? vehicleFilteredRows.length : effectiveRowCount;
+    const tableRowCount = isEventLog && selectedUpSetMask != null
+        ? effectiveDisplayRows.length
+        : (isVehicleSearchMode ? vehicleFilteredRows.length : effectiveRowCount);
     const tableLoading = isVehicleSearchMode ? vehicleSearchLoading : loading;
 
     return (
-        <Box sx={{display: "flex", flexDirection: "column", height: isEventLog ? 860 : 800, width: "100%"}}>
+        <Box sx={{display: "flex", flexDirection: "column", ...(isEventLog ? {minHeight: 860} : {height: 800}), width: "100%"}}>
             {isAlarmTable && (
                 <Box
                     role="status"
@@ -2358,10 +2384,43 @@ export default function EventTable({
                     {t("eventQueryLoadFailed")}
                 </Alert>
             )}
-            <Box sx={{flex: 1, minHeight: 0, width: "100%"}}>
+            {isEventLog && eventLogUpSetData && eventLogUpSetData.totalOccupancies > 0 && (
+                <Box
+                    component="details"
+                    open
+                    data-testid="event-log-upset-section"
+                    sx={{
+                        mb: 1,
+                        px: 1.25,
+                        py: 0.75,
+                        borderRadius: 1,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "background.paper",
+                        "& > summary": {
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            fontSize: "0.875rem",
+                            py: 0.5,
+                            userSelect: "none",
+                        },
+                    }}
+                >
+                    <summary>{t("eventLogUpSetSummaryToggle")}</summary>
+                    <Box sx={{pt: 1}}>
+                        <UpSetPlot
+                            data={eventLogUpSetData}
+                            selectedMask={selectedUpSetMask}
+                            onSelectIntersection={col => setSelectedUpSetMask(col?.mask ?? null)}
+                            testId="event-log-upset-plot"
+                        />
+                    </Box>
+                </Box>
+            )}
+            <Box sx={{...(isEventLog ? {height: 680} : {flex: 1, minHeight: 0}), width: "100%"}}>
                 <DataGrid
                     localeText={getDataGridLocaleText(language)}
-                    rows={displayRows}
+                    rows={effectiveDisplayRows}
                     getRowId={eventSelectionKey}
                     columns={columns}
                     columnVisibilityModel={columnVisibilityModel}

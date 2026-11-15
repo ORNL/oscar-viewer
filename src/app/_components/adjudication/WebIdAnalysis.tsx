@@ -20,7 +20,12 @@ import {getDataGridLocaleText, getIntlLocale} from '@/app/utils/LocaleUtils';
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
 
 
-export default function WebIdAnalysis(props: { event: EventTableData; onWebIdResults?: (results: WebIdAnalysisResult[]) => void; }) {
+export default function WebIdAnalysis(props: {
+    event: EventTableData;
+    occupancyObsIdOverride?: string;
+    refreshNonce?: number;
+    onWebIdResults?: (results: WebIdAnalysisResult[]) => void;
+}) {
     const {language, t} = useLanguage();
     const laneMapRef = useContext(DataSourceContext).laneMapRef;
 
@@ -124,19 +129,20 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
             type: 'number',
         },
         {
-            field: 'numAnalysisWarning',
+            field: 'numAnalysisWarnings',
             headerName: t('warningCount'),
             minWidth: 120,
             flex: 0.7,
-            type: 'string',
-            renderCell: renderStringCell(t('warningCount')),
+            type: 'number',
+            valueGetter: (value, row) => row.numAnalysisWarnings ?? (Array.isArray(row.analysisWarnings) ? row.analysisWarnings.length : 0),
         },
         {
-            field: 'analysisWarning',
+            field: 'analysisWarnings',
             headerName: t('analysisWarning'),
             minWidth: 155,
             flex: 1,
             type: 'string',
+            valueGetter: (value, row) => Array.isArray(row.analysisWarnings) ? row.analysisWarnings.join('; ') : String(row.analysisWarnings ?? ''),
             renderCell: renderStringCell(t('analysisWarning')),
         },
         {
@@ -171,8 +177,14 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
         }
     ];
 
+    const targetOccupancyObsId = props.occupancyObsIdOverride || props.event?.occupancyObsId;
+    const currentLane = props.event?.laneId;
+
     const fetchData = useCallback(async() => {
-        const currentLane = props.event.laneId;
+        if (!currentLane) {
+            setWebIdLog([]);
+            return;
+        }
         const currLaneEntry: LaneMapEntry = laneMapRef.current.get(currentLane);
         if (!currLaneEntry) {
             console.warn("Cannot load WebID data: lane entry is unavailable:", currentLane);
@@ -185,25 +197,33 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
             return;
         }
 
+        const accumulated: WebIdAnalysisResult[] = [];
         let query = await webIdDatastream.searchObservations(undefined, 100);
+        let pagesRead = 0;
 
-        while (query.hasNext()) {
+        while (query.hasNext() && pagesRead < 25) {
+            pagesRead += 1;
             let obsCollection = await query.nextPage();
-
-            let webIdData = obsCollection.map((obs: any)=> {
-                return new WebIdAnalysisResult(obs.resultTime, obs.result);
-            })
-            setWebIdLog(webIdData)
+            for (const obs of obsCollection) {
+                accumulated.push(new WebIdAnalysisResult(obs.resultTime, obs.result));
+            }
         }
-    },[])
+        accumulated.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+        setWebIdLog(accumulated);
+    }, [currentLane, laneMapRef]);
 
     useEffect(() => {
-        if (props.event)
-            fetchData();
-    }, [props.event]);
+        if (props.event && targetOccupancyObsId) {
+            void fetchData();
+        } else {
+            setFilteredLog([]);
+        }
+    }, [props.event, targetOccupancyObsId, props.refreshNonce, fetchData]);
 
     useEffect(() => {
-        const currentLane = props.event.laneId;
+        if (!currentLane || !targetOccupancyObsId) {
+            return;
+        }
         const currLaneEntry: LaneMapEntry = laneMapRef.current.get(currentLane);
         if (!currLaneEntry) {
             console.warn("Cannot subscribe to WebID data: lane entry is unavailable:", currentLane);
@@ -226,10 +246,10 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
             const data = msg.values?.[0]?.data;
             if (!data) return;
 
-            const webId = new WebIdAnalysisResult(data.timestamp, data);
-            if (webId.occupancyObsId !== props.event.occupancyObsId) return;
+            const webId = new WebIdAnalysisResult(data.timestamp ?? data.sampleTime, data);
+            if (webId.occupancyObsId !== targetOccupancyObsId) return;
 
-            setFilteredLog(prev => {
+            setWebIdLog(prev => {
                 const exists = prev.some(item => item.occupancyObsId === webId.occupancyObsId && item.time === webId.time);
                 if (exists) return prev;
                 return [webId, ...prev];
@@ -248,21 +268,25 @@ export default function WebIdAnalysis(props: { event: EventTableData; onWebIdRes
                 console.error("Error disconnecting webid source:", error);
             });
         };
-    }, [props.event]);
+    }, [currentLane, targetOccupancyObsId, laneMapRef]);
 
 
     useEffect(() => {
-        let filteredLog = webIdLog.filter((data) => data?.occupancyObsId ==  props.event.occupancyObsId);
-        setFilteredLog(filteredLog);
-    }, [webIdLog]);
+        if (!targetOccupancyObsId) {
+            setFilteredLog([]);
+            return;
+        }
+        const matched = webIdLog.filter((data) => data?.occupancyObsId == targetOccupancyObsId);
+        setFilteredLog(matched);
+    }, [webIdLog, targetOccupancyObsId]);
 
     useEffect(() => {
         if (!props.onWebIdResults) return;
         props.onWebIdResults(filteredLog);
-    }, [filteredLog]);
+    }, [filteredLog, props.onWebIdResults]);
 
     return (
-        <Stack spacing={2} sx={{ width: '100%' }}>
+        <Stack spacing={2} sx={{ width: '100%' }} data-testid="webid-analysis-section">
             <Stack direction={"column"} spacing={1}>
                 <Typography variant="h5">
                     {t('webIdAnalysisResults')}

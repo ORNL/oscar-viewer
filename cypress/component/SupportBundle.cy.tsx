@@ -203,4 +203,58 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
                 expect(summary.serverCliFallback.windows).to.equal("oscar.bat support-bundle");
             });
     });
+
+    it("surfaces route-aware contextual video guides, click-to-play WebVTT player, and 18-module offline catalog", () => {
+        window.localStorage.setItem("language", "es");
+
+        cy.mount(
+            <LanguageProvider>
+                <HelpDialog
+                    open
+                    onClose={() => {}}
+                    activePathname="/alarm-transfer/"
+                    skipBrowserDownload
+                />
+            </LanguageProvider>,
+        );
+
+        cy.get('[data-testid="help-inline-video-player"]').should("not.exist");
+        cy.get('[data-testid="help-contextual-guide-14"]')
+            .should("be.visible")
+            .and("have.attr", "aria-pressed", "false")
+            .and("contain.text", "Ver #14 (25.2s)")
+            .click();
+
+        cy.get('[data-testid="help-contextual-guide-14"]').should("have.attr", "aria-pressed", "true");
+        cy.get('[data-testid="help-inline-video-player"]').should("be.visible");
+        cy.get('[data-testid="help-video-element"]')
+            .should("have.attr", "width", "1280")
+            .and("have.attr", "height", "720")
+            .and("have.attr", "preload", "metadata");
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/14-airgapped-alarm-qr-transfer.mp4");
+        cy.get('[data-testid="help-video-element"] track')
+            .should("have.attr", "kind", "captions")
+            .and("have.attr", "src", "/video-guides/captions/14-airgapped-alarm-qr-transfer.vtt");
+
+        cy.get('[data-testid="help-close-video-player"]').click();
+        cy.get('[data-testid="help-inline-video-player"]').should("not.exist");
+        cy.get('[data-testid="help-contextual-guide-14"]').should("have.focus");
+
+        cy.get('[data-testid="help-page-1-guide-17"]').then(($btn) => {
+            const visible = $btn.text().trim();
+            const ariaLabel = $btn.attr("aria-label") ?? "";
+            expect(ariaLabel.startsWith(visible)).to.equal(true);
+        });
+
+        cy.contains('[role="tab"]', "Manual y videoguías").click();
+        cy.get('[data-testid="help-open-local-video-guides"]')
+            .should("have.attr", "href", "/video-guides/index.html");
+        cy.get('[data-testid="help-video-track-C"]').should("not.have.attr", "open");
+        cy.get('[data-testid="help-video-track-C"] > summary').click();
+        cy.get('[data-testid="help-video-track-C"]').should("have.attr", "open");
+        cy.get('[data-testid="help-catalog-watch-17"]').should("be.visible").click();
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/17-vehicle-ocr-and-adjudication.mp4");
+    });
 });

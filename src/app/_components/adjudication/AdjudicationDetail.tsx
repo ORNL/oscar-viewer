@@ -75,6 +75,24 @@ import {
 } from "@/lib/data/oscar/VehicleSearch";
 import {useLanguage} from '@/app/contexts/LanguageContext';
 import {getIntlLocale} from '@/app/utils/LocaleUtils';
+import {
+    CanonicalIsotopeKey,
+    normalizeIsotopeListForSelect,
+    selectHighestConfidenceIsotopesFromWebIdEntry,
+    selectHighestConfidenceWebIdResult,
+} from '@/lib/data/oscar/adjudication/IsotopeMapping';
+
+function inferSpectrumTypeFromFileName(fileName: string): "foreground" | "background" {
+    const lower = (fileName || "").toLowerCase();
+    if (lower.includes("background") || /(?:^|[\s_.-])(bkg|bg)(?:$|[\s_.-])/.test(lower)) {
+        return "background";
+    }
+    return "foreground";
+}
+
+function isSpectroscopicFileName(fileName: string): boolean {
+    return /\.(spe|n42|n42\.xml|xml|spc|chn|pcf)$/i.test(fileName || "");
+}
 
 interface FileWithWebId {
     file: File;
@@ -198,6 +216,26 @@ export default function AdjudicationDetail(props: {
     const [webIdResults, setWebIdResults] = useState<WebIdAnalysisResult[]>([]);
     const [selectedWebIdResultId, setSelectedWebIdResultId] = useState<string[]>([]);
     const [isSubmittingWebId, setIsSubmittingWebId] = useState(false);
+    const [spectroscopicRefreshNonce, setSpectroscopicRefreshNonce] = useState(0);
+    const spectroscopicTimersRef = useRef<number[]>([]);
+
+    useEffect(() => {
+        return () => {
+            spectroscopicTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+            spectroscopicTimersRef.current = [];
+        };
+    }, []);
+
+    const scheduleSpectroscopicRefresh = React.useCallback((includeAsyncWebIdFollowUp: boolean) => {
+        setSpectroscopicRefreshNonce((prev) => prev + 1);
+        if (!includeAsyncWebIdFollowUp || typeof window === "undefined") return;
+        for (const delayMs of [1500, 3500, 7000]) {
+            const timerId = window.setTimeout(() => {
+                setSpectroscopicRefreshNonce((prev) => prev + 1);
+            }, delayMs);
+            spectroscopicTimersRef.current.push(timerId);
+        }
+    }, []);
 
     function onFetchComplete() {
         setShouldFetchLogs(false);
@@ -289,11 +327,34 @@ export default function AdjudicationDetail(props: {
     }, [props.event.occupancyObsId]);
 
     const handleWebIdAnalysis = (fileIndex: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
-        setUploadedFiles(prevFiles =>
-            prevFiles.map((fileData, idx) =>
-                idx === fileIndex ? {...fileData, webIdEnabled: event.target.checked} : fileData
-            )
-        );
+        const enabled = event.target.checked;
+        setUploadedFiles(prevFiles => {
+            const hasExplicitBg = prevFiles.some((f, idx) =>
+                idx !== fileIndex
+                && (f.webIdEnabled || enabled)
+                && (f.spectrumType || inferSpectrumTypeFromFileName(f.file.name)) === 'background',
+            );
+            return prevFiles.map((fileData, idx) => {
+                if (idx !== fileIndex) {
+                    if (enabled && inferSpectrumTypeFromFileName(prevFiles[fileIndex].file.name) === 'background' && fileData.spectrumType === 'foreground') {
+                        return {...fileData, synthesizeBackground: false};
+                    }
+                    return fileData;
+                }
+                const nextType = fileData.spectrumType || inferSpectrumTypeFromFileName(fileData.file.name);
+                const nextDrf = fileData.detectorResponseFunction || 'auto';
+                const nextSynth = enabled && nextType === 'foreground' && !hasExplicitBg
+                    ? (fileData.spectrumType === '' ? true : fileData.synthesizeBackground)
+                    : false;
+                return {
+                    ...fileData,
+                    webIdEnabled: enabled,
+                    detectorResponseFunction: nextDrf,
+                    spectrumType: nextType,
+                    synthesizeBackground: nextSynth,
+                };
+            });
+        });
     };
 
     const handleQRCodeWebIdAnalysis = (fileIndex: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -365,14 +426,20 @@ export default function AdjudicationDetail(props: {
         }
 
         const files = Array.from(e.target.files);
+        const batchHasBg = files.some(f => inferSpectrumTypeFromFileName(f.name) === 'background')
+            || uploadedFiles.some(f => f.spectrumType === 'background');
 
-        const filesWithWebId = files.map(file => ({
-            file,
-            webIdEnabled: false,
-            detectorResponseFunction: "",
-            spectrumType: "",
-            synthesizeBackground: false
-        }));
+        const filesWithWebId = files.map(file => {
+            const inferredType = inferSpectrumTypeFromFileName(file.name);
+            const autoWebId = isSpectroscopicFileName(file.name);
+            return {
+                file,
+                webIdEnabled: autoWebId,
+                detectorResponseFunction: "auto",
+                spectrumType: inferredType,
+                synthesizeBackground: inferredType === 'foreground' && !batchHasBg,
+            };
+        });
 
         setUploadedFiles([...uploadedFiles, ...filesWithWebId]);
         e.target.value = '';
@@ -601,11 +668,15 @@ export default function AdjudicationDetail(props: {
             qrCodeFiles.forEach(file => needsUpload.push(file));
 
             const newFileNames = needsUpload.length > 0
-                ? await sendFileUploadRequest(needsUpload, currLaneEntry.parentNode)
+                ? await sendFileUploadRequest(needsUpload, currLaneEntry.parentNode, tempAdjData.occupancyObsId)
                 : [];
 
             if (needsUpload.length > 0 && (!newFileNames || newFileNames.length === 0)) {
                 return;
+            }
+
+            if (needsUpload.length > 0) {
+                scheduleSpectroscopicRefresh(needsUpload.some(item => item.webIdEnabled));
             }
 
             const alreadyUploadedPaths = [
@@ -680,21 +751,53 @@ export default function AdjudicationDetail(props: {
         return newFiles;
     }
 
-    async function sendFileUploadRequest(filePaths: FileWithWebId[], node: INode) {
-        let newFileNames: any[] = [];
+    async function ensureOccupancyObsId(currLaneEntry: LaneMapEntry): Promise<string> {
+        const existing = adjData?.occupancyObsId || props.event.occupancyObsId;
+        if (existing) return existing;
+        const ds = currLaneEntry.datastreams.find((candidate: any) => candidate.properties.id == props.event.dataStreamId);
+        if (!ds) return '';
+        try {
+            const query = await ds.searchObservations(new ObservationFilter({
+                filter: `startTime='${props.event.startTime}' AND endTime='${props.event.endTime}'`,
+            }), 1);
+            const occupancyObservation = await query.nextPage();
+            const resolved = occupancyObservation?.[0]?.id ?? '';
+            if (resolved) {
+                setAdjData(previous => {
+                    if (!previous || previous.occupancyObsId === resolved) return previous;
+                    const updated = Object.assign(
+                        Object.create(Object.getPrototypeOf(previous)),
+                        previous,
+                    ) as AdjudicationData;
+                    updated.setOccupancyObsId(resolved);
+                    return updated;
+                });
+            }
+            return resolved;
+        } catch {
+            return '';
+        }
+    }
+
+    async function sendFileUploadRequest(filePaths: FileWithWebId[], node: INode, occupancyObsIdOverride?: string) {
+        const resolvedPathsByItem = new Map<FileWithWebId, string>();
+        let newFileNames: string[] = [];
 
         const protocol = node.isSecure ? 'https://' : 'http://';
+        const effectiveOccupancyObsId = occupancyObsIdOverride || adjData?.occupancyObsId || props.event.occupancyObsId || '';
 
         const webIdFiles = filePaths.filter(f => f.webIdEnabled);
         const foregroundFile = webIdFiles.find(f => f.spectrumType === 'foreground');
         const backgroundFile = webIdFiles.find(f => f.spectrumType === 'background');
-        const hasPair = foregroundFile && backgroundFile;
+        const hasPair = Boolean(foregroundFile && backgroundFile);
 
-        const pairedFiles = hasPair ? new Set([foregroundFile, backgroundFile]) : new Set<FileWithWebId>();
+        const pairedFiles = hasPair && foregroundFile && backgroundFile
+            ? new Set<FileWithWebId>([foregroundFile, backgroundFile])
+            : new Set<FileWithWebId>();
 
-        if (hasPair) {
-            const drf = foregroundFile.detectorResponseFunction || backgroundFile.detectorResponseFunction;
-            const endpoint = `${protocol}${node.address}:${node.port}${node.oshPathRoot}${node.bucketsEndpoint}/adjudication?occupancyObsId=${props.event.occupancyObsId}&laneUid=${laneUid}&webIdEnabled=${foregroundFile.webIdEnabled}&drf=${drf}`;
+        if (hasPair && foregroundFile && backgroundFile) {
+            const drf = foregroundFile.detectorResponseFunction || backgroundFile.detectorResponseFunction || 'auto';
+            const endpoint = `${protocol}${node.address}:${node.port}${node.oshPathRoot}${node.bucketsEndpoint}/adjudication?occupancyObsId=${encodeURIComponent(effectiveOccupancyObsId)}&laneUid=${encodeURIComponent(laneUid ?? '')}&webIdEnabled=${foregroundFile.webIdEnabled}&drf=${encodeURIComponent(drf)}`;
             const url = new URL(endpoint);
 
             const formData = new FormData();
@@ -715,25 +818,24 @@ export default function AdjudicationDetail(props: {
                 setAdjSnackMsg(t('pairedWebIdUploadFailed'));
                 setColorStatus('error');
                 setOpenSnack(true);
+                return;
             }
 
-            let filesNames: string[] = await response.json();
-
-            filesNames.forEach(path => newFileNames.push(path))
+            const filesNames: string[] = await response.json();
+            if (filesNames[0]) resolvedPathsByItem.set(foregroundFile, filesNames[0]);
+            if (filesNames[1]) resolvedPathsByItem.set(backgroundFile, filesNames[1]);
         }
 
         for (const fileData of filePaths) {
             if (pairedFiles.has(fileData)) continue;
 
-            let fileName = `adjudication?occupancyObsId=${props.event.occupancyObsId}&laneUid=${laneUid}&webIdEnabled=${fileData.webIdEnabled}`
+            const drf = fileData.detectorResponseFunction || 'auto';
+            let queryPath = `adjudication?occupancyObsId=${encodeURIComponent(effectiveOccupancyObsId)}&laneUid=${encodeURIComponent(laneUid ?? '')}&webIdEnabled=${fileData.webIdEnabled}`;
+            if (fileData.webIdEnabled) {
+                queryPath += `&drf=${encodeURIComponent(drf)}&synthesizeBackground=${Boolean(fileData.synthesizeBackground)}`;
+            }
 
-            if (fileData.webIdEnabled)
-                fileName = fileName + `&drf=${fileData.detectorResponseFunction}&synthesizeBackground=${fileData.synthesizeBackground}`
-
-
-
-            let endpoint = `${protocol}${node.address}:${node.port}${node.oshPathRoot}${node.bucketsEndpoint}/${fileName}`;
-
+            const endpoint = `${protocol}${node.address}:${node.port}${node.oshPathRoot}${node.bucketsEndpoint}/${queryPath}`;
             const url = new URL(endpoint);
 
             const formData = new FormData();
@@ -756,32 +858,56 @@ export default function AdjudicationDetail(props: {
                 return;
             }
 
-            setAdjSnackMsg(t('fileUploadSuccessful', {file: fileName}));
+            setAdjSnackMsg(t('fileUploadSuccessful', {file: fileData.file.name}));
             setColorStatus('success');
             setOpenSnack(true);
 
-            let filesNames: string[] = await response.json();
-            filesNames.forEach(path => newFileNames.push(path))
+            const filesNames: string[] = await response.json();
+            if (filesNames[0]) {
+                resolvedPathsByItem.set(fileData, filesNames[0]);
+            }
         }
+
+        newFileNames = filePaths
+            .map((item) => resolvedPathsByItem.get(item))
+            .filter((p): p is string => Boolean(p));
 
         return newFileNames;
     }
 
-    const handleWebIdResults = (results: WebIdAnalysisResult[]) => {
+    const handleWebIdResults = React.useCallback((results: WebIdAnalysisResult[]) => {
         setWebIdResults(results);
-    };
+        setSelectedWebIdResultId(prev => {
+            const validPrev = prev.filter(id => results.some(r => r.id === id));
+            if (validPrev.length > 0) return validPrev;
+            const {bestResult} = selectHighestConfidenceWebIdResult(results);
+            return bestResult?.id ? [bestResult.id] : [];
+        });
+    }, []);
 
     const applySelectedWebIdResult = () => {
         if (selectedWebIdResultId.length === 0) return;
         const selectedResults = webIdResults.filter(r => selectedWebIdResultId.includes(r.id));
-        const allNames = new Set<string>();
-        selectedResults.forEach(result => {
-            result.isotopes?.forEach(iso => {
-                allNames.add(iso.name); // maybe need to map these to the isotopes list to make sure we dont duplicate names ....
-            });
-        });
-        handleIsotopeSelect(Array.from(allNames));
+        const collected: string[] = [];
+        for (const result of selectedResults) {
+            const topEntry = selectHighestConfidenceIsotopesFromWebIdEntry(result);
+            if (topEntry.canonicalIsotopes.length > 0) {
+                collected.push(...topEntry.canonicalIsotopes);
+            } else if (Array.isArray(result.isotopes)) {
+                result.isotopes.forEach(iso => collected.push(iso.name));
+            }
+        }
+        const normalized = normalizeIsotopeListForSelect(collected);
+        if (normalized.length > 0) {
+            handleIsotopeSelect(normalized);
+        }
     };
+
+    const handleApplyDeviceIsotopes = React.useCallback((deviceIsotopes: CanonicalIsotopeKey[]) => {
+        if (deviceIsotopes.length > 0) {
+            handleIsotopeSelect([...deviceIsotopes]);
+        }
+    }, [adjData]);
 
     const submitToWebId = async () => {
         setIsSubmittingWebId(true);
@@ -796,10 +922,12 @@ export default function AdjudicationDetail(props: {
             }
             const node = currLaneEntry.parentNode;
 
+            const resolvedOccupancyObsId = await ensureOccupancyObsId(currLaneEntry);
+
             const webIdFileIndices: number[] = [];
             const webIdFilesToUpload: FileWithWebId[] = [];
             uploadedFiles.forEach((f, idx) => {
-                if (f.webIdEnabled && !f.serverPath) {
+                if (!f.serverPath && (f.webIdEnabled || isSpectroscopicFileName(f.file.name))) {
                     webIdFileIndices.push(idx);
                     webIdFilesToUpload.push(f);
                 }
@@ -824,7 +952,7 @@ export default function AdjudicationDetail(props: {
                 return;
             }
 
-            const serverPaths = await sendFileUploadRequest(allToUpload, node);
+            const serverPaths = await sendFileUploadRequest(allToUpload, node, resolvedOccupancyObsId);
 
             if (!serverPaths || serverPaths.length === 0) return;
 
@@ -843,6 +971,8 @@ export default function AdjudicationDetail(props: {
                 }
                 return d;
             }));
+
+            scheduleSpectroscopicRefresh(allToUpload.some(item => item.webIdEnabled));
 
             setAdjSnackMsg(t('webIdSubmitSuccessful'));
             setColorStatus('success');
@@ -872,12 +1002,19 @@ export default function AdjudicationDetail(props: {
                 <Grid container spacing={2} sx={{ width: '100%' }}>
                     {/*N42 Detail*/}
                     <Grid item xs={12}>
-                        <N42Detail event={props.event}/>
+                        <N42Detail
+                            event={props.event}
+                            occupancyObsIdOverride={adjData?.occupancyObsId || props.event.occupancyObsId}
+                            refreshNonce={spectroscopicRefreshNonce}
+                            onApplyDeviceIsotopes={handleApplyDeviceIsotopes}
+                        />
                     </Grid>
                     {/*WebID Results*/}
                     <Grid item xs={12}>
                         <WebIdAnalysis
                             event={props.event}
+                            occupancyObsIdOverride={adjData?.occupancyObsId || props.event.occupancyObsId}
+                            refreshNonce={spectroscopicRefreshNonce}
                             onWebIdResults={handleWebIdResults}
                         />
                     </Grid>
@@ -1223,6 +1360,7 @@ export default function AdjudicationDetail(props: {
                                     <input
                                         type="file"
                                         multiple
+                                        data-testid="adjudication-file-input"
                                         onChange={handleFileUpload}
                                         ref={fileInputRef}
                                         style={{display: "none"}}
@@ -1250,8 +1388,9 @@ export default function AdjudicationDetail(props: {
                                 <Button
                                     variant="outlined"
                                     color="info"
+                                    data-testid="upload-to-webid-btn"
                                     onClick={submitToWebId}
-                                    disabled={isSubmittingWebId || (!uploadedFiles.some(f => f.webIdEnabled && !f.serverPath) && !scannedData.some(d => d.webIdEnabled && !d.serverPath))}
+                                    disabled={isSubmittingWebId || (!uploadedFiles.some(f => !f.serverPath && (f.webIdEnabled || isSpectroscopicFileName(f.file.name))) && !scannedData.some(d => d.webIdEnabled && !d.serverPath))}
                                     sx={{
                                         padding: "8px",
                                         borderRadius: "10px",
@@ -1417,6 +1556,7 @@ export default function AdjudicationDetail(props: {
                                             multiple
                                             labelId="webid-result-select-label"
                                             label={t('webIdEvidence')}
+                                            data-testid="webid-evidence-select"
                                             value={selectedWebIdResultId}
                                             onChange={handleEvidenceSelection}
                                         >
@@ -1429,9 +1569,11 @@ export default function AdjudicationDetail(props: {
                                         </Select>
                                     </FormControl>
                                     <Button
+                                        type="button"
                                         size="small"
                                         variant="outlined"
                                         color="info"
+                                        data-testid="apply-webid-isotopes"
                                         disabled={selectedWebIdResultId.length === 0}
                                         onClick={applySelectedWebIdResult}
                                         sx={{ whiteSpace: 'nowrap' }}
