@@ -531,12 +531,13 @@ export default function VehiclePassComparisonDialog({
         }
     };
 
-    // Build SVG trace paths when profilesLoaded is true
+    // Build SVG trace paths when profilesLoaded is true (cap to 16 newest sampled passes for legibility)
     const profileChartData = useMemo(() => {
-        const withSamples = passes
+        const allWithSamples = passes
             .map((pass, index) => ({pass, index}))
             .filter(entry => entry.pass.radiationProfile.length > 0);
-        if (withSamples.length === 0) return null;
+        if (allWithSamples.length === 0) return null;
+        const withSamples = allWithSamples.slice(-16);
 
         let maxOffset = 1;
         let maxGamma = 10;

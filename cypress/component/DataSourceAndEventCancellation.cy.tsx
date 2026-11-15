@@ -512,4 +512,215 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         expect(historicalFault?.status).to.equal("Fault - Neutron High");
         expect(historicalFault?.timestamp).to.equal("2026-11-09T00:55:00.000Z");
     });
+
+    it("debounces rapid 72-click page bursts, aborts stale page fetches synchronously, and slices disjoint priority buckets in O(pageSize)", () => {
+        const countCalls: Array<{url: string; priority?: string}> = [];
+        const rowCalls: Array<{filter: string; limit: number; offset: number}> = [];
+        const abortedPageCalls: string[] = [];
+        let holdPageOne = false;
+
+        const bucketCountsByFilter: Record<string, number> = {
+            "gammaAlarm=true AND neutronAlarm=true": 20,
+            "gammaAlarm=false AND neutronAlarm=true": 30,
+            "gammaAlarm=true AND neutronAlarm=false": 6000,
+        };
+
+        cy.window().then((win) => {
+            cy.stub(win, "fetch").callsFake((input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                const priority = (init as {priority?: string} | undefined)?.priority;
+                if (url.includes("/observations/count?")) {
+                    countCalls.push({url, priority});
+                    const filterParam = new URL(url).searchParams.get("filter") ?? "";
+                    let count = 6050;
+                    for (const [filterExpr, c] of Object.entries(bucketCountsByFilter)) {
+                        if (filterParam === filterExpr || filterParam.includes(filterExpr)) {
+                            count = c;
+                            break;
+                        }
+                    }
+                    return Promise.resolve(new Response(JSON.stringify({count}), {
+                        status: 200,
+                        headers: {"Content-Type": "application/json"},
+                    }));
+                }
+                return Promise.resolve(new Response("[]", {status: 200}));
+            });
+        });
+
+        const fakeNode: any = {
+            id: "node-1",
+            name: "Local Node",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+        };
+
+        function RapidPaginationHarness() {
+            const [page, setPage] = useState(0);
+            const queryPlans = useMemo<EventQueryPlan[]>(() => [{
+                key: "all-alarms",
+                node: fakeNode,
+                datastreamIds: ["occ-1"],
+                filter: "gammaAlarm=true OR neutronAlarm=true",
+            }], []);
+            const pageQueryPlans = useMemo<EventQueryPlan[]>(() => [
+                {...queryPlans[0], key: "p-gn", filter: "gammaAlarm=true AND neutronAlarm=true"},
+                {...queryPlans[0], key: "p-n", filter: "gammaAlarm=false AND neutronAlarm=true"},
+                {...queryPlans[0], key: "p-g", filter: "gammaAlarm=true AND neutronAlarm=false"},
+            ], [queryPlans]);
+
+            const fetchPlanRows = useCallback(async (
+                plan: EventQueryPlan,
+                limit: number,
+                offset: number,
+                cutoff = "2026-11-15T11:30:00.000Z",
+                signal?: AbortSignal,
+            ) => {
+                rowCalls.push({filter: plan.filter, limit, offset});
+                if (holdPageOne && offset === 10 && limit === 15 && plan.key === "p-n") {
+                    return new Promise<EventTableData[]>((_resolve, reject) => {
+                        signal?.addEventListener("abort", () => {
+                            abortedPageCalls.push(`${plan.key}:${offset}:${limit}`);
+                            reject(new DOMException("Aborted", "AbortError"));
+                        });
+                    });
+                }
+                const gammaAlarm = plan.key === "p-gn" || plan.key === "p-g";
+                const neutronAlarm = plan.key === "p-gn" || plan.key === "p-n";
+                return Array.from({length: limit}, (_, i) => {
+                    const globalSeq = offset + i;
+                    const ts = new Date(Date.parse(cutoff) - globalSeq * 1000).toISOString();
+                    return new EventTableData(
+                        globalSeq + 1,
+                        `${plan.key}-${globalSeq}`,
+                        {
+                            occupancyCount: globalSeq + 1,
+                            startTime: ts,
+                            endTime: ts,
+                            maxGamma: 100,
+                            maxNeutron: 1,
+                            gammaAlarm,
+                            neutronAlarm,
+                            adjudicatedIds: [],
+                        },
+                        `${plan.key}-obs-${globalSeq}`,
+                        "foi-1",
+                        "Local Node",
+                        false,
+                    );
+                });
+            }, []);
+
+            const {rows, loading, pageQueryError} = useAbortableEventQueries({
+                queryPlans,
+                pageQueryPlans,
+                page,
+                pageSize: 15,
+                pageLoadedTime: "2026-11-15T11:30:00.000Z",
+                disjointPriorityPlans: true,
+                pageChangeDebounceMs: 60,
+                fetchPlanRows,
+            });
+
+            return (
+                <div>
+                    <span data-testid="rapid-page">{String(page)}</span>
+                    <span data-testid="rapid-loading">{String(loading)}</span>
+                    <span data-testid="rapid-error">{String(pageQueryError)}</span>
+                    <span data-testid="rapid-row-count">{String(rows.length)}</span>
+                    <span data-testid="rapid-first-row">{rows[0]?.laneId ?? ""}</span>
+                    <span data-testid="rapid-last-row">{rows[rows.length - 1]?.laneId ?? ""}</span>
+                    <button
+                        data-testid="burst-71-clicks"
+                        onClick={() => {
+                            for (let next = 1; next <= 71; next++) {
+                                setPage(next);
+                            }
+                        }}
+                    >
+                        Burst 71 clicks
+                    </button>
+                    <button data-testid="step-page-72" onClick={() => setPage(72)}>Page 72</button>
+                    <button data-testid="boundary-page-3" onClick={() => setPage(3)}>Boundary Page 3</button>
+                    <button
+                        data-testid="slow-page-2-then-abort"
+                        onClick={() => {
+                            holdPageOne = true;
+                            setPage(2);
+                            window.setTimeout(() => {
+                                holdPageOne = false;
+                                setPage(4);
+                            }, 90);
+                        }}
+                    >
+                        Slow Page 2 then Page 4
+                    </button>
+                </div>
+            );
+        }
+
+        cy.mount(<RapidPaginationHarness />);
+
+        // Initial page 0 loads 3 priority plans x 15 rows = 3 rowCalls + 1 low-priority total count.
+        cy.get('[data-testid="rapid-row-count"]').should("have.text", "15");
+        cy.then(() => {
+            expect(rowCalls).to.have.length(3);
+            expect(countCalls).to.have.length(1);
+            expect(countCalls[0].priority).to.equal("low");
+            rowCalls.length = 0;
+        });
+
+        // Rapid 71-click burst to page 71 (rows 1065..1079 across [20, 30, 6000]):
+        // 0 intermediate page fetches; 3 interactive bucket counts (default priority) + 1 slice fetch (offset=1015, limit=15).
+        cy.get('[data-testid="burst-71-clicks"]').click();
+        cy.get('[data-testid="rapid-page"]').should("have.text", "71");
+        cy.get('[data-testid="rapid-first-row"]').should("have.text", "p-g-1015");
+        cy.get('[data-testid="rapid-last-row"]').should("have.text", "p-g-1029");
+        cy.get('[data-testid="rapid-error"]').should("have.text", "false");
+        cy.then(() => {
+            expect(rowCalls).to.deep.equal([
+                {filter: "gammaAlarm=true AND neutronAlarm=false", limit: 15, offset: 1015},
+            ]);
+            expect(countCalls).to.have.length(4);
+            countCalls.slice(1).forEach((call) => {
+                expect(call.priority).to.equal(undefined);
+            });
+            rowCalls.length = 0;
+        });
+
+        // Next click to page 72 reuses cached bucket counts (0 extra count fetches) and fetches 15 rows at offset=1030.
+        cy.get('[data-testid="step-page-72"]').click();
+        cy.get('[data-testid="rapid-first-row"]').should("have.text", "p-g-1030");
+        cy.get('[data-testid="rapid-last-row"]').should("have.text", "p-g-1044");
+        cy.then(() => {
+            expect(countCalls).to.have.length(4);
+            expect(rowCalls).to.deep.equal([
+                {filter: "gammaAlarm=true AND neutronAlarm=false", limit: 15, offset: 1030},
+            ]);
+            rowCalls.length = 0;
+        });
+
+        // Boundary page 3 (window 45..60 across [20, 30, 6000]) splits 5 Neutron rows (offset=25) + 10 Gamma rows (offset=0).
+        cy.get('[data-testid="boundary-page-3"]').click();
+        cy.get('[data-testid="rapid-first-row"]').should("have.text", "p-n-25");
+        cy.get('[data-testid="rapid-last-row"]').should("have.text", "p-g-9");
+        cy.get('[data-testid="rapid-row-count"]').should("have.text", "15");
+        cy.then(() => {
+            expect(countCalls).to.have.length(4);
+            expect(rowCalls).to.deep.equal([
+                {filter: "gammaAlarm=false AND neutronAlarm=true", limit: 5, offset: 25},
+                {filter: "gammaAlarm=true AND neutronAlarm=false", limit: 10, offset: 0},
+            ]);
+            rowCalls.length = 0;
+        });
+
+        // Slow in-flight page 2 (window 30..45 -> p-n offset=10, limit=15) aborts synchronously when page 4 is clicked.
+        cy.get('[data-testid="slow-page-2-then-abort"]').click();
+        cy.get('[data-testid="rapid-page"]').should("have.text", "4");
+        cy.get('[data-testid="rapid-first-row"]').should("have.text", "p-g-10");
+        cy.get('[data-testid="rapid-error"]').should("have.text", "false");
+        cy.then(() => {
+            expect(abortedPageCalls).to.deep.equal(["p-n:10:15"]);
+        });
+    });
 });

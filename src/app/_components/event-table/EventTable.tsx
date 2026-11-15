@@ -576,6 +576,14 @@ export default function EventTable({
 
     const queryPlans = effectiveUnreadOnly ? unreadScopePlanBundle.plans : baseQueryPlans;
 
+    const hasRS350Lane = useMemo(() => {
+        for (const lane of stableLaneMap.values()) {
+            if (tableMode === "lanelog" && currentLane && lane.laneName !== currentLane) continue;
+            if (lane.isRS350Backpack) return true;
+        }
+        return false;
+    }, [stableLaneMap, tableMode, currentLane]);
+
     const pageQueryPlans = useMemo<QueryPlan[]>(() => {
         const priorities = tableMode === "alarmtable"
             ? EVENT_PRIORITY_FILTERS.slice(0, 3)
@@ -728,6 +736,7 @@ export default function EventTable({
         rowFilter: isRowUnread,
         extraFetchRows: effectiveUnreadOnly ? postWatermarkReadKeysSummary.totalEstimatedCount : 0,
         filterModeActive: effectiveUnreadOnly,
+        disjointPriorityPlans: !hasRS350Lane && queryPlans.length === 1 && pageQueryPlans.length > 1,
         fetchPlanRows,
     });
 
