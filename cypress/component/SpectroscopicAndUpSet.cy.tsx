@@ -1,11 +1,20 @@
 import React, {useState} from "react";
+import {configureStore} from "@reduxjs/toolkit";
+import {Provider} from "react-redux";
+import {AppRouterContext} from "next/dist/shared/lib/app-router-context.shared-runtime";
 import {LanguageProvider} from "../../src/app/contexts/LanguageContext";
+import {DataSourceContext} from "../../src/app/contexts/DataSourceContext";
 import UpSetPlot from "../../src/app/_components/common/UpSetPlot";
+import EventTable from "../../src/app/_components/event-table/EventTable";
 import N42ChartPlayback from "../../src/app/_components/n42/N42ChartPlayback";
 import {prepareSpectrumPlotData} from "../../src/app/_components/n42/SpectrumScaleControl";
 import WebIdAnalysisResult from "../../src/lib/data/oscar/adjudication/WebId";
 import {EventTableData} from "../../src/lib/data/oscar/TableHelpers";
 import {adjudicationCodeMarker} from "../../src/lib/data/oscar/adjudication/models/AdjudicationConstants";
+import {OCCUPANCY_PILLAR_DEF} from "../../src/lib/data/Constants";
+import eventDataReducer from "../../src/lib/state/EventDataSlice";
+import oscarClientReducer from "../../src/lib/state/OSCARClientSlice";
+import eventPreviewReducer from "../../src/lib/state/EventPreviewSlice";
 import {
     buildUpSetCoOccurrenceFromEvents,
     mapNuclideToCanonicalIsotope,
@@ -248,5 +257,164 @@ describe("Spectroscopic Isotope Mapping & UpSet Co-Occurrence Plotting", () => {
         cy.get('[data-testid="cypress-n42-spectrum-scale-log"]').click();
         cy.get('[data-testid="cypress-n42-spectrum-canvas-wrapper"]').should("have.attr", "data-scale-mode", "log");
         cy.get('[data-testid="cypress-n42-spectrum-scale-log"]').should("have.attr", "aria-pressed", "true");
+    });
+
+    it("keeps the Events page UpSet section collapsed with zero extra fetches on load and summarizes all filtered alarms when expanded", () => {
+        window.localStorage.setItem("language", "en");
+        const searchCalls: Array<{limit: number; offset: number; filter: string}> = [];
+
+        // Create 25 alarming occupancies (20 Gamma+NORM, 5 Gamma+SNM) + 5 non-alarming Clear occupancies = 30 total.
+        const allObs = Array.from({length: 30}, (_, idx) => {
+            const seq = 1000 + (30 - idx);
+            const ts = new Date(Date.parse("2026-11-15T12:00:00Z") - idx * 60_000).toISOString();
+            const isClear = idx >= 25;
+            const isSnm = idx >= 20 && idx < 25; // Put all 5 SNM rows on Page 2 (indices 20..24) so Page 1's 15 rows wouldn't even see them!
+            return {
+                id: `obs-upset-${seq}`,
+                properties: {
+                    id: `obs-upset-${seq}`,
+                    "datastream@id": "ds-occ-upset",
+                    "foi@id": "foi-lane1",
+                    resultTime: ts,
+                    phenomenonTime: ts,
+                },
+                result: {
+                    occupancyCount: String(seq),
+                    startTime: ts,
+                    endTime: ts,
+                    maxGammaBackground: 100,
+                    maxGamma: isClear ? 90 : 4200,
+                    maxNeutron: isSnm ? 30 : 1,
+                    gammaAlarm: !isClear,
+                    neutronAlarm: isSnm,
+                    adjudicatedIds: isClear ? [] : [adjudicationCodeMarker(isSnm ? 1 : 4)],
+                    videoPaths: [],
+                },
+            };
+        });
+
+        const matchesFilter = (obs: any, filterStr: string) => {
+            const r = obs.result;
+            if (!filterStr) return true;
+            if (filterStr.includes("gammaAlarm=true AND neutronAlarm=true")) return r.gammaAlarm && r.neutronAlarm;
+            if (filterStr.includes("gammaAlarm=false AND neutronAlarm=true")) return !r.gammaAlarm && r.neutronAlarm;
+            if (filterStr.includes("gammaAlarm=true AND neutronAlarm=false")) return r.gammaAlarm && !r.neutronAlarm;
+            if (filterStr.includes("gammaAlarm=false AND neutronAlarm=false")) return !r.gammaAlarm && !r.neutronAlarm;
+            if (filterStr.includes("gammaAlarm=true OR neutronAlarm=true")) return r.gammaAlarm || r.neutronAlarm;
+            return true;
+        };
+
+        cy.window().then((win) => {
+            const origFetch = win.fetch.bind(win);
+            cy.stub(win, "fetch").callsFake((input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                if (url.includes("/observations/count?")) {
+                    const filterParam = new URL(url).searchParams.get("filter") ?? "";
+                    const count = allObs.filter(o => matchesFilter(o, filterParam)).length;
+                    return Promise.resolve(new Response(JSON.stringify({count}), {
+                        status: 200,
+                        headers: {"Content-Type": "application/json"},
+                    }));
+                }
+                return origFetch(input, init);
+            });
+        });
+
+        const fakeNode: any = {
+            id: "node-upset-eventlog",
+            name: "GateNode",
+            address: "127.0.0.1",
+            port: 8282,
+            isSecure: false,
+            isDefaultNode: true,
+            oshPathRoot: "/sensorhub",
+            bucketsEndpoint: "/buckets",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+            getObservationsApi: async () => ({
+                searchObservations: async (obsFilter: any, limit = 15, offset = 0) => {
+                    const filterStr = decodeURIComponent(obsFilter?.props?.filter ?? "");
+                    searchCalls.push({limit, offset, filter: filterStr});
+                    const matched = allObs.filter(o => matchesFilter(o, filterStr)).slice(offset, offset + limit);
+                    return {
+                        fetchData: async () => matched,
+                    };
+                },
+            }),
+        };
+
+        const laneMap = new Map<string, any>([
+            ["Lane 1", {
+                laneName: "Lane 1",
+                parentNode: fakeNode,
+                isRS350Backpack: false,
+                datastreams: [{
+                    properties: {
+                        id: "ds-occ-upset",
+                        "system@id": "sys-lane1",
+                        observedProperties: [{definition: OCCUPANCY_PILLAR_DEF}],
+                    },
+                }],
+                datastreamSourceMap: new Map(),
+                findDataStreamByObsProperty: () => null,
+                lookupSystemIdFromDataStreamId: () => "sys-lane1",
+            }],
+        ]);
+
+        const store = configureStore({
+            reducer: {
+                eventLogSlice: eventDataReducer,
+                oscarClientSlice: oscarClientReducer,
+                eventPreview: eventPreviewReducer,
+            },
+            middleware: getDefault => getDefault({serializableCheck: false}),
+        });
+
+        const mockRouter: any = {
+            push: cy.stub(),
+            replace: cy.stub(),
+            prefetch: cy.stub(),
+            back: cy.stub(),
+            forward: cy.stub(),
+            refresh: cy.stub(),
+        };
+
+        cy.mount(
+            <AppRouterContext.Provider value={mockRouter}>
+                <Provider store={store}>
+                    <LanguageProvider>
+                        <DataSourceContext.Provider value={{
+                            laneMapRef: {current: laneMap},
+                            activeViewKey: null,
+                            viewError: null,
+                            scopedHref: (href: string) => href,
+                        } as any}>
+                            <EventTable tableMode="eventlog" laneMap={laneMap} />
+                        </DataSourceContext.Provider>
+                    </LanguageProvider>
+                </Provider>
+            </AppRouterContext.Provider>,
+        );
+
+        // 1. Starts collapsed on page load: UpSet SVG is not mounted and no 500-row batch fetch has fired.
+        cy.get('[data-testid="event-log-upset-section"]').should("exist").and("not.have.attr", "open");
+        cy.get('[data-testid="event-log-upset-plot"]').should("not.exist");
+        cy.contains(".MuiDataGrid-row", "1030").should("exist");
+        cy.then(() => {
+            expect(searchCalls.some(c => c.limit > 15)).to.equal(false);
+        });
+
+        // 2. Clicking the summary expands <details>, fetches ALL 25 alarms across pages (including the 5 SNM rows on Page 2!), and renders UpSetPlot.
+        cy.get('[data-testid="event-log-upset-summary"]').click();
+        cy.get('[data-testid="event-log-upset-section"]').should("have.attr", "open");
+        cy.get('[data-testid="event-log-upset-plot"]').should("be.visible");
+        cy.get('[data-testid="event-log-upset-plot"] svg rect[fill="#DC2626"]').should("have.length.at.least", 1);
+        cy.get('[data-testid="upset-accessible-table-details"] > summary').click();
+        cy.get('[data-testid="upset-accessible-table-details"] table caption').should("contain.text", "25");
+
+        // 3. Clicking the SNM intersection bar filters the DataGrid across the full filter set (showing the 5 SNM rows from Page 2!).
+        cy.contains('[data-testid="event-log-upset-plot"] button', "SNM").click();
+        cy.contains(".MuiDataGrid-row", "1010").should("exist");
+        cy.contains(".MuiDataGrid-row", "1030").should("not.exist");
     });
 });

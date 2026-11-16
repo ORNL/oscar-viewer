@@ -7,6 +7,8 @@ import {
     GridToolbarProps,
 } from "@mui/x-data-grid";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
+import BookmarksOutlinedIcon from "@mui/icons-material/BookmarksOutlined";
+import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
 import MarkEmailReadOutlinedIcon from "@mui/icons-material/MarkEmailReadOutlined";
@@ -29,12 +31,18 @@ export interface CustomToolbarProps {
   timeWindowGroupLabel?: string;
   unreadOnlyLabel?: string;
   filterLabel?: string;
+  savedQueriesLabel?: string;
+  savedQueryCount?: number;
+  resetQueryLabel?: string;
+  hasActiveQuery?: boolean;
   selectAllFilteredLabel?: string;
   clearSelectionLabel?: string;
   bulkAdjudicateLabel?: string;
   acknowledgeSelectedLabel?: string;
   acknowledgeAllLabel?: string;
   onOpenFilters?: () => void;
+  onOpenSavedQueries?: (anchor: HTMLElement) => void;
+  onResetQuery?: () => void;
   onToggleUnreadOnly?: () => void;
   onSelectTimeWindowPreset?: (preset: AlarmTimeWindowPreset) => void;
   onSelectAllFiltered?: () => void;
@@ -101,12 +109,18 @@ export default function CustomToolbar({
   timeWindowGroupLabel = "Alarm time window",
   unreadOnlyLabel = "Unread only",
   filterLabel = "Filters",
+  savedQueriesLabel = "Saved Queries",
+  savedQueryCount = 0,
+  resetQueryLabel = "Reset Query",
+  hasActiveQuery = false,
   selectAllFilteredLabel = "Select all filtered",
   clearSelectionLabel = "Clear selection",
   bulkAdjudicateLabel = "Bulk adjudicate",
   acknowledgeSelectedLabel = "Acknowledge selected",
   acknowledgeAllLabel = "Acknowledge all",
   onOpenFilters,
+  onOpenSavedQueries,
+  onResetQuery,
   onToggleUnreadOnly,
   onSelectTimeWindowPreset,
   onSelectAllFiltered,
@@ -141,6 +155,32 @@ export default function CustomToolbar({
             {filterLabel}
           </Button>
         ) : <GridToolbarFilterButton />}
+        {onOpenSavedQueries && (
+          <Button
+            type="button"
+            size="small"
+            startIcon={
+              <Badge color="primary" badgeContent={savedQueryCount}>
+                <BookmarksOutlinedIcon fontSize="small" aria-hidden="true" />
+              </Badge>
+            }
+            onClick={(event) => onOpenSavedQueries(event.currentTarget)}
+            data-testid="saved-queries-btn"
+          >
+            {savedQueriesLabel}
+          </Button>
+        )}
+        {hasActiveQuery && onResetQuery && (
+          <Button
+            type="button"
+            size="small"
+            startIcon={<RestartAltRoundedIcon fontSize="small" aria-hidden="true" />}
+            onClick={onResetQuery}
+            data-testid="reset-event-query-btn"
+          >
+            {resetQueryLabel}
+          </Button>
+        )}
         <GridToolbarDensitySelector />
         {onToggleUnreadOnly && (
           <>

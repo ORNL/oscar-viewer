@@ -13,6 +13,7 @@ import {
     EML_NON_THREAT_MARKER,
 } from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
 import {formatIso6346, isValidIso6346} from "@/lib/data/oscar/adjudication/Iso6346";
+import {isSpectroscopicFilePath} from "@/lib/data/oscar/adjudication/IsotopeMapping";
 import {
     fetchAdjudicatedVehicleIdsWindow,
     fetchVehicleOcrWindow,
@@ -226,6 +227,17 @@ export function isPassAlarming(pass: Pick<VehiclePassItem, "gammaAlarm" | "neutr
 
 export function isPassOpenAlarm(pass: Pick<VehiclePassItem, "gammaAlarm" | "neutronAlarm" | "alarmCategoryCode" | "emlAutoReleased" | "adjudications">): boolean {
     return isPassAlarming(pass) && !pass.emlAutoReleased && pass.adjudications.length === 0;
+}
+
+export function isPassSpectroscopic(
+    pass: Pick<VehiclePassItem, "systemType" | "webIdAnalyses" | "adjudications">,
+): boolean {
+    if (pass.systemType.toLowerCase().includes("spectroscopic") || pass.webIdAnalyses.length > 0) {
+        return true;
+    }
+    return pass.adjudications.some(
+        adj => Array.isArray(adj.filePaths) && adj.filePaths.some(isSpectroscopicFilePath),
+    );
 }
 
 export function buildNodeBucketBaseUrl(
@@ -829,7 +841,7 @@ export function summarizeVehiclePasses(passes: readonly VehiclePassItem[]): Vehi
         if (isPassAlarming(pass)) alarmingPasses += 1;
         if (isPassOpenAlarm(pass)) openAlarmPasses += 1;
         if (pass.emlAutoReleased) emlAutoReleasePasses += 1;
-        if (pass.systemType.toLowerCase().includes("spectroscopic") || pass.webIdAnalyses.length > 0) {
+        if (isPassSpectroscopic(pass)) {
             spectroscopicPasses += 1;
         }
         lanes.add(`${pass.nodeId}|${pass.laneUid || pass.laneName}`);

@@ -128,6 +128,15 @@ export async function fetchObservationPlanCount(
     }
 }
 
+export interface HydratedEventQuerySnapshot {
+    cacheKey: string;
+    rows: EventTableData[];
+    rowCount: number;
+    page: number;
+    pageLoadedTime: string;
+    bucketCounts?: number[] | null;
+}
+
 export interface UseAbortableEventQueriesArgs {
     queryPlans: EventQueryPlan[];
     pageQueryPlans: EventQueryPlan[];
@@ -145,7 +154,14 @@ export interface UseAbortableEventQueriesArgs {
      * rows from every priority bucket.
      */
     disjointPriorityPlans?: boolean;
+    /**
+     * When true alongside `disjointPriorityPlans`, lazily pre-warms per-bucket counts
+     * at low priority once Page 0 has rendered and `rowCount > pageSize`, so clicking
+     * Next (`>`) to Page 2+ slices immediately without waiting on count round-trips.
+     */
+    prewarmBucketCounts?: boolean;
     pageChangeDebounceMs?: number;
+    cachedSnapshot?: HydratedEventQuerySnapshot | null;
     fetchPlanRows: (
         plan: EventQueryPlan,
         limit: number,
@@ -156,6 +172,13 @@ export interface UseAbortableEventQueriesArgs {
 }
 
 const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 120;
+const BUCKET_COUNTS_PREWARM_DELAY_MS = 0;
+
+function buildBucketCountsCacheKey(effectiveCutoff: string, plans: EventQueryPlan[]): string {
+    return `${effectiveCutoff}\u001e${plans
+        .map(plan => `${plan.key}\u001f${plan.datastreamIds.join(",")}\u001f${plan.filter}`)
+        .join("\u001d")}`;
+}
 
 export interface UseAbortableEventQueriesResult {
     rows: EventTableData[];
@@ -167,6 +190,7 @@ export interface UseAbortableEventQueriesResult {
     countQueryError: boolean;
     pageQueryError: boolean;
     currentPageRef: MutableRefObject<number>;
+    getCachedBucketCounts: () => number[] | null;
     fetchPlanCount: (
         plan: EventQueryPlan,
         cutoff?: string,
@@ -188,22 +212,35 @@ export function useAbortableEventQueries({
     extraFetchRows = 0,
     filterModeActive = false,
     disjointPriorityPlans = false,
+    prewarmBucketCounts = false,
     pageChangeDebounceMs = DEFAULT_PAGE_CHANGE_DEBOUNCE_MS,
+    cachedSnapshot = null,
     fetchPlanRows,
 }: UseAbortableEventQueriesArgs): UseAbortableEventQueriesResult {
-    const [rows, setRows] = useState<EventTableData[]>([]);
-    const [rowCount, setRowCount] = useState(0);
+    const [rows, setRows] = useState<EventTableData[]>(() => cachedSnapshot?.rows ?? []);
+    const [rowCount, setRowCount] = useState(() => cachedSnapshot?.rowCount ?? 0);
     const [loading, setLoading] = useState(false);
     const [countQueryError, setCountQueryError] = useState(false);
     const [pageQueryError, setPageQueryError] = useState(false);
-    const currentPageRef = useRef(0);
+    const currentPageRef = useRef(page);
     const previousPageRef = useRef(page);
+    const pageRef = useRef(page);
+    const cachedSnapshotRef = useRef(cachedSnapshot);
+    pageRef.current = page;
+    cachedSnapshotRef.current = cachedSnapshot;
+    const lastPageChangeMsRef = useRef(-Infinity);
     const countRequestRef = useRef(0);
     const pageRequestRef = useRef(0);
     const countAbortRef = useRef<AbortController | null>(null);
     const pageAbortRef = useRef<AbortController | null>(null);
     const pageDebounceTimerRef = useRef<number | null>(null);
+    const prewarmTimerRef = useRef<number | null>(null);
     const bucketCountsCacheRef = useRef<{key: string; counts: number[]} | null>(null);
+    const bucketCountsInFlightRef = useRef<{
+        key: string;
+        promise: Promise<number[]>;
+        controller: AbortController;
+    } | null>(null);
     const rowFilterRef = useRef(rowFilter);
     const extraFetchRowsRef = useRef(extraFetchRows);
     rowFilterRef.current = rowFilter;
@@ -216,11 +253,23 @@ export function useAbortableEventQueries({
         }
     }, []);
 
+    const clearPendingBucketPrewarm = useCallback(() => {
+        if (prewarmTimerRef.current !== null && typeof window !== "undefined") {
+            window.clearTimeout(prewarmTimerRef.current);
+            prewarmTimerRef.current = null;
+        }
+        if (bucketCountsInFlightRef.current) {
+            bucketCountsInFlightRef.current.controller.abort();
+            bucketCountsInFlightRef.current = null;
+        }
+    }, []);
+
     useEffect(() => () => {
         clearPendingPageDebounce();
+        clearPendingBucketPrewarm();
         countAbortRef.current?.abort();
         pageAbortRef.current?.abort();
-    }, [clearPendingPageDebounce]);
+    }, [clearPendingPageDebounce, clearPendingBucketPrewarm]);
 
     const fetchPlanCount = useCallback(
         (
@@ -304,12 +353,24 @@ export function useAbortableEventQueries({
                 return;
             }
             if (disjointPriorityPlans && !filterModeActive && targetPage >= 1 && pageQueryPlans.length > 1) {
-                const cacheKey = `${effectiveCutoff}\u001e${pageQueryPlans
-                    .map(plan => `${plan.key}\u001f${plan.datastreamIds.join(",")}\u001f${plan.filter}`)
-                    .join("\u001d")}`;
+                const cacheKey = buildBucketCountsCacheKey(effectiveCutoff, pageQueryPlans);
                 let bucketCounts = bucketCountsCacheRef.current?.key === cacheKey
                     ? bucketCountsCacheRef.current.counts
                     : null;
+                if (!bucketCounts && bucketCountsInFlightRef.current?.key === cacheKey) {
+                    try {
+                        const awaitedCounts = await bucketCountsInFlightRef.current.promise;
+                        if (controller.signal.aborted || requestId !== pageRequestRef.current) return;
+                        bucketCounts = awaitedCounts;
+                    } catch (prewarmErr) {
+                        if (controller.signal.aborted || requestId !== pageRequestRef.current) {
+                            return;
+                        }
+                        if (!isAbortRequestError(prewarmErr)) {
+                            bucketCounts = null;
+                        }
+                    }
+                }
                 if (!bucketCounts) {
                     try {
                         const fetchedCounts = await runWithConcurrency(
@@ -419,17 +480,148 @@ export function useAbortableEventQueries({
 
     useEffect(() => {
         clearPendingPageDebounce();
+        clearPendingBucketPrewarm();
+        lastPageChangeMsRef.current = -Infinity;
+        const snap = cachedSnapshotRef.current;
+        if (
+            snap
+            && snap.pageLoadedTime === pageLoadedTime
+            && snap.page === pageRef.current
+            && pageQueryPlans.length > 0
+        ) {
+            countAbortRef.current?.abort();
+            pageAbortRef.current?.abort();
+            countAbortRef.current = null;
+            pageAbortRef.current = null;
+            ++countRequestRef.current;
+            ++pageRequestRef.current;
+            if (snap.bucketCounts && snap.bucketCounts.length === pageQueryPlans.length) {
+                bucketCountsCacheRef.current = {
+                    key: buildBucketCountsCacheKey(pageLoadedTime, pageQueryPlans),
+                    counts: snap.bucketCounts,
+                };
+            } else {
+                bucketCountsCacheRef.current = null;
+            }
+            previousPageRef.current = snap.page;
+            currentPageRef.current = snap.page;
+            setRows(snap.rows);
+            setRowCount(snap.rowCount);
+            setCountQueryError(false);
+            setPageQueryError(false);
+            setLoading(false);
+            return;
+        }
         bucketCountsCacheRef.current = null;
-        previousPageRef.current = 0;
+        const targetPage = pageRef.current;
+        previousPageRef.current = targetPage;
+        currentPageRef.current = targetPage;
         void refreshCounts();
-        void fetchPage(0);
-    }, [clearPendingPageDebounce, refreshCounts, fetchPage]);
+        void fetchPage(targetPage);
+    }, [clearPendingPageDebounce, clearPendingBucketPrewarm, refreshCounts, fetchPage, pageLoadedTime, pageQueryPlans]);
+
+    useEffect(() => {
+        const snap = cachedSnapshotRef.current;
+        if (
+            !prewarmBucketCounts
+            || !disjointPriorityPlans
+            || filterModeActive
+            || pageQueryPlans.length <= 1
+            || rowCount <= pageSize
+            || typeof window === "undefined"
+            || (snap !== null && snap.pageLoadedTime === pageLoadedTime && !snap.bucketCounts)
+        ) {
+            return;
+        }
+        const cacheKey = buildBucketCountsCacheKey(pageLoadedTime, pageQueryPlans);
+        if (
+            bucketCountsCacheRef.current?.key === cacheKey
+            || bucketCountsInFlightRef.current?.key === cacheKey
+        ) {
+            return;
+        }
+        if (prewarmTimerRef.current !== null) {
+            window.clearTimeout(prewarmTimerRef.current);
+        }
+        prewarmTimerRef.current = window.setTimeout(() => {
+            prewarmTimerRef.current = null;
+            if (
+                bucketCountsCacheRef.current?.key === cacheKey
+                || bucketCountsInFlightRef.current?.key === cacheKey
+            ) {
+                return;
+            }
+            const prewarmController = new AbortController();
+            const promise = runWithConcurrency(
+                pageQueryPlans,
+                6,
+                plan => fetchPlanCount(plan, pageLoadedTime, true, {
+                    signal: prewarmController.signal,
+                    lowPriority: true,
+                }),
+            );
+            bucketCountsInFlightRef.current = {
+                key: cacheKey,
+                promise,
+                controller: prewarmController,
+            };
+            void promise
+                .then(counts => {
+                    if (!prewarmController.signal.aborted) {
+                        bucketCountsCacheRef.current = {key: cacheKey, counts};
+                    }
+                })
+                .catch(() => {
+                    // Fallback interactive bucket-count path handles any prewarm error on page >= 1.
+                })
+                .finally(() => {
+                    if (bucketCountsInFlightRef.current?.controller === prewarmController) {
+                        bucketCountsInFlightRef.current = null;
+                    }
+                });
+        }, BUCKET_COUNTS_PREWARM_DELAY_MS);
+        return () => {
+            if (prewarmTimerRef.current !== null && typeof window !== "undefined") {
+                window.clearTimeout(prewarmTimerRef.current);
+                prewarmTimerRef.current = null;
+            }
+        };
+    }, [
+        prewarmBucketCounts,
+        disjointPriorityPlans,
+        filterModeActive,
+        pageQueryPlans,
+        rowCount,
+        pageSize,
+        pageLoadedTime,
+        fetchPlanCount,
+    ]);
 
     useEffect(() => {
         const previousPage = previousPageRef.current;
         previousPageRef.current = page;
         currentPageRef.current = page;
-        if (page > 0 || previousPage !== 0) {
+        if (page !== previousPage) {
+            const snap = cachedSnapshotRef.current;
+            if (snap && snap.pageLoadedTime === pageLoadedTime && snap.page === page && pageQueryPlans.length > 0) {
+                clearPendingPageDebounce();
+                pageAbortRef.current?.abort();
+                pageAbortRef.current = null;
+                ++pageRequestRef.current;
+                setRows(snap.rows);
+                setRowCount(snap.rowCount);
+                setPageQueryError(false);
+                setLoading(false);
+                return;
+            }
+            const hadPendingDebounce = pageDebounceTimerRef.current !== null;
+            const hadActiveFetch = pageAbortRef.current !== null;
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            const rapidFollowUp =
+                hadPendingDebounce
+                || hadActiveFetch
+                || now - lastPageChangeMsRef.current < pageChangeDebounceMs;
+            lastPageChangeMsRef.current = now;
             clearPendingPageDebounce();
             pageAbortRef.current?.abort();
             pageAbortRef.current = null;
@@ -439,7 +631,7 @@ export function useAbortableEventQueries({
                 setLoading(false);
                 return;
             }
-            if (pageChangeDebounceMs <= 0 || typeof window === "undefined") {
+            if (pageChangeDebounceMs <= 0 || typeof window === "undefined" || !rapidFollowUp) {
                 void fetchPage(page);
                 return;
             }
@@ -452,7 +644,14 @@ export function useAbortableEventQueries({
         return () => {
             clearPendingPageDebounce();
         };
-    }, [page, fetchPage, clearPendingPageDebounce, pageChangeDebounceMs, pageQueryPlans.length]);
+    }, [page, fetchPage, clearPendingPageDebounce, pageChangeDebounceMs, pageLoadedTime, pageQueryPlans.length]);
+
+    const getCachedBucketCounts = useCallback((): number[] | null => {
+        const cacheKey = buildBucketCountsCacheKey(pageLoadedTime, pageQueryPlans);
+        return bucketCountsCacheRef.current?.key === cacheKey
+            ? bucketCountsCacheRef.current.counts
+            : null;
+    }, [pageLoadedTime, pageQueryPlans]);
 
     return {
         rows,
@@ -464,6 +663,7 @@ export function useAbortableEventQueries({
         countQueryError,
         pageQueryError,
         currentPageRef,
+        getCachedBucketCounts,
         fetchPlanCount,
         refreshCounts,
         fetchPage,

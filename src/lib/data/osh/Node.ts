@@ -590,9 +590,16 @@ export class Node implements INode {
 
     async fetchDataStreams(laneMap: Map<string, LaneMapEntry>) {
         const laneIds: string[] = [];
+        const laneBySystemId = new Map<string, LaneMapEntry>();
         for (const [, laneEntry] of laneMap) {
             if (laneEntry.parentNode.id != this.id) continue;
             laneIds.push(laneEntry.laneSystem.properties.id);
+            for (const system of laneEntry.systems) {
+                const sysId = (system as any)?.properties?.id;
+                if (typeof sysId === "string" && sysId.length > 0) {
+                    laneBySystemId.set(sysId, laneEntry);
+                }
+            }
         }
 
         const dataStreamCollection = await this.getDataStreamsApi()
@@ -600,7 +607,7 @@ export class Node implements INode {
                 new DataStreamFilter({
                     system: laneIds.join(","),
                     validTime: "latest"
-                }), 1000);
+                }), 2500);
 
         const allDataStreams = [];
         while (dataStreamCollection.hasNext()) {
@@ -609,17 +616,13 @@ export class Node implements INode {
         }
 
         for (const dataStream of allDataStreams) {
-            for (const [, laneEntry] of laneMap) {
-                if (laneEntry.parentNode.id != this.id)
-                    continue;
-                const matchingSystem: typeof System = laneEntry.systems.find((system: typeof System) => system.properties.id == dataStream.properties["system@id"]);
-                if (matchingSystem != null) {
-                    laneEntry.addDataStream(dataStream);
+            const laneEntry = laneBySystemId.get(dataStream.properties?.["system@id"]);
+            if (laneEntry != null) {
+                laneEntry.addDataStream(dataStream);
 
-                    const systemLinkUid = dataStream.properties?.["system@link"]?.uid;
-                    if (systemLinkUid && systemLinkUid.includes("rsi:rs350")) {
-                        laneEntry.setIsRS350Backpack(true);
-                    }
+                const systemLinkUid = dataStream.properties?.["system@link"]?.uid;
+                if (systemLinkUid && systemLinkUid.includes("rsi:rs350")) {
+                    laneEntry.setIsRS350Backpack(true);
                 }
             }
         }
@@ -637,9 +640,16 @@ export class Node implements INode {
 
     async fetchLaneControlStreams(laneMap: Map<string, LaneMapEntry>) {
         const laneIds: string[] = [];
+        const laneBySystemId = new Map<string, LaneMapEntry>();
         for (const [, laneEntry] of laneMap) {
             if (laneEntry.parentNode.id != this.id) continue;
             laneIds.push(laneEntry.laneSystem.properties.id);
+            for (const system of laneEntry.systems) {
+                const sysId = (system as any)?.properties?.id;
+                if (typeof sysId === "string" && sysId.length > 0) {
+                    laneBySystemId.set(sysId, laneEntry);
+                }
+            }
         }
 
         const controlStreamCollection = await this.getControlStreamApi()
@@ -656,13 +666,9 @@ export class Node implements INode {
         }
 
         for (const controlStream of allControlStreams) {
-            for (const [, laneEntry] of laneMap) {
-                if (laneEntry.parentNode.id != this.id)
-                    continue;
-                const matchingSystem: typeof System = laneEntry.systems.find((system: typeof System) => system.properties.id == controlStream.properties["system@id"]);
-                if (matchingSystem != null) {
-                    laneEntry.addControlStream(controlStream);
-                }
+            const laneEntry = laneBySystemId.get(controlStream.properties?.["system@id"]);
+            if (laneEntry != null) {
+                laneEntry.addControlStream(controlStream);
             }
         }
     }

@@ -96,9 +96,14 @@ export function normalizeEventObservationId(value: unknown): string {
  * Builds an application-relative deep link. Operational-view scoping is added
  * by DataSourceContext.scopedHref at the call site.
  */
-export function buildEventDetailsHref(eventId: string, nodeId?: string | null): string {
+export function buildEventDetailsHref(
+    eventId: string,
+    nodeId?: string | null,
+    fromFiltered?: boolean,
+): string {
     const params = new URLSearchParams({eventId: normalizeEventObservationId(eventId)});
     if (nodeId?.trim()) params.set("nodeId", nodeId.trim());
+    if (fromFiltered) params.set("fromFiltered", "1");
     return `/event-details?${params.toString()}`;
 }
 

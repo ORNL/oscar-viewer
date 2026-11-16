@@ -53,6 +53,10 @@ import {useLanguage} from '@/app/contexts/LanguageContext';
 import AlarmQrExportButton from "@/app/_components/alarm-transfer/AlarmQrExportButton";
 import ShareOccupancyButton from "@/app/_components/event-details/ShareOccupancyButton";
 import {buildEventDetailsHref, EventLookupError, resolveEventObservationId} from "@/lib/data/oscar/EventLookup";
+import {
+    isCurrentEventLogFiltered,
+    markSessionCachedEventAdjudicated,
+} from "@/lib/data/oscar/SavedEventQueries";
 import VehicleIdOcr from "@/app/_components/adjudication/VehicleIdOcr";
 import {
     IVehicleOcrResult,
@@ -78,7 +82,7 @@ export function EventPreview() {
     const router = useRouter();
     const eventPreview = useSelector(selectEventPreview);
 
-    const {laneMapRef, laneMapReady, readyLaneNames, scopedHref} = useContext(DataSourceContext);
+    const {activeViewKey, laneMapRef, laneMapReady, readyLaneNames, scopedHref} = useContext(DataSourceContext);
     const laneReady = Boolean(
         eventPreview.eventData?.laneId && readyLaneNames.has(eventPreview.eventData.laneId));
     const laneEntry = eventPreview.eventData?.laneId
@@ -296,6 +300,10 @@ export function EventPreview() {
 
 
             eventPreview.eventData.adjudicatedData = comboData;
+            markSessionCachedEventAdjudicated(
+                comboData.occupancyObsId,
+                comboData.adjudicationCode?.code,
+            );
 
 
             // Dispatch actions
@@ -344,9 +352,12 @@ export function EventPreview() {
         dispatch(setSelectedRowId(eventPreview.eventData.id))
         dispatch(setSelectedEvent(eventPreview.eventData));
 
+        const onEventLog = typeof window !== "undefined"
+            && window.location.pathname.replace(/\/+$/, "").endsWith("/event-log");
+        const fromFiltered = onEventLog && isCurrentEventLogFiltered(activeViewKey);
         const href = eventPreview.eventData.occupancyObsId
-            ? buildEventDetailsHref(eventPreview.eventData.occupancyObsId, laneEntry?.parentNode.id)
-            : "/event-details";
+            ? buildEventDetailsHref(eventPreview.eventData.occupancyObsId, laneEntry?.parentNode.id, fromFiltered)
+            : (fromFiltered ? "/event-details?fromFiltered=1" : "/event-details");
         router.push(scopedHref(href));
     }
 

@@ -723,4 +723,139 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
             expect(abortedPageCalls).to.deep.equal(["p-n:10:15"]);
         });
     });
+
+    it("pre-warms disjoint priority bucket counts at low priority after Page 0 settles so Next-page clicks issue zero count queries", () => {
+        const countCalls: Array<{url: string; priority?: string}> = [];
+        const rowCalls: Array<{filter: string; limit: number; offset: number}> = [];
+
+        const bucketCountsByFilter: Record<string, number> = {
+            "gammaAlarm=true AND neutronAlarm=true": 5,
+            "gammaAlarm=false AND neutronAlarm=true": 12,
+            "gammaAlarm=true AND neutronAlarm=false": 100,
+        };
+
+        cy.window().then((win) => {
+            cy.stub(win, "fetch").callsFake((input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                const priority = (init as {priority?: string} | undefined)?.priority;
+                if (url.includes("/observations/count?")) {
+                    countCalls.push({url, priority});
+                    const filterParam = new URL(url).searchParams.get("filter") ?? "";
+                    let count = 117;
+                    for (const [filterExpr, c] of Object.entries(bucketCountsByFilter)) {
+                        if (filterParam === filterExpr || filterParam.includes(filterExpr)) {
+                            count = c;
+                            break;
+                        }
+                    }
+                    return Promise.resolve(new Response(JSON.stringify({count}), {
+                        status: 200,
+                        headers: {"Content-Type": "application/json"},
+                    }));
+                }
+                return Promise.resolve(new Response("[]", {status: 200}));
+            });
+        });
+
+        const fakeNode: any = {
+            id: "node-prewarm",
+            name: "Local Node",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+        };
+
+        function PrewarmPaginationHarness() {
+            const [page, setPage] = useState(0);
+            const queryPlans = useMemo<EventQueryPlan[]>(() => [{
+                key: "all-alarms",
+                node: fakeNode,
+                datastreamIds: ["occ-1"],
+                filter: "gammaAlarm=true OR neutronAlarm=true",
+            }], []);
+            const pageQueryPlans = useMemo<EventQueryPlan[]>(() => [
+                {...queryPlans[0], key: "p-gn", filter: "gammaAlarm=true AND neutronAlarm=true"},
+                {...queryPlans[0], key: "p-n", filter: "gammaAlarm=false AND neutronAlarm=true"},
+                {...queryPlans[0], key: "p-g", filter: "gammaAlarm=true AND neutronAlarm=false"},
+            ], [queryPlans]);
+
+            const fetchPlanRows = useCallback(async (
+                plan: EventQueryPlan,
+                limit: number,
+                offset: number,
+                cutoff = "2026-11-15T12:00:00.000Z",
+            ) => {
+                rowCalls.push({filter: plan.filter, limit, offset});
+                const gammaAlarm = plan.key === "p-gn" || plan.key === "p-g";
+                const neutronAlarm = plan.key === "p-gn" || plan.key === "p-n";
+                return Array.from({length: limit}, (_, i) => {
+                    const globalSeq = offset + i;
+                    const ts = new Date(Date.parse(cutoff) - globalSeq * 1000).toISOString();
+                    return new EventTableData(
+                        globalSeq + 1,
+                        `${plan.key}-${globalSeq}`,
+                        {
+                            occupancyCount: globalSeq + 1,
+                            startTime: ts,
+                            endTime: ts,
+                            maxGamma: 100,
+                            maxNeutron: 1,
+                            gammaAlarm,
+                            neutronAlarm,
+                            adjudicatedIds: [],
+                        },
+                        `${plan.key}-obs-${globalSeq}`,
+                        "foi-1",
+                        "Local Node",
+                        false,
+                    );
+                });
+            }, []);
+
+            const {rows} = useAbortableEventQueries({
+                queryPlans,
+                pageQueryPlans,
+                page,
+                pageSize: 15,
+                pageLoadedTime: "2026-11-15T12:00:00.000Z",
+                disjointPriorityPlans: true,
+                prewarmBucketCounts: true,
+                fetchPlanRows,
+            });
+
+            return (
+                <div>
+                    <span data-testid="prewarm-first-row">{rows[0]?.laneId ?? ""}</span>
+                    <span data-testid="prewarm-last-row">{rows[rows.length - 1]?.laneId ?? ""}</span>
+                    <button data-testid="prewarm-next" onClick={() => setPage(1)}>Next</button>
+                </div>
+            );
+        }
+
+        cy.mount(<PrewarmPaginationHarness />);
+        cy.get('[data-testid="prewarm-first-row"]').should("have.text", "p-gn-0");
+
+        // Wait for background prewarm (1 total count + 3 disjoint bucket counts, all at priority: "low").
+        cy.wrap(null).should(() => {
+            expect(countCalls).to.have.length(4);
+            countCalls.forEach((call) => {
+                expect(call.priority).to.equal("low");
+            });
+        });
+
+        cy.then(() => {
+            rowCalls.length = 0;
+        });
+
+        // Clicking Next (window 15..30 across [5, 12, 100]) fires immediately with 0 extra count queries!
+        cy.get('[data-testid="prewarm-next"]').click();
+        cy.get('[data-testid="prewarm-first-row"]').should("have.text", "p-n-10");
+        cy.get('[data-testid="prewarm-last-row"]').should("have.text", "p-g-12");
+        cy.then(() => {
+            expect(countCalls).to.have.length(4);
+            expect(rowCalls).to.deep.equal([
+                {filter: "gammaAlarm=false AND neutronAlarm=true", limit: 2, offset: 10},
+                {filter: "gammaAlarm=true AND neutronAlarm=false", limit: 13, offset: 0},
+            ]);
+        });
+    });
 });

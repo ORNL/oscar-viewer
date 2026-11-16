@@ -77,10 +77,12 @@ import {useLanguage} from '@/app/contexts/LanguageContext';
 import {getIntlLocale} from '@/app/utils/LocaleUtils';
 import {
     CanonicalIsotopeKey,
+    isSpectroscopicFilePath,
     normalizeIsotopeListForSelect,
     selectHighestConfidenceIsotopesFromWebIdEntry,
     selectHighestConfidenceWebIdResult,
 } from '@/lib/data/oscar/adjudication/IsotopeMapping';
+import {markSessionCachedEventAdjudicated} from '@/lib/data/oscar/SavedEventQueries';
 
 function inferSpectrumTypeFromFileName(fileName: string): "foreground" | "background" {
     const lower = (fileName || "").toLowerCase();
@@ -91,7 +93,7 @@ function inferSpectrumTypeFromFileName(fileName: string): "foreground" | "backgr
 }
 
 function isSpectroscopicFileName(fileName: string): boolean {
-    return /\.(spe|n42|n42\.xml|xml|spc|chn|pcf)$/i.test(fileName || "");
+    return isSpectroscopicFilePath(fileName);
 }
 
 interface FileWithWebId {
@@ -127,6 +129,9 @@ export default function AdjudicationDetail(props: {
     const [adjudicationCode, setAdjudicationCode] = useState(AdjudicationCodes.codes[0]);
     const [isotope, setIsotope] = useState<string[]>([]);
     const [secondaryInspection, setSecondaryInspection] = useState('');
+    const [secondaryInspectionManuallySet, setSecondaryInspectionManuallySet] = useState(false);
+    const secondaryInspectionManuallySetRef = useRef(false);
+    secondaryInspectionManuallySetRef.current = secondaryInspectionManuallySet;
 
     const [vehicleId, setVehicleId] = useState<string>("");
     const [vehicleIdTouched, setVehicleIdTouched] = useState<boolean>(false);
@@ -166,6 +171,8 @@ export default function AdjudicationDetail(props: {
         setDebouncedVehicleId("");
         setVehicleIdTouched(false);
         setVehicleIdAutoFilled(false);
+        setSecondaryInspection("");
+        setSecondaryInspectionManuallySet(false);
         setOcrResults([]);
         setRelatedVehicleResult(null);
         setAdjData(
@@ -326,6 +333,27 @@ export default function AdjudicationDetail(props: {
         });
     }, [props.event.occupancyObsId]);
 
+    const syncAutoSecondaryInspection = React.useCallback((
+        nextFiles: readonly FileWithWebId[],
+        nextScanned: readonly ScannedDataWithWebId[],
+    ) => {
+        if (secondaryInspectionManuallySetRef.current) return;
+        const hasSpectroscopic = nextFiles.some(f => f.webIdEnabled || isSpectroscopicFileName(f.file.name))
+            || nextScanned.length > 0
+            || webIdResults.length > 0;
+        const nextStatus = hasSpectroscopic ? "COMPLETED" : "";
+        setSecondaryInspection(prev => (prev === nextStatus ? prev : nextStatus));
+        setAdjData(previous => {
+            if (!previous || previous.secondaryInspectionStatus === nextStatus) return previous;
+            const updated = Object.assign(
+                Object.create(Object.getPrototypeOf(previous)),
+                previous,
+            ) as AdjudicationData;
+            updated.secondaryInspectionStatus = nextStatus;
+            return updated;
+        });
+    }, [webIdResults.length]);
+
     const handleWebIdAnalysis = (fileIndex: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
         const enabled = event.target.checked;
         setUploadedFiles(prevFiles => {
@@ -334,7 +362,7 @@ export default function AdjudicationDetail(props: {
                 && (f.webIdEnabled || enabled)
                 && (f.spectrumType || inferSpectrumTypeFromFileName(f.file.name)) === 'background',
             );
-            return prevFiles.map((fileData, idx) => {
+            const nextFiles = prevFiles.map((fileData, idx) => {
                 if (idx !== fileIndex) {
                     if (enabled && inferSpectrumTypeFromFileName(prevFiles[fileIndex].file.name) === 'background' && fileData.spectrumType === 'foreground') {
                         return {...fileData, synthesizeBackground: false};
@@ -354,6 +382,8 @@ export default function AdjudicationDetail(props: {
                     synthesizeBackground: nextSynth,
                 };
             });
+            syncAutoSecondaryInspection(nextFiles, scannedData);
+            return nextFiles;
         });
     };
 
@@ -403,7 +433,9 @@ export default function AdjudicationDetail(props: {
                     setScannedData(prev => {
                         if (prev.some(item => item.text === result.data))
                             return prev;
-                        return [...prev, newData]
+                        const next = [...prev, newData];
+                        syncAutoSecondaryInspection(uploadedFiles, next);
+                        return next;
                     });
                 }, qrOptions);
 
@@ -441,12 +473,18 @@ export default function AdjudicationDetail(props: {
             };
         });
 
-        setUploadedFiles([...uploadedFiles, ...filesWithWebId]);
+        const nextFiles = [...uploadedFiles, ...filesWithWebId];
+        setUploadedFiles(nextFiles);
+        syncAutoSecondaryInspection(nextFiles, scannedData);
         e.target.value = '';
     };
 
     const handleFileDelete = (fileIndex: number) => {
-        setUploadedFiles((prevState) => prevState.filter((_, i) => i !== fileIndex));
+        setUploadedFiles((prevState) => {
+            const nextFiles = prevState.filter((_, i) => i !== fileIndex);
+            syncAutoSecondaryInspection(nextFiles, scannedData);
+            return nextFiles;
+        });
     }
 
     const handleAdjudicationSelect = (value: AdjudicationCode) => {
@@ -465,6 +503,8 @@ export default function AdjudicationDetail(props: {
     }
 
     const handleInspectionSelect = (value: string) => {
+        setSecondaryInspectionManuallySet(true);
+        secondaryInspectionManuallySetRef.current = true;
         let tAdjData = adjData;
         tAdjData.secondaryInspectionStatus = value;
         setSecondaryInspection(value);
@@ -520,7 +560,11 @@ export default function AdjudicationDetail(props: {
     };
 
     const handleScannedDataDelete = (index: number) => {
-        setScannedData(prev => prev.filter((_, i) => i !== index));
+        setScannedData(prev => {
+            const nextScanned = prev.filter((_, i) => i !== index);
+            syncAutoSecondaryInspection(uploadedFiles, nextScanned);
+            return nextScanned;
+        });
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -576,6 +620,8 @@ export default function AdjudicationDetail(props: {
         setUploadedFiles([]);
         setScannedData([]);
         setSecondaryInspection('');
+        setSecondaryInspectionManuallySet(false);
+        secondaryInspectionManuallySetRef.current = false;
         setIsotope([]);
         setAdjudicationCode(AdjudicationCodes.codes[0]);
         setFeedback('')
@@ -708,6 +754,10 @@ export default function AdjudicationDetail(props: {
             }
 
             props.event.adjudicatedData = tempAdjData;
+            markSessionCachedEventAdjudicated(
+                tempAdjData.occupancyObsId,
+                tempAdjData.adjudicationCode?.code,
+            );
 
             setAdjSnackMsg(t('adjudicationSuccessful', {occupancyId: props.event.occupancyCount}));
             setColorStatus('success')
@@ -1322,7 +1372,10 @@ export default function AdjudicationDetail(props: {
                                 {scannedData.length > 0 && (
                                     <Button
                                         variant="outlined"
-                                        onClick={() => setScannedData([])}
+                                        onClick={() => {
+                                            setScannedData([]);
+                                            syncAutoSecondaryInspection(uploadedFiles, []);
+                                        }}
                                     >
                                         {t('clearAll')}
                                     </Button>

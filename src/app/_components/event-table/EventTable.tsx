@@ -6,6 +6,7 @@ import {
     Box,
     Button,
     Chip,
+    CircularProgress,
     FormControl,
     InputLabel,
     MenuItem,
@@ -14,6 +15,7 @@ import {
     Stack,
     TextField,
     Tooltip,
+    Typography,
 } from "@mui/material";
 import {useSelector} from "react-redux";
 import {
@@ -145,6 +147,21 @@ import {
 } from "@/lib/data/oscar/EventTableRequests";
 import {formatIso6346} from "@/lib/data/oscar/adjudication/Iso6346";
 import {useVehicleOcrMap} from "@/app/_components/event-table/useVehicleOcrMap";
+import SavedQueriesPopover from "@/app/_components/event-table/SavedQueriesPopover";
+import {
+    CachedEventLogQuerySnapshot,
+    clearFilteredEventLogSnapshot,
+    deleteSavedEventQueryBookmark,
+    EventLogQueryCriteria,
+    getFilteredEventLogRestoreState,
+    hasActiveEventLogCriteria,
+    loadSavedEventQueries,
+    SavedEventQueryBookmark,
+    saveEventQueryBookmark,
+    setCurrentEventLogFilteredFlag,
+    setFilteredEventLogSnapshot,
+    summarizeEventLogQuery,
+} from "@/lib/data/oscar/SavedEventQueries";
 
 export {fetchCollectionDataWithSignal, isAbortRequestError};
 
@@ -158,12 +175,14 @@ interface TableProps {
     laneMap: Map<string, LaneMapEntry>;
     setEvents?: unknown;
     readStateFetch?: DashboardReadStateFetch;
+    restoreFiltered?: boolean;
 }
 
 type QueryPlan = EventQueryPlan;
 
 const PAGE_SIZE = 15;
 const BULK_FETCH_SIZE = 5000;
+const MAX_UPSET_SUMMARY_EVENTS = 1000;
 const REALTIME_ID_RESOLUTION_TIMEOUT_MS = 12_000;
 const MAX_EVENT_CACHE_ENTRIES = 1000;
 
@@ -180,6 +199,7 @@ export default function EventTable({
     laneMap,
     currentLane,
     readStateFetch,
+    restoreFiltered,
 }: TableProps) {
     const isAlarmTable = tableMode === "alarmtable";
     const isEventLog = tableMode === "eventlog";
@@ -206,12 +226,33 @@ export default function EventTable({
     const {language, t} = useLanguage();
     const locale = getIntlLocale(language);
 
+    const [initialHydration] = useState(() => {
+        if (!isEventLog) return null;
+        const shouldRestore = restoreFiltered === true
+            || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("restore") === "1");
+        if (!shouldRestore) return null;
+        return getFilteredEventLogRestoreState(activeViewKey);
+    });
+
+    const [restoredSnapshot, setRestoredSnapshot] = useState<CachedEventLogQuerySnapshot | null>(
+        () => initialHydration?.snapshot ?? null,
+    );
+    const restoredSnapshotRef = useRef<CachedEventLogQuerySnapshot | null>(restoredSnapshot);
+    restoredSnapshotRef.current = restoredSnapshot;
+    const [savedBookmarks, setSavedBookmarks] = useState<SavedEventQueryBookmark[]>(
+        () => (isEventLog ? loadSavedEventQueries() : []),
+    );
+    const [savedQueriesAnchorEl, setSavedQueriesAnchorEl] = useState<HTMLElement | null>(null);
+
     const stableLaneMap = useMemo(() => convertToMap(laneMap), [laneMap]);
-    const [paginationModel, setPaginationModel] = useState({page: 0, pageSize: PAGE_SIZE});
+    const [paginationModel, setPaginationModel] = useState(() => ({
+        page: initialHydration?.snapshot?.page ?? 0,
+        pageSize: PAGE_SIZE,
+    }));
     const [columnVisibilityModel, setColumnVisibilityModel] = useState<GridColumnVisibilityModel>(() => ({
         adjudicatedIds: viewAdjudicated,
         adjudicationCode: false,
-        vehicleId: false,
+        vehicleId: Boolean(initialHydration?.criteria.vehicleSearch),
     }));
     const [syncedViewAdjudicated, setSyncedViewAdjudicated] = useState(viewAdjudicated);
     if (syncedViewAdjudicated !== viewAdjudicated) {
@@ -219,7 +260,9 @@ export default function EventTable({
         setColumnVisibilityModel(previous => ({...previous, adjudicatedIds: viewAdjudicated}));
     }
     const [filterEpoch, setFilterEpoch] = useState(0);
-    const [filter, setFilter] = useState<EventFilterGroup>(() => createEventFilterGroup());
+    const [filter, setFilter] = useState<EventFilterGroup>(
+        () => initialHydration?.criteria.filter ?? createEventFilterGroup(),
+    );
     const [filterDialogOpen, setFilterDialogOpen] = useState(false);
     const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
     const [bulkSelectionError, setBulkSelectionError] = useState(false);
@@ -230,16 +273,33 @@ export default function EventTable({
     const [postSelectionKeys, setPostSelectionKeys] = useState<Set<string>>(new Set());
 
     // Vehicle ID search & multi-pass comparison state
-    const [vehicleSearchInput, setVehicleSearchInput] = useState("");
-    const [vehicleSearchMatchMode, setVehicleSearchMatchMode] = useState<"contains" | "equals" | "startsWith">("contains");
-    const [vehicleSearchWindow, setVehicleSearchWindow] = useState<VehicleSearchWindowPreset>("30d");
+    const [vehicleSearchInput, setVehicleSearchInput] = useState(
+        () => initialHydration?.criteria.vehicleSearch?.query ?? "",
+    );
+    const [vehicleSearchMatchMode, setVehicleSearchMatchMode] = useState<"contains" | "equals" | "startsWith">(
+        () => initialHydration?.criteria.vehicleSearch?.matchMode ?? "contains",
+    );
+    const [vehicleSearchWindow, setVehicleSearchWindow] = useState<VehicleSearchWindowPreset>(
+        () => initialHydration?.criteria.vehicleSearch?.window ?? "30d",
+    );
     const [submittedVehicleQuery, setSubmittedVehicleQuery] = useState<{
         query: string;
         matchMode: VehicleSearchMatchMode;
         window: VehicleSearchWindowPreset;
         nonce: number;
-    } | null>(null);
-    const [vehicleSearchResult, setVehicleSearchResult] = useState<FederatedVehicleSearchResult | null>(null);
+    } | null>(() =>
+        initialHydration?.criteria.vehicleSearch
+            ? {
+                query: initialHydration.criteria.vehicleSearch.query,
+                matchMode: initialHydration.criteria.vehicleSearch.matchMode,
+                window: initialHydration.criteria.vehicleSearch.window,
+                nonce: 0,
+            }
+            : null,
+    );
+    const [vehicleSearchResult, setVehicleSearchResult] = useState<FederatedVehicleSearchResult | null>(
+        () => initialHydration?.snapshot?.vehicleSearchResult ?? null,
+    );
     const [vehicleSearchLoading, setVehicleSearchLoading] = useState(false);
     const [vehicleSearchError, setVehicleSearchError] = useState<string | null>(null);
     const [comparisonDialogState, setComparisonDialogState] = useState<{
@@ -294,17 +354,26 @@ export default function EventTable({
         setAllFilteredTotal(0);
     }
 
-    const latestCutoffRef = useRef<string>(new Date().toISOString());
+    const latestCutoffRef = useRef<string>(
+        initialHydration?.snapshot?.latestCutoff
+        ?? initialHydration?.snapshot?.pageLoadedTime
+        ?? new Date().toISOString(),
+    );
     // Stamp the REST snapshot upper bound when discovered lanes hydrate (or when filters
     // are re-applied), rather than at empty initial mount before MQTT subscriptions exist.
     const pageLoadedTime = useMemo(
         () => {
+            const snap = restoredSnapshotRef.current;
+            if (isEventLog && snap && stableLaneMap.size > 0) {
+                latestCutoffRef.current = snap.latestCutoff || snap.pageLoadedTime;
+                return snap.pageLoadedTime;
+            }
             const now = new Date().toISOString();
             latestCutoffRef.current = now;
             return now;
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [stableLaneMap, filterEpoch],
+        [stableLaneMap, filterEpoch, isEventLog],
     );
     const allFilteredCutoffRef = useRef<string | null>(null);
     const eventCacheRef = useRef<Map<string, EventTableData>>(new Map());
@@ -695,7 +764,7 @@ export default function EventTable({
         signal?: AbortSignal,
         cacheRows = true,
     ) => {
-        const effectiveCutoff = cutoff === pageLoadedTime && latestCutoffRef.current > cutoff
+        const effectiveCutoff = cutoff === pageLoadedTime && offset === 0 && limit <= PAGE_SIZE && latestCutoffRef.current > cutoff
             ? latestCutoffRef.current
             : cutoff;
         const phenomenonTime = phenomenonTimeForCutoff(effectiveCutoff, plan);
@@ -718,6 +787,15 @@ export default function EventTable({
         });
     }, [eventFromObservation, findLaneByDataStreamId, pageLoadedTime, phenomenonTimeForCutoff]);
 
+    const effectiveQueryPlans = useMemo<QueryPlan[]>(
+        () => (isEventLog && isVehicleSearchMode ? [] : queryPlans),
+        [isEventLog, isVehicleSearchMode, queryPlans],
+    );
+    const effectivePageQueryPlans = useMemo<QueryPlan[]>(
+        () => (isEventLog && isVehicleSearchMode ? [] : pageQueryPlans),
+        [isEventLog, isVehicleSearchMode, pageQueryPlans],
+    );
+
     const {
         rows,
         setRows,
@@ -728,12 +806,13 @@ export default function EventTable({
         countQueryError,
         pageQueryError,
         currentPageRef,
+        getCachedBucketCounts,
         fetchPlanCount,
         refreshCounts,
         fetchPage,
     } = useAbortableEventQueries({
-        queryPlans,
-        pageQueryPlans,
+        queryPlans: effectiveQueryPlans,
+        pageQueryPlans: effectivePageQueryPlans,
         page: paginationModel.page,
         pageSize: PAGE_SIZE,
         pageLoadedTime,
@@ -741,7 +820,9 @@ export default function EventTable({
         rowFilter: isRowUnread,
         extraFetchRows: effectiveUnreadOnly ? postWatermarkReadKeysSummary.totalEstimatedCount : 0,
         filterModeActive: effectiveUnreadOnly,
-        disjointPriorityPlans: !hasRS350Lane && queryPlans.length === 1 && pageQueryPlans.length > 1,
+        disjointPriorityPlans: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
+        prewarmBucketCounts: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
+        cachedSnapshot: isEventLog ? restoredSnapshot : null,
         fetchPlanRows,
     });
 
@@ -960,6 +1041,11 @@ export default function EventTable({
     }, []);
 
     const applyFilter = (next: EventFilterGroup) => {
+        restoredSnapshotRef.current = null;
+        setRestoredSnapshot(null);
+        if (isEventLog && countEventFilterRules(next) === 0 && !submittedVehicleQuery) {
+            clearFilteredEventLogSnapshot(activeViewKey);
+        }
         setFilter(next);
         setFilterDialogOpen(false);
         setPaginationModel(previous => ({...previous, page: 0}));
@@ -997,6 +1083,17 @@ export default function EventTable({
             return;
         }
         if (stableLaneMap.size === 0) return;
+
+        const snapVehicle = isEventLog ? restoredSnapshotRef.current?.vehicleSearchResult : null;
+        if (snapVehicle) {
+            for (const pass of snapVehicle.passes) {
+                cacheEventBounded(eventSelectionKey(pass.eventRow), pass.eventRow);
+            }
+            setVehicleSearchResult(snapVehicle);
+            setVehicleSearchLoading(false);
+            setVehicleSearchError(null);
+            return;
+        }
 
         const controller = new AbortController();
         setVehicleSearchLoading(true);
@@ -1072,6 +1169,8 @@ export default function EventTable({
     const handleVehicleSearchSubmit = useCallback(
         (event?: React.FormEvent) => {
             event?.preventDefault();
+            restoredSnapshotRef.current = null;
+            setRestoredSnapshot(null);
             const trimmed = vehicleSearchInput.trim();
             if (!trimmed || normalizeVehicleId(trimmed).length === 0) {
                 setSubmittedVehicleQuery(null);
@@ -1090,13 +1189,18 @@ export default function EventTable({
     );
 
     const handleVehicleSearchClear = useCallback(() => {
+        restoredSnapshotRef.current = null;
+        setRestoredSnapshot(null);
+        if (isEventLog && countEventFilterRules(filter) === 0) {
+            clearFilteredEventLogSnapshot(activeViewKey);
+        }
         setVehicleSearchInput("");
         setSubmittedVehicleQuery(null);
         setVehicleSearchResult(null);
         setVehicleSearchError(null);
         setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
         clearSelection();
-    }, [clearSelection]);
+    }, [activeViewKey, clearSelection, filter, isEventLog]);
 
     const visibleSelectionModel = useMemo<GridRowSelectionModel>(() => activePageSourceRows
         .filter(row => row.status !== "None" && !row.adjudicatedIds?.length)
@@ -1366,9 +1470,10 @@ export default function EventTable({
         getLatestGB(event);
         if (navigate) {
             const lane = stableLaneMap.get(event.laneId);
+            const fromFiltered = isEventLog && hasActiveQueryRef.current;
             const href = event.occupancyObsId
-                ? buildEventDetailsHref(event.occupancyObsId, lane?.parentNode.id)
-                : "/event-details";
+                ? buildEventDetailsHref(event.occupancyObsId, lane?.parentNode.id, fromFiltered)
+                : (fromFiltered ? "/event-details?fromFiltered=1" : "/event-details");
             router.push(scopedHref(href));
         }
     };
@@ -1717,7 +1822,7 @@ export default function EventTable({
     }, [pageLoadedTime, rows, wantsVehicleIdColumn]);
 
     const {ocrByObsId, adjudicatedVehicleIdByObsId} = useVehicleOcrMap({
-        enabled: wantsVehicleIdColumn,
+        enabled: wantsVehicleIdColumn && !isVehicleSearchMode,
         lanes: visibleOcrLanes,
         windowStartIso: ocrWindowStartIso,
     });
@@ -1754,12 +1859,11 @@ export default function EventTable({
         };
     }, [findLaneByDataStreamId, replaceRealtimeEventIdentity, rows, stableLaneMap, wantsVehicleIdColumn]);
 
-    const displayRows = useMemo<EventTableData[]>(() => {
-        if (isVehicleSearchMode) return vehiclePageRows;
-        if (!wantsVehicleIdColumn) return rows;
-        if (ocrByObsId.size === 0 && adjudicatedVehicleIdByObsId.size === 0) return rows;
+    const enrichRowsWithVehicleId = useCallback((sourceRows: EventTableData[]): EventTableData[] => {
+        if (!wantsVehicleIdColumn) return sourceRows;
+        if (ocrByObsId.size === 0 && adjudicatedVehicleIdByObsId.size === 0) return sourceRows;
         let changed = false;
-        const mapped = rows.map(row => {
+        const mapped = sourceRows.map(row => {
             const obsId = row.occupancyObsId;
             if (!obsId) return row;
             const adjVehicleId = adjudicatedVehicleIdByObsId.get(obsId);
@@ -1783,27 +1887,358 @@ export default function EventTable({
             }
             return row;
         });
-        return changed ? mapped : rows;
-    }, [adjudicatedVehicleIdByObsId, isVehicleSearchMode, ocrByObsId, rows, vehiclePageRows, wantsVehicleIdColumn]);
+        return changed ? mapped : sourceRows;
+    }, [adjudicatedVehicleIdByObsId, ocrByObsId, wantsVehicleIdColumn]);
 
+    const displayRows = useMemo<EventTableData[]>(() => {
+        if (isVehicleSearchMode) return vehiclePageRows;
+        return enrichRowsWithVehicleId(rows);
+    }, [enrichRowsWithVehicleId, isVehicleSearchMode, rows, vehiclePageRows]);
+
+    const [upSetExpanded, setUpSetExpanded] = useState(false);
     const [selectedUpSetMask, setSelectedUpSetMask] = useState<number | null>(null);
+    const [upSetRefreshNonce, setUpSetRefreshNonce] = useState(0);
+    const [upSetFetchState, setUpSetFetchState] = useState<{
+        loading: boolean;
+        error: boolean;
+        events: EventTableData[];
+        totalAlarmCount: number;
+        capped: boolean;
+    }>({
+        loading: false,
+        error: false,
+        events: [],
+        totalAlarmCount: 0,
+        capped: false,
+    });
+
+    const activeCriteria = useMemo<EventLogQueryCriteria>(() => ({
+        filter,
+        vehicleSearch: submittedVehicleQuery
+            ? {
+                query: submittedVehicleQuery.query,
+                matchMode:
+                    submittedVehicleQuery.matchMode === "equals"
+                    || submittedVehicleQuery.matchMode === "startsWith"
+                        ? submittedVehicleQuery.matchMode
+                        : "contains",
+                window: submittedVehicleQuery.window,
+            }
+            : null,
+    }), [filter, submittedVehicleQuery]);
+
+    const hasActiveQuery = useMemo(
+        () => isEventLog && hasActiveEventLogCriteria(activeCriteria),
+        [activeCriteria, isEventLog],
+    );
+    const hasActiveQueryRef = useRef<boolean>(hasActiveQuery);
+    hasActiveQueryRef.current = hasActiveQuery;
+
+    // Seed bounded row cache when hydrating from the single-slot return snapshot
+    useEffect(() => {
+        if (!isEventLog || !restoredSnapshot) return;
+        for (const row of restoredSnapshot.rows) {
+            cacheEventBounded(eventSelectionKey(row), row);
+        }
+        if (restoredSnapshot.vehicleSearchResult) {
+            for (const pass of restoredSnapshot.vehicleSearchResult.passes) {
+                cacheEventBounded(eventSelectionKey(pass.eventRow), pass.eventRow);
+            }
+        }
+    }, [cacheEventBounded, isEventLog, restoredSnapshot]);
+
+    const applyCriteriaAndSnapshot = useCallback(
+        (criteria: EventLogQueryCriteria, snapshot: CachedEventLogQuerySnapshot | null) => {
+            restoredSnapshotRef.current = snapshot;
+            setRestoredSnapshot(snapshot);
+            setFilter(criteria.filter ?? createEventFilterGroup());
+            setPaginationModel({page: snapshot?.page ?? 0, pageSize: PAGE_SIZE});
+            if (criteria.vehicleSearch) {
+                setVehicleSearchInput(criteria.vehicleSearch.query);
+                setVehicleSearchMatchMode(criteria.vehicleSearch.matchMode);
+                setVehicleSearchWindow(criteria.vehicleSearch.window);
+                setSubmittedVehicleQuery({
+                    query: criteria.vehicleSearch.query,
+                    matchMode: criteria.vehicleSearch.matchMode,
+                    window: criteria.vehicleSearch.window,
+                    nonce: snapshot ? 0 : Date.now(),
+                });
+                setVehicleSearchResult(snapshot?.vehicleSearchResult ?? null);
+                setVehicleSearchError(null);
+            } else {
+                setVehicleSearchInput("");
+                setSubmittedVehicleQuery(null);
+                setVehicleSearchResult(null);
+                setVehicleSearchError(null);
+            }
+            setUpSetExpanded(false);
+            setSelectedUpSetMask(null);
+            setUpSetFetchState({loading: false, error: false, events: [], totalAlarmCount: 0, capped: false});
+            clearSelection();
+            setFilterEpoch(previous => previous + 1);
+        },
+        [clearSelection],
+    );
+
+    const handleApplyBookmark = useCallback(
+        (criteria: EventLogQueryCriteria) => {
+            applyCriteriaAndSnapshot(criteria, null);
+        },
+        [applyCriteriaAndSnapshot],
+    );
+
+    const handleResetEventLogQuery = useCallback(() => {
+        clearFilteredEventLogSnapshot(activeViewKey);
+        applyCriteriaAndSnapshot({}, null);
+        if (typeof window !== "undefined" && window.location.search.includes("restore=")) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("restore");
+            window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        }
+    }, [activeViewKey, applyCriteriaAndSnapshot]);
+
+    useEffect(() => {
+        if (!isEventLog) return;
+        setCurrentEventLogFilteredFlag(activeViewKey, hasActiveQuery);
+        return () => {
+            setCurrentEventLogFilteredFlag(activeViewKey, false);
+        };
+    }, [activeViewKey, hasActiveQuery, isEventLog]);
+
+    const prevRestoreFilteredRef = useRef<boolean | undefined>(restoreFiltered);
+    useEffect(() => {
+        if (!isEventLog) return;
+        const prev = prevRestoreFilteredRef.current;
+        prevRestoreFilteredRef.current = restoreFiltered;
+        if (restoreFiltered === undefined || prev === restoreFiltered) return;
+        if (restoreFiltered) {
+            const restored = getFilteredEventLogRestoreState(activeViewKey);
+            if (restored) {
+                applyCriteriaAndSnapshot(restored.criteria, restored.snapshot);
+            }
+        } else if (prev === true && hasActiveQueryRef.current) {
+            handleResetEventLogQuery();
+        }
+    }, [activeViewKey, applyCriteriaAndSnapshot, handleResetEventLogQuery, isEventLog, restoreFiltered]);
+
+    // Update the single-slot return snapshot when a filtered /event-log query settles
+    useEffect(() => {
+        if (!isEventLog || !hasActiveQuery || stableLaneMap.size === 0) return;
+        if (isVehicleSearchMode) {
+            if (vehicleSearchLoading || vehicleSearchError || !vehicleSearchResult) return;
+            setFilteredEventLogSnapshot(activeViewKey, {
+                criteria: activeCriteria,
+                rows: [],
+                rowCount: vehicleFilteredRows.length,
+                page: paginationModel.page,
+                pageLoadedTime,
+                latestCutoff: latestCutoffRef.current,
+                bucketCounts: null,
+                vehicleSearchResult,
+            });
+            return;
+        }
+        if (loading || countQueryError || pageQueryError) return;
+        if (currentPageRef.current !== paginationModel.page) return;
+        setFilteredEventLogSnapshot(activeViewKey, {
+            criteria: activeCriteria,
+            rows,
+            rowCount,
+            page: paginationModel.page,
+            pageLoadedTime,
+            latestCutoff: latestCutoffRef.current,
+            bucketCounts: getCachedBucketCounts(),
+            vehicleSearchResult: null,
+        });
+    }, [
+        activeCriteria,
+        activeViewKey,
+        countQueryError,
+        currentPageRef,
+        getCachedBucketCounts,
+        hasActiveQuery,
+        isEventLog,
+        isVehicleSearchMode,
+        loading,
+        pageLoadedTime,
+        pageQueryError,
+        paginationModel.page,
+        rowCount,
+        rows,
+        stableLaneMap.size,
+        vehicleFilteredRows.length,
+        vehicleSearchError,
+        vehicleSearchLoading,
+        vehicleSearchResult,
+    ]);
+
+    const handleSaveBookmark = useCallback(
+        (name: string) => {
+            if (!hasActiveQuery) return;
+            setSavedBookmarks(saveEventQueryBookmark(name, activeCriteria));
+        },
+        [activeCriteria, hasActiveQuery],
+    );
+
+    const handleDeleteBookmark = useCallback((id: string) => {
+        setSavedBookmarks(deleteSavedEventQueryBookmark(id));
+    }, []);
+
+    const defaultBookmarkName = useMemo(
+        () => (hasActiveQuery ? summarizeEventLogQuery(activeCriteria, t) : ""),
+        [activeCriteria, hasActiveQuery, t],
+    );
+
+    const upSetAlarmQueryPlans = useMemo<QueryPlan[]>(() => {
+        if (!isEventLog || !upSetExpanded || isVehicleSearchMode) return [];
+        return queryPlans.map(plan => ({
+            ...plan,
+            key: `${plan.key}\u001fupset-alarms`,
+            filter: combineServerFilters(plan.filter, "gammaAlarm=true OR neutronAlarm=true"),
+        }));
+    }, [isEventLog, isVehicleSearchMode, queryPlans, upSetExpanded]);
+
+    useEffect(() => {
+        if (!isEventLog || !upSetExpanded || isVehicleSearchMode) {
+            setUpSetFetchState(previous => (
+                previous.loading || previous.error || previous.events.length > 0 || previous.totalAlarmCount > 0
+                    ? {loading: false, error: false, events: [], totalAlarmCount: 0, capped: false}
+                    : previous
+            ));
+            return;
+        }
+        if (upSetAlarmQueryPlans.length === 0) {
+            setUpSetFetchState({loading: false, error: false, events: [], totalAlarmCount: 0, capped: false});
+            return;
+        }
+
+        const controller = new AbortController();
+        const cutoff = latestCutoffRef.current > pageLoadedTime ? latestCutoffRef.current : pageLoadedTime;
+        setUpSetFetchState(previous => ({...previous, loading: true, error: false}));
+
+        void (async () => {
+            try {
+                const perPlanCap = Math.max(1, Math.ceil(MAX_UPSET_SUMMARY_EVENTS / upSetAlarmQueryPlans.length));
+                const collectedBatches = await runWithConcurrency(
+                    upSetAlarmQueryPlans,
+                    4,
+                    plan => fetchPlanRows(plan, perPlanCap, 0, cutoff, controller.signal, false),
+                );
+                if (controller.signal.aborted) return;
+
+                const deduped = deduplicateEvents(collectedBatches.flat())
+                    .sort(sortEventsByAlarmPriority)
+                    .slice(0, MAX_UPSET_SUMMARY_EVENTS);
+                for (const ev of deduped.slice(0, MAX_EVENT_CACHE_ENTRIES)) {
+                    cacheEventBounded(eventSelectionKey(ev), ev);
+                }
+
+                const hitCap = collectedBatches.some(batch => batch.length >= perPlanCap)
+                    || deduped.length >= MAX_UPSET_SUMMARY_EVENTS;
+                setUpSetFetchState({
+                    loading: false,
+                    error: false,
+                    events: deduped,
+                    totalAlarmCount: deduped.length,
+                    capped: hitCap,
+                });
+
+                if (hitCap) {
+                    const planCounts = await runWithConcurrency(
+                        upSetAlarmQueryPlans,
+                        4,
+                        plan => fetchPlanCount(plan, cutoff, false, {
+                            signal: controller.signal,
+                            lowPriority: true,
+                        }),
+                    );
+                    if (controller.signal.aborted) return;
+                    const exactTotal = planCounts.reduce((sum, count) => sum + count, 0);
+                    if (exactTotal >= deduped.length) {
+                        setUpSetFetchState(previous => ({
+                            ...previous,
+                            totalAlarmCount: exactTotal,
+                            capped: exactTotal > deduped.length,
+                        }));
+                    }
+                }
+            } catch (error) {
+                if (controller.signal.aborted || isAbortRequestError(error)) return;
+                console.error("Unable to summarize filtered events for UpSet plot", error);
+                setUpSetFetchState({loading: false, error: true, events: [], totalAlarmCount: 0, capped: false});
+            }
+        })();
+
+        return () => {
+            controller.abort();
+        };
+    }, [
+        cacheEventBounded,
+        fetchPlanCount,
+        fetchPlanRows,
+        isEventLog,
+        isVehicleSearchMode,
+        pageLoadedTime,
+        upSetAlarmQueryPlans,
+        upSetExpanded,
+        upSetRefreshNonce,
+    ]);
+
+    const upSetSourceEvents = useMemo<EventTableData[]>(() => {
+        if (!isEventLog || !upSetExpanded) return [];
+        if (isVehicleSearchMode) return vehicleFilteredRows;
+        if (!hasFilterVehicleRule) return upSetFetchState.events;
+        const enriched = enrichRowsWithVehicleId(upSetFetchState.events);
+        return enriched.filter(ev => {
+            const lane = findLaneByDataStreamId(ev.dataStreamId) ?? stableLaneMap.get(ev.laneId);
+            return eventMatchesFilter(filter, ev, {
+                nodeId: lane?.parentNode.id ?? "",
+                nodeName: lane?.parentNode.name ?? ev.parentNode,
+                laneId: lane?.laneName ?? ev.laneId,
+            });
+        });
+    }, [
+        enrichRowsWithVehicleId,
+        filter,
+        findLaneByDataStreamId,
+        hasFilterVehicleRule,
+        isEventLog,
+        isVehicleSearchMode,
+        stableLaneMap,
+        upSetExpanded,
+        upSetFetchState.events,
+        vehicleFilteredRows,
+    ]);
 
     const eventLogUpSetData = useMemo(
-        () => (isEventLog ? buildUpSetCoOccurrenceFromEvents(displayRows) : null),
-        [displayRows, isEventLog],
+        () => (isEventLog && upSetExpanded ? buildUpSetCoOccurrenceFromEvents(upSetSourceEvents) : null),
+        [isEventLog, upSetExpanded, upSetSourceEvents],
     );
+
+    const upSetSummaryLoading = isEventLog && upSetExpanded && (isVehicleSearchMode ? vehicleSearchLoading : upSetFetchState.loading);
 
     useEffect(() => {
         if (selectedUpSetMask == null) return;
-        if (!eventLogUpSetData || !eventLogUpSetData.intersections.some(col => col.mask === selectedUpSetMask)) {
+        if (!upSetExpanded) {
+            setSelectedUpSetMask(null);
+            return;
+        }
+        if (!upSetSummaryLoading && (!eventLogUpSetData || !eventLogUpSetData.intersections.some(col => col.mask === selectedUpSetMask))) {
             setSelectedUpSetMask(null);
         }
-    }, [eventLogUpSetData, selectedUpSetMask]);
+    }, [eventLogUpSetData, selectedUpSetMask, upSetExpanded, upSetSummaryLoading]);
+
+    const upSetMatchedRows = useMemo<EventTableData[]>(() => {
+        if (!isEventLog || !upSetExpanded || selectedUpSetMask == null) return [];
+        return upSetSourceEvents.filter(row => computeEventUpSetMask(row) === selectedUpSetMask);
+    }, [isEventLog, selectedUpSetMask, upSetExpanded, upSetSourceEvents]);
 
     const effectiveDisplayRows = useMemo<EventTableData[]>(() => {
-        if (!isEventLog || selectedUpSetMask == null) return displayRows;
-        return displayRows.filter(row => computeEventUpSetMask(row) === selectedUpSetMask);
-    }, [displayRows, isEventLog, selectedUpSetMask]);
+        if (!isEventLog || !upSetExpanded || selectedUpSetMask == null) return displayRows;
+        const startIdx = paginationModel.page * PAGE_SIZE;
+        const sliced = upSetMatchedRows.slice(startIdx, startIdx + PAGE_SIZE);
+        return isVehicleSearchMode ? sliced : enrichRowsWithVehicleId(sliced);
+    }, [displayRows, enrichRowsWithVehicleId, isEventLog, isVehicleSearchMode, paginationModel.page, selectedUpSetMask, upSetExpanded, upSetMatchedRows]);
 
     const renderCompactHeader = useCallback((label: string) => {
         const unitMatch = label.match(/^(.*?)\s*(\([^)]+\))$/);
@@ -2140,6 +2575,8 @@ export default function EventTable({
         .map(column => column.field);
 
     const retryEventQueries = () => {
+        restoredSnapshotRef.current = null;
+        setRestoredSnapshot(null);
         const cutoff = advanceSnapshotCutoff();
         setUnreadReconcileEpoch(previous => previous + 1);
         void refreshCounts(cutoff);
@@ -2158,8 +2595,9 @@ export default function EventTable({
         return new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS[activeVehicleQuery.window]).toISOString();
     }, [activeVehicleQuery]);
 
-    const tableRowCount = isEventLog && selectedUpSetMask != null
-        ? effectiveDisplayRows.length
+    const isUpSetMaskFiltered = isEventLog && upSetExpanded && selectedUpSetMask != null;
+    const tableRowCount = isUpSetMaskFiltered
+        ? upSetMatchedRows.length
         : (isVehicleSearchMode ? vehicleFilteredRows.length : effectiveRowCount);
     const tableLoading = isVehicleSearchMode ? vehicleSearchLoading : loading;
 
@@ -2384,10 +2822,22 @@ export default function EventTable({
                     {t("eventQueryLoadFailed")}
                 </Alert>
             )}
-            {isEventLog && eventLogUpSetData && eventLogUpSetData.totalOccupancies > 0 && (
+            {isEventLog && (
                 <Box
                     component="details"
-                    open
+                    open={upSetExpanded}
+                    onToggle={event => {
+                        if (event.target !== event.currentTarget) return;
+                        const nextOpen = (event.currentTarget as HTMLDetailsElement).open;
+                        if (nextOpen && !upSetExpanded && !isVehicleSearchMode) {
+                            setUpSetFetchState(previous => ({...previous, loading: true, error: false}));
+                        }
+                        setUpSetExpanded(nextOpen);
+                        if (!nextOpen && selectedUpSetMask !== null) {
+                            setSelectedUpSetMask(null);
+                            setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
+                        }
+                    }}
                     data-testid="event-log-upset-section"
                     sx={{
                         mb: 1,
@@ -2406,15 +2856,82 @@ export default function EventTable({
                         },
                     }}
                 >
-                    <summary>{t("eventLogUpSetSummaryToggle")}</summary>
-                    <Box sx={{pt: 1}}>
-                        <UpSetPlot
-                            data={eventLogUpSetData}
-                            selectedMask={selectedUpSetMask}
-                            onSelectIntersection={col => setSelectedUpSetMask(col?.mask ?? null)}
-                            testId="event-log-upset-plot"
-                        />
-                    </Box>
+                    <summary data-testid="event-log-upset-summary">
+                        <Box component="span">{t("eventLogUpSetSummaryToggle")}</Box>
+                        {!upSetExpanded && (
+                            <Box
+                                component="span"
+                                sx={{ml: 1, fontWeight: 400, fontSize: "0.8rem", color: "text.secondary"}}
+                            >
+                                — {t("eventLogUpSetExpandHint")}
+                            </Box>
+                        )}
+                    </summary>
+                    {upSetExpanded && (
+                        <Box sx={{pt: 1}}>
+                            {upSetSummaryLoading ? (
+                                <Stack
+                                    direction="row"
+                                    spacing={1.25}
+                                    alignItems="center"
+                                    sx={{py: 1.5}}
+                                    data-testid="event-log-upset-loading"
+                                >
+                                    <CircularProgress size={16} />
+                                    <Typography variant="body2" color="text.secondary">
+                                        {t("eventLogUpSetLoading")}
+                                    </Typography>
+                                </Stack>
+                            ) : upSetFetchState.error ? (
+                                <Alert
+                                    severity="error"
+                                    action={
+                                        <Button
+                                            type="button"
+                                            color="inherit"
+                                            size="small"
+                                            onClick={() => setUpSetRefreshNonce(previous => previous + 1)}
+                                        >
+                                            {t("retry")}
+                                        </Button>
+                                    }
+                                >
+                                    {t("eventQueryLoadFailed")}
+                                </Alert>
+                            ) : !eventLogUpSetData || eventLogUpSetData.totalOccupancies === 0 ? (
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{py: 1}}
+                                    data-testid="event-log-upset-empty"
+                                >
+                                    {t("eventLogUpSetNoAlarms")}
+                                </Typography>
+                            ) : (
+                                <Stack spacing={0.75}>
+                                    {!isVehicleSearchMode && !hasFilterVehicleRule && upSetFetchState.capped && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            {t("eventLogUpSetCappedNote", {
+                                                sampled: upSetSourceEvents.length.toLocaleString(locale),
+                                                total: upSetFetchState.totalAlarmCount.toLocaleString(locale),
+                                            })}
+                                        </Typography>
+                                    )}
+                                    <UpSetPlot
+                                        data={eventLogUpSetData}
+                                        selectedMask={selectedUpSetMask}
+                                        onSelectIntersection={col => {
+                                            setSelectedUpSetMask(col?.mask ?? null);
+                                            setPaginationModel(previous => (
+                                                previous.page === 0 ? previous : {...previous, page: 0}
+                                            ));
+                                        }}
+                                        testId="event-log-upset-plot"
+                                    />
+                                </Stack>
+                            )}
+                        </Box>
+                    )}
                 </Box>
             )}
             <Box sx={{...(isEventLog ? {height: 680} : {flex: 1, minHeight: 0}), width: "100%"}}>
@@ -2431,7 +2948,13 @@ export default function EventTable({
                     paginationMode="server"
                     filterMode="server"
                     paginationModel={paginationModel}
-                    onPaginationModelChange={model => setPaginationModel(model)}
+                    onPaginationModelChange={model => {
+                        if (isEventLog && model.page !== paginationModel.page) {
+                            restoredSnapshotRef.current = null;
+                            setRestoredSnapshot(null);
+                        }
+                        setPaginationModel(model);
+                    }}
                     rowCount={tableRowCount}
                     pageSizeOptions={[PAGE_SIZE]}
                     checkboxSelection
@@ -2466,6 +2989,16 @@ export default function EventTable({
                             acknowledgeSelectedLabel: t("acknowledgeSelected", {count: selectedCount}),
                             acknowledgeAllLabel: t("acknowledgeAll"),
                             onOpenFilters: () => setFilterDialogOpen(true),
+                            ...(isEventLog
+                                ? {
+                                    savedQueriesLabel: t("savedQueriesLabel"),
+                                    savedQueryCount: savedBookmarks.length,
+                                    resetQueryLabel: t("resetQueryButton"),
+                                    hasActiveQuery,
+                                    onOpenSavedQueries: (anchor: HTMLElement) => setSavedQueriesAnchorEl(anchor),
+                                    onResetQuery: handleResetEventLogQuery,
+                                }
+                                : {}),
                             onSelectAllFiltered: selectAllFilteredAlarms,
                             onClearSelection: clearSelection,
                             onBulkAdjudicate: () => setBulkDialogOpen(true),
@@ -2594,6 +3127,18 @@ export default function EventTable({
                 onClose={() => setFilterDialogOpen(false)}
                 onApply={applyFilter}
             />
+            {isEventLog && (
+                <SavedQueriesPopover
+                    anchorEl={savedQueriesAnchorEl}
+                    hasActiveQuery={hasActiveQuery}
+                    defaultBookmarkName={defaultBookmarkName}
+                    bookmarks={savedBookmarks}
+                    onClose={() => setSavedQueriesAnchorEl(null)}
+                    onApplyBookmark={handleApplyBookmark}
+                    onSaveBookmark={handleSaveBookmark}
+                    onDeleteBookmark={handleDeleteBookmark}
+                />
+            )}
             <BulkAdjudicationDialog
                 nodes={allFilteredSelected ? bulkQueryPlans.map(plan => plan.node) :
                     Array.from(selectedKeys).flatMap(key => {

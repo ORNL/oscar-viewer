@@ -36,6 +36,11 @@ import {getIntlLocale} from "@/app/utils/LocaleUtils";
 import AdjudicationSelect from "@/app/_components/adjudication/AdjudicationSelect";
 import IsotopeSelect from "@/app/_components/adjudication/IsotopeSelect";
 import SecondaryInspectionSelect from "@/app/_components/adjudication/SecondaryInspectionSelect";
+import UpSetPlot from "@/app/_components/common/UpSetPlot";
+import {
+    buildUpSetCoOccurrenceFromVehiclePasses,
+    computeVehiclePassUpSetMask,
+} from "@/lib/data/oscar/adjudication/IsotopeMapping";
 import {
     AdjudicationCode,
     AdjudicationCodes,
@@ -53,6 +58,7 @@ import {
     FederatedVehicleSearchResult,
     isPassAlarming,
     isPassOpenAlarm,
+    isPassSpectroscopic,
     normalizeVehicleId,
     searchVehiclePassesAcrossNodes,
     submitVehicleIncidentReport,
@@ -196,6 +202,7 @@ export default function VehiclePassComparisonDialog({
         format: ReportOutputFormat;
     } | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
+    const [selectedUpSetMask, setSelectedUpSetMask] = useState<number | null>(null);
 
     const runSearch = useCallback(
         async (includeProfiles: boolean, signal?: AbortSignal) => {
@@ -247,8 +254,10 @@ export default function VehiclePassComparisonDialog({
             setBatchStatus(null);
             setExportedReport(null);
             setExportError(null);
+            setSelectedUpSetMask(null);
             return;
         }
+        setSelectedUpSetMask(null);
 
         const normTarget = normalizeVehicleId(vehicleId);
         if (
@@ -367,6 +376,30 @@ export default function VehiclePassComparisonDialog({
     const passes = result?.passes ?? [];
     const summary = result?.summary;
     const firstPassEpochMs = passes.length > 0 ? resolvePassEpochMs(passes[0]) : 0;
+
+    const vehicleUpSetData = useMemo(
+        () => buildUpSetCoOccurrenceFromVehiclePasses(passes),
+        [passes],
+    );
+
+    useEffect(() => {
+        if (selectedUpSetMask === null || loading) return;
+        if (!vehicleUpSetData.intersections.some(col => col.mask === selectedUpSetMask)) {
+            setSelectedUpSetMask(null);
+        }
+    }, [loading, selectedUpSetMask, vehicleUpSetData]);
+
+    const displayedPassEntries = useMemo(
+        () =>
+            passes
+                .map((pass, idx) => ({pass, idx}))
+                .filter(
+                    ({pass}) =>
+                        selectedUpSetMask === null
+                        || computeVehiclePassUpSetMask(pass) === selectedUpSetMask,
+                ),
+        [passes, selectedUpSetMask],
+    );
 
     const openAlarmPasses = useMemo(
         () => passes.filter(isPassOpenAlarm),
@@ -695,6 +728,17 @@ export default function VehiclePassComparisonDialog({
                         </Stack>
                     )}
 
+                    {/* Multi-Pass Alarm & Source-Category Co-Occurrence UpSet Plot (in-memory, zero extra queries) */}
+                    {!loading && vehicleUpSetData.totalOccupancies > 0 && (
+                        <UpSetPlot
+                            data={vehicleUpSetData}
+                            title={t("vehicleHistoryUpSetTitle")}
+                            selectedMask={selectedUpSetMask}
+                            onSelectIntersection={col => setSelectedUpSetMask(col?.mask ?? null)}
+                            testId="vehicle-history-upset-plot"
+                        />
+                    )}
+
                     {/* Cross-Lane Chronological Pass Comparison Table */}
                     {!loading && passes.length === 0 ? (
                         <Alert severity="info" data-testid="vehicle-no-passes-alert">
@@ -762,7 +806,7 @@ export default function VehiclePassComparisonDialog({
                                 <caption id={tableCaptionId}>
                                     {t("vehicleComparisonTableCaption", {
                                         vehicleId: displayVehicleTitle,
-                                        count: passes.length,
+                                        count: displayedPassEntries.length,
                                     })}
                                 </caption>
                                 <thead>
@@ -800,7 +844,7 @@ export default function VehiclePassComparisonDialog({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {passes.map((pass, idx) => {
+                                    {displayedPassEntries.map(({pass, idx}) => {
                                         const passMs = resolvePassEpochMs(pass);
                                         const deltaSeconds =
                                             idx === 0 || firstPassEpochMs <= 0 || passMs <= 0
@@ -813,9 +857,7 @@ export default function VehiclePassComparisonDialog({
                                             && pass.occupancyObsId === highlightOccupancyObsId,
                                         );
                                         const latestAdj = pass.adjudications[pass.adjudications.length - 1];
-                                        const isSpectroscopic =
-                                            pass.systemType.toLowerCase().includes("spectroscopic")
-                                            || pass.webIdAnalyses.length > 0;
+                                        const isSpectroscopic = isPassSpectroscopic(pass);
 
                                         return (
                                             <tr

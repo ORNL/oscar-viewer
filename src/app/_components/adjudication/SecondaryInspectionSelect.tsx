@@ -24,11 +24,13 @@ export default function SecondaryInspectionSelect(props: {
 
     return (
         <FormControl size="small" fullWidth>
-            <InputLabel id="label">{t('secondaryInspection')}</InputLabel>
+            <InputLabel id="secondary-inspection-label">{t('secondaryInspection')}</InputLabel>
             <Select
                 variant="outlined"
-                id="label"
+                labelId="secondary-inspection-label"
+                id="secondary-inspection-select-input"
                 label={t('secondaryInspection')}
+                data-testid="secondary-inspection-select"
                 value={props.secondarySelectVal}
                 onChange={handleChange}
                 MenuProps={{

@@ -1,7 +1,10 @@
 "use client";
 
 import {Alert, Button, Grid, Paper, Stack, Typography} from "@mui/material";
-import React, {useCallback, useContext, useEffect, useRef, useState} from "react";
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
+import Link from "next/link";
+import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
+import ListAltRoundedIcon from "@mui/icons-material/ListAltRounded";
 import BackButton from "../_components/BackButton";
 import DataRow from "../_components/event-details/DataRow";
 import MiscTable from "../_components/event-details/MiscTable";
@@ -35,6 +38,7 @@ import {
     normalizeEventObservationId,
     resolveEventObservationId,
 } from "@/lib/data/oscar/EventLookup";
+import {hasFilteredEventLogReturnState} from "@/lib/data/oscar/SavedEventQueries";
 
 type LookupState = "idle" | "loading" | "ready" | "not-found" | "ambiguous" | "unavailable";
 type LiveIdentityState = "idle" | "resolving" | "failed";
@@ -65,7 +69,7 @@ export default function EventDetailsPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const nodes = useSelector((state: RootState) => state.oshSlice.nodes);
-    const {laneMapRef, laneMapReady, readyLaneNames, scopedHref} = useContext(DataSourceContext);
+    const {laneMapRef, laneMapReady, readyLaneNames, activeViewKey, scopedHref} = useContext(DataSourceContext);
     const sharedRequested = searchParams.has("id");
     const shared = useSharedOccupancy(
         searchParams.get("id"),
@@ -80,6 +84,8 @@ export default function EventDetailsPage() {
     const lookupQueryMalformed = eventIdValues.length !== 1 || nodeIdValues.length > 1;
     const requestedEventId = eventIdValues.length === 1 ? eventIdValues[0] : "";
     const requestedNodeId = nodeIdValues.length === 1 ? nodeIdValues[0] : null;
+    const fromFiltered = searchParams.get("fromFiltered") === "1"
+        && hasFilteredEventLogReturnState(activeViewKey);
     const [resolvedEvent, setResolvedEvent] = useState<EventTableData | null>(null);
     const [lookupState, setLookupState] = useState<LookupState>(lookupRequested ? "loading" : "idle");
     const [liveIdentityState, setLiveIdentityState] = useState<LiveIdentityState>("idle");
@@ -175,7 +181,7 @@ export default function EventDetailsPage() {
             dispatch(setEventData(result.event));
 
             if (requestedEventId !== normalizedEventId || requestedNodeId !== result.nodeId) {
-                router.replace(scopedHref(buildEventDetailsHref(normalizedEventId, result.nodeId)));
+                router.replace(scopedHref(buildEventDetailsHref(normalizedEventId, result.nodeId, fromFiltered)));
             }
         }).catch(error => {
             if (controller.signal.aborted) return;
@@ -202,6 +208,7 @@ export default function EventDetailsPage() {
         requestedNodeId,
         router,
         scopedHref,
+        fromFiltered,
     ]);
 
     useEffect(() => {
@@ -246,7 +253,7 @@ export default function EventDetailsPage() {
                     setResolvedEvent(identifiedEvent);
                     setLookupState("ready");
                     setLiveIdentityState("idle");
-                    router.replace(scopedHref(buildEventDetailsHref(occupancyObsId, nodeId)));
+                    router.replace(scopedHref(buildEventDetailsHref(occupancyObsId, nodeId, fromFiltered)));
                     return;
                 } catch (error) {
                     if (controller.signal.aborted) return;
@@ -280,6 +287,7 @@ export default function EventDetailsPage() {
         lookupRequested,
         router,
         scopedHref,
+        fromFiltered,
     ]);
 
     useEffect(() => {
@@ -368,7 +376,34 @@ export default function EventDetailsPage() {
                 <Grid item container xs={12} spacing={2} justifyContent={"space-between"}>
                     <Grid item container spacing={2} xs alignItems={"center"}>
                         <Grid item sx={{ displayPrint: 'none' }}>
-                            <BackButton/>
+                            <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                                <BackButton/>
+                                {fromFiltered && (
+                                    <>
+                                        <Button
+                                            component={Link}
+                                            href={scopedHref("/event-log?restore=1")}
+                                            variant="contained"
+                                            color="primary"
+                                            size="small"
+                                            startIcon={<FilterAltOutlinedIcon fontSize="small" aria-hidden="true" />}
+                                            data-testid="back-to-filtered-events-btn"
+                                        >
+                                            {t('backToFilteredEvents')}
+                                        </Button>
+                                        <Button
+                                            component={Link}
+                                            href={scopedHref("/event-log")}
+                                            variant="outlined"
+                                            size="small"
+                                            startIcon={<ListAltRoundedIcon fontSize="small" aria-hidden="true" />}
+                                            data-testid="open-unfiltered-events-btn"
+                                        >
+                                            {t('allEventsUnfiltered')}
+                                        </Button>
+                                    </>
+                                )}
+                            </Stack>
                         </Grid>
                         <Grid item>
                             <Typography variant="h4" sx={{ textWrap: 'balance' }}>

@@ -535,6 +535,45 @@ export function suggestAdjudicationCodeForCategory(
     }
 }
 
+const SPECTROSCOPIC_FILE_SUFFIXES = [
+    ".spe",
+    ".n42.xml",
+    ".n42",
+    ".xml",
+    ".spc",
+    ".chn",
+    ".pcf",
+    ".cnf",
+    ".tka",
+    ".mca",
+    ".phd",
+    ".lzs",
+    ".mps",
+    ".aram",
+] as const;
+
+export function isSpectroscopicFilePath(rawPath: string | null | undefined): boolean {
+    if (!rawPath) return false;
+    let clean = rawPath.trim();
+    const qIdx = clean.indexOf("?");
+    if (qIdx >= 0) clean = clean.slice(0, qIdx);
+    const hIdx = clean.indexOf("#");
+    if (hIdx >= 0) clean = clean.slice(0, hIdx);
+    clean = clean.trim().toLowerCase();
+    if (clean.length < 4) return false;
+    for (const suffix of SPECTROSCOPIC_FILE_SUFFIXES) {
+        if (clean.length > suffix.length && clean.endsWith(suffix)) {
+            return true;
+        }
+    }
+    if (clean.endsWith(".txt")) {
+        const slashIdx = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
+        const baseName = slashIdx >= 0 ? clean.slice(slashIdx + 1) : clean;
+        return baseName.length > 15 && baseName.startsWith("foreground-");
+    }
+    return false;
+}
+
 const BIT_GAMMA = 1 << 0;
 const BIT_NORM = 1 << 1;
 const BIT_UNKNOWN = 1 << 2;
@@ -553,68 +592,42 @@ const UPSET_SET_DEFS: ReadonlyArray<{ name: UpSetSetName; bit: number; snm: bool
     { name: "Neutron", bit: BIT_NEUTRON, snm: false },
 ];
 
-export function computeEventUpSetMask(
-    event: Pick<EventTableData, "status"> & Partial<Pick<EventTableData, "adjudicatedData" | "adjudicatedCode" | "adjudicatedIds">>,
-): number {
-    const status = (event.status ?? "").trim();
-    if (!status || status === "None" || status.startsWith("Fault") || status === "Tamper") {
-        return 0;
-    }
-
-    let mask = 0;
-    const lowerStatus = status.toLowerCase();
-    if (lowerStatus.includes("gamma")) mask |= BIT_GAMMA;
-    if (lowerStatus.includes("neutron")) mask |= BIT_NEUTRON;
-    if (lowerStatus.includes("norm")) mask |= BIT_GAMMA | BIT_NORM;
-    if (lowerStatus.includes("medical")) mask |= BIT_GAMMA | BIT_MEDICAL;
-    if (lowerStatus.includes("industrial")) mask |= BIT_GAMMA | BIT_INDUSTRIAL;
-    if (lowerStatus.includes("snm") || lowerStatus.includes("special nuclear") || lowerStatus.includes("threat")) {
-        mask |= BIT_GAMMA | BIT_SNM;
-    }
-    if (lowerStatus.includes("unknown")) mask |= BIT_GAMMA | BIT_UNKNOWN;
-    if (mask === 0) {
-        mask |= BIT_GAMMA;
-    }
-
-    const isotopes: string[] = Array.isArray(event.adjudicatedData?.isotopes)
-        ? event.adjudicatedData.isotopes
-        : [];
-    for (const iso of isotopes) {
-        const cat = classifySourceCategory(iso);
-        if (cat === "NORM") mask |= BIT_NORM;
-        else if (cat === "Unknown") mask |= BIT_UNKNOWN;
-        else if (cat === "Industrial") mask |= BIT_INDUSTRIAL;
-        else if (cat === "Medical") mask |= BIT_MEDICAL;
-        else if (cat === "SNM") mask |= BIT_SNM;
-    }
-
-    const latestMarkerCode = Array.isArray(event.adjudicatedIds)
-        ? (extractLatestAdjudicationCode(event.adjudicatedIds) ?? 0)
-        : 0;
-    const codeNum = event.adjudicatedData?.adjudicationCode?.code ?? event.adjudicatedCode ?? latestMarkerCode;
-    if ((mask & (BIT_NORM | BIT_UNKNOWN | BIT_INDUSTRIAL | BIT_MEDICAL | BIT_SNM)) === 0 && codeNum > 0) {
-        if (codeNum === 1) mask |= BIT_SNM;
-        else if (codeNum === 2) mask |= BIT_UNKNOWN;
-        else if (codeNum === 3) mask |= BIT_MEDICAL;
-        else if (codeNum === 4) mask |= BIT_NORM;
-        else if (codeNum === 5) mask |= BIT_INDUSTRIAL;
-    }
-
-    return mask;
+function categoryToBit(cat: UpSetSourceCategory | null): number {
+    if (cat === "NORM") return BIT_NORM;
+    if (cat === "Unknown") return BIT_UNKNOWN;
+    if (cat === "Industrial") return BIT_INDUSTRIAL;
+    if (cat === "Medical") return BIT_MEDICAL;
+    if (cat === "SNM") return BIT_SNM;
+    return 0;
 }
 
-export function buildUpSetCoOccurrenceFromEvents(events: readonly EventTableData[]): UpSetCoOccurrencePayload {
-    const countsByMask = new Array<number>(128).fill(0);
-    let totalOccupancies = 0;
+function classifySourceCategoryBitsFromToken(rawToken: string | null | undefined): number {
+    if (!rawToken) return 0;
+    const trimmed = rawToken.trim();
+    if (!trimmed) return 0;
+    const lower = trimmed.toLowerCase();
+    let bits = 0;
+    if (lower.includes("gamma")) bits |= BIT_GAMMA;
+    if (lower.includes("neutron")) bits |= BIT_NEUTRON;
+    if (lower.includes("snm") || lower.includes("special nuclear") || lower.includes("threat")) bits |= BIT_SNM;
+    else if (lower.includes("medical") || lower === "med") bits |= BIT_MEDICAL;
+    else if (lower.includes("industrial") || lower === "ind") bits |= BIT_INDUSTRIAL;
+    else if (lower.includes("norm") || lower.includes("natural")) bits |= BIT_NORM;
+    else if (lower.includes("unknown") || lower === "unk") bits |= BIT_UNKNOWN;
+    bits |= categoryToBit(classifySourceCategory(trimmed));
+    return bits;
+}
 
-    for (const ev of events) {
-        const mask = computeEventUpSetMask(ev);
-        if (mask > 0 && mask < 128) {
-            countsByMask[mask] += 1;
-            totalOccupancies += 1;
-        }
-    }
+function classifyDispositionCodeBits(codeNum: number): number {
+    if (codeNum === 1) return BIT_SNM;
+    if (codeNum === 2) return BIT_UNKNOWN;
+    if (codeNum === 3) return BIT_MEDICAL;
+    if (codeNum === 4 || codeNum === 9999) return BIT_NORM;
+    if (codeNum === 5) return BIT_INDUSTRIAL;
+    return 0;
+}
 
+function finalizeUpSetFromCounts(countsByMask: readonly number[], totalOccupancies: number): UpSetCoOccurrencePayload {
     const setTotals: UpSetSetTotalItem[] = UPSET_SET_DEFS.map((def) => {
         let sum = 0;
         for (let m = 1; m < 128; m++) {
@@ -652,4 +665,159 @@ export function buildUpSetCoOccurrenceFromEvents(events: readonly EventTableData
         sets: setTotals,
         intersections,
     };
+}
+
+export interface VehiclePassUpSetInput {
+    gammaAlarm: boolean;
+    neutronAlarm: boolean;
+    emlAutoReleased?: boolean;
+    alarmCategoryCode?: string;
+    confirmedIsotopes?: readonly string[];
+    eml?: {
+        decision?: string;
+        sourceType?: string;
+    } | null;
+    webIdAnalyses?: ReadonlyArray<{
+        isotopeString?: string;
+        isotopes?: readonly string[];
+    }>;
+    adjudications?: ReadonlyArray<{
+        adjudicationCode?: number;
+        isotopes?: readonly string[];
+    }>;
+}
+
+export function computeVehiclePassUpSetMask(pass: VehiclePassUpSetInput | null | undefined): number {
+    if (!pass) return 0;
+    const alarmCat = (pass.alarmCategoryCode ?? "").trim();
+    const isAlarming = Boolean(pass.gammaAlarm || pass.neutronAlarm || alarmCat.length > 0);
+    if (!isAlarming) {
+        return 0;
+    }
+
+    let mask = 0;
+    if (pass.gammaAlarm) mask |= BIT_GAMMA;
+    if (pass.neutronAlarm) mask |= BIT_NEUTRON;
+    if (pass.emlAutoReleased) mask |= BIT_NORM;
+
+    if (alarmCat.length > 0) {
+        for (const tok of alarmCat.split(/[,;/+]/)) {
+            mask |= classifySourceCategoryBitsFromToken(tok);
+        }
+    }
+    if (pass.eml?.sourceType) {
+        mask |= classifySourceCategoryBitsFromToken(pass.eml.sourceType);
+    }
+    if (Array.isArray(pass.confirmedIsotopes)) {
+        for (const iso of pass.confirmedIsotopes) {
+            mask |= classifySourceCategoryBitsFromToken(iso);
+        }
+    }
+    if (Array.isArray(pass.webIdAnalyses)) {
+        for (const w of pass.webIdAnalyses) {
+            if (Array.isArray(w?.isotopes)) {
+                for (const iso of w.isotopes) {
+                    mask |= classifySourceCategoryBitsFromToken(iso);
+                }
+            }
+            if (w?.isotopeString) {
+                for (const tok of w.isotopeString.split(/[,;+]/)) {
+                    mask |= classifySourceCategoryBitsFromToken(tok);
+                }
+            }
+        }
+    }
+    if (Array.isArray(pass.adjudications)) {
+        for (const adj of pass.adjudications) {
+            if (!adj) continue;
+            let isoBits = 0;
+            if (Array.isArray(adj.isotopes)) {
+                for (const iso of adj.isotopes) {
+                    isoBits |= classifySourceCategoryBitsFromToken(iso);
+                }
+            }
+            mask |= isoBits;
+            const codeNum = Number(adj.adjudicationCode ?? 0);
+            const codeBits = classifyDispositionCodeBits(codeNum);
+            if (!(codeBits === BIT_INDUSTRIAL && isoBits !== 0)) {
+                mask |= codeBits;
+            }
+        }
+    }
+
+    if (mask === 0) {
+        mask = BIT_GAMMA;
+    }
+    return mask & 0x7f;
+}
+
+export function buildUpSetCoOccurrenceFromVehiclePasses(
+    passes: readonly VehiclePassUpSetInput[],
+): UpSetCoOccurrencePayload {
+    const countsByMask = new Array<number>(128).fill(0);
+    let totalOccupancies = 0;
+    for (const pass of passes) {
+        const mask = computeVehiclePassUpSetMask(pass);
+        if (mask > 0 && mask < 128) {
+            countsByMask[mask] += 1;
+            totalOccupancies += 1;
+        }
+    }
+    return finalizeUpSetFromCounts(countsByMask, totalOccupancies);
+}
+
+export function computeEventUpSetMask(
+    event: Pick<EventTableData, "status"> & Partial<Pick<EventTableData, "adjudicatedData" | "adjudicatedCode" | "adjudicatedIds">>,
+): number {
+    const status = (event.status ?? "").trim();
+    if (!status || status === "None" || status.startsWith("Fault") || status === "Tamper") {
+        return 0;
+    }
+
+    let mask = 0;
+    const lowerStatus = status.toLowerCase();
+    if (lowerStatus.includes("gamma")) mask |= BIT_GAMMA;
+    if (lowerStatus.includes("neutron")) mask |= BIT_NEUTRON;
+    if (lowerStatus.includes("norm")) mask |= BIT_GAMMA | BIT_NORM;
+    if (lowerStatus.includes("medical")) mask |= BIT_GAMMA | BIT_MEDICAL;
+    if (lowerStatus.includes("industrial")) mask |= BIT_GAMMA | BIT_INDUSTRIAL;
+    if (lowerStatus.includes("snm") || lowerStatus.includes("special nuclear") || lowerStatus.includes("threat")) {
+        mask |= BIT_GAMMA | BIT_SNM;
+    }
+    if (lowerStatus.includes("unknown")) mask |= BIT_GAMMA | BIT_UNKNOWN;
+    if (mask === 0) {
+        mask |= BIT_GAMMA;
+    }
+
+    const isotopes: string[] = Array.isArray(event.adjudicatedData?.isotopes)
+        ? event.adjudicatedData.isotopes
+        : [];
+    for (const iso of isotopes) {
+        mask |= categoryToBit(classifySourceCategory(iso));
+    }
+
+    const latestMarkerCode = Array.isArray(event.adjudicatedIds)
+        ? (extractLatestAdjudicationCode(event.adjudicatedIds) ?? 0)
+        : 0;
+    const codeNum = event.adjudicatedData?.adjudicationCode?.code ?? event.adjudicatedCode ?? latestMarkerCode;
+    if ((mask & (BIT_NORM | BIT_UNKNOWN | BIT_INDUSTRIAL | BIT_MEDICAL | BIT_SNM)) === 0 && codeNum > 0) {
+        mask |= classifyDispositionCodeBits(codeNum);
+    }
+
+    return mask;
+}
+
+export function buildUpSetCoOccurrenceFromEvents(events: readonly EventTableData[]): UpSetCoOccurrencePayload {
+    const countsByMask = new Array<number>(128).fill(0);
+    let totalOccupancies = 0;
+
+    for (const ev of events) {
+        const mask = computeEventUpSetMask(ev);
+        if (mask > 0 && mask < 128) {
+            countsByMask[mask] += 1;
+            totalOccupancies += 1;
+        }
+    }
+
+    return finalizeUpSetFromCounts(countsByMask, totalOccupancies);
 }
