@@ -679,5 +679,15 @@
   "savedQueryDeletedAnnouncement": "Consulta {name} eliminada.",
   "savedQueryConditionsSummary": "{count} condición(es) de filtro",
   "savedQueryCustomLabel": "Consulta filtrada",
-  "savedQueriesEmptyHint": "Aplique un filtro o búsqueda de ID de vehículo para guardar un marcador de consulta."
+  "savedQueriesEmptyHint": "Aplique un filtro o búsqueda de ID de vehículo para guardar un marcador de consulta.",
+  "usersAndAccess": "Usuarios y acceso",
+  "roleViewerBadge": "Solo lectura",
+  "operationalViewUnauthorized": "Su cuenta no está autorizada para la Vista operativa \"{view}\". Seleccione una vista asignada o contacte a un administrador.",
+  "nodeAuthMethod": "Método de autenticación",
+  "nodeAuthSession": "Sesión interactiva del navegador (Cookie / llave de acceso / SSO)",
+  "nodeAuthFederationToken": "Token de servicio de federación (solo lectura / operador)",
+  "federationTokenLabel": "Token de servicio de federación",
+  "showSecret": "Mostrar",
+  "hideSecret": "Ocultar",
+  "viewerReadOnlyAdjudicationNotice": "Cuenta Visor de solo lectura: el envío de adjudicaciones está deshabilitado."
 }

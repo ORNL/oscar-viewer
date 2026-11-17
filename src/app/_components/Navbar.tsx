@@ -22,6 +22,7 @@ import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import WarningRoundedIcon from '@mui/icons-material/WarningRounded';
 import LocationOnRoundedIcon from '@mui/icons-material/LocationOnRounded';
 import CloudRoundedIcon from '@mui/icons-material/CloudRounded';
+import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -151,15 +152,21 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const dispatch = useDispatch();
     const router = useRouter();
     const pathname = usePathname();
-    const {activeViewKey, viewError, scopedHref} = React.useContext(DataSourceContext);
+    const dataSourceCtx = React.useContext(DataSourceContext);
+    const activeViewKey = dataSourceCtx?.activeViewKey ?? null;
+    const viewError = dataSourceCtx?.viewError ?? null;
+    const scopedHref = dataSourceCtx?.scopedHref ?? ((p: string) => p);
+    const currentSession = dataSourceCtx?.currentSession ?? null;
     const savedVolume = useSelector(selectAlarmAudioVolume);
     const continuousAlarmAudio = useSelector(selectContinuousAlarmAudio);
     const visualUnreadAlert = useSelector(selectVisualUnreadAlert);
     const unreadAlarmCount = useSelector(selectDashboardUnreadAlarmCount);
     const configuredNodes = useSelector((state: RootState) => state.oshSlice?.nodes ?? []);
-    const [authenticatedUsername, setAuthenticatedUsername] = useState<string | null>(null);
+    const [fallbackUsername, setFallbackUsername] = useState<string | null>(null);
+    const authenticatedUsername = currentSession?.username ?? fallbackUsername;
 
     useEffect(() => {
+        if (currentSession?.username) return;
         const controller = new AbortController();
         fetch('/session', {
             credentials: 'include',
@@ -167,13 +174,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             signal: controller.signal,
         })
             .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Session lookup returned ${response.status}`)))
-            .then((session) => setAuthenticatedUsername(typeof session.username === 'string' ? session.username : null))
+            .then((session) => setFallbackUsername(typeof session.username === 'string' ? session.username : null))
             .catch((error) => {
                 if (error.name !== 'AbortError')
                     console.warn('Unable to read the current OSCAR session', error);
             });
         return () => controller.abort();
-    }, []);
+    }, [currentSession?.username]);
 
     const handleLogout = async () => {
         try {
@@ -323,6 +330,11 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     // Settings items for drawer
     const settingsItems = [
         {
+            title: t('usersAndAccess'),
+            icon: <ManageAccountsRoundedIcon/>,
+            href: "/users",
+        },
+        {
             title: t('servers'),
             icon: <CloudRoundedIcon/>,
             href: "/servers",
@@ -439,9 +451,27 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                         )}
                         <Stack direction="row" alignItems="center" spacing={1} sx={{flexShrink: 0}}>
                             {authenticatedUsername && (
-                                <Typography variant="body2" noWrap sx={{maxWidth: {xs: 110, sm: 240}, overflow: 'hidden', textOverflow: 'ellipsis'}}>
-                                    {t('signedInAs', {username: authenticatedUsername})}
-                                </Typography>
+                                <Button
+                                    component={Link}
+                                    href={scopedHref('/users')}
+                                    color="inherit"
+                                    size="small"
+                                    startIcon={<ManageAccountsRoundedIcon fontSize="small" />}
+                                    sx={{textTransform: 'none', maxWidth: {xs: 130, sm: 260}}}
+                                >
+                                    <Typography variant="body2" noWrap sx={{overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                                        {t('signedInAs', {username: currentSession?.displayName || authenticatedUsername})}
+                                    </Typography>
+                                </Button>
+                            )}
+                            {currentSession?.isReadOnly && (
+                                <Chip
+                                    label={t('roleViewerBadge')}
+                                    size="small"
+                                    color="default"
+                                    variant="outlined"
+                                    sx={{display: {xs: 'none', md: 'inline-flex'}}}
+                                />
                             )}
                             <Button color="inherit" size="small" onClick={handleLogout}>
                                 {t('logOut')}
@@ -647,7 +677,9 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                         <Alert severity="error" sx={{mb: 2}}>
                             {viewError === "invalid"
                                 ? t('operationalViewInvalid')
-                                : t('operationalViewEmpty', {view: activeViewKey ?? ''})}
+                                : viewError === "unauthorized"
+                                    ? t('operationalViewUnauthorized', {view: activeViewKey ?? ''})
+                                    : t('operationalViewEmpty', {view: activeViewKey ?? ''})}
                         </Alert>
                     )}
                     {children}

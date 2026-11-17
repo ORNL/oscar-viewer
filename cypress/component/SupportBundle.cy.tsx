@@ -204,7 +204,7 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
             });
     });
 
-    it("surfaces route-aware contextual video guides, click-to-play WebVTT player, and 18-module offline catalog", () => {
+    it("surfaces route-aware contextual video guides, click-to-play WebVTT player, and 19-module offline catalog", () => {
         window.localStorage.setItem("language", "es");
 
         cy.mount(
@@ -256,5 +256,8 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
         cy.get('[data-testid="help-catalog-watch-17"]').should("be.visible").click();
         cy.get('[data-testid="help-video-element"] source')
             .should("have.attr", "src", "/video-guides/videos/17-vehicle-ocr-and-adjudication.mp4");
+        cy.get('[data-testid="help-catalog-watch-19"]').should("be.visible").click();
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/19-viewer-users-passkeys-and-access.mp4");
     });
 });

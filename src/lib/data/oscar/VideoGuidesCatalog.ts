@@ -189,7 +189,7 @@ export const VIDEO_GUIDES_CATALOG: readonly VideoGuideEntry[] = [
         '08',
         '08-viewer-signin-language-and-nodes',
         'C',
-        '16.9s',
+        '17.9s',
         '3.0 MiB',
         {
             en: 'Sign In to OSCAR Viewer, Switch Language & Manage Nodes',
@@ -198,10 +198,10 @@ export const VIDEO_GUIDES_CATALOG: readonly VideoGuideEntry[] = [
             el: 'Σύνδεση στο OSCAR Viewer, αλλαγή γλώσσας & διαχείριση κόμβων',
         },
         {
-            en: 'Authenticate at the TLS gateway, switch localization live across 4 languages, open the Operator Quick Guide (?), and manage federated nodes.',
-            es: 'Autentíquese en la pasarela TLS, cambie el idioma en vivo entre 4 idiomas, abra la guía rápida (?) y gestione nodos federados.',
-            fr: 'Authentifiez-vous sur la passerelle TLS, changez la langue en direct parmi 4 langues, ouvrez le guide (?) et gérez les nœuds fédérés.',
-            el: 'Συνδεθείτε στην πύλη TLS, αλλάξτε ζωντανά μεταξύ 4 γλωσσών, ανοίξτε τον οδηγό χειριστή (?) και διαχειριστείτε ομόσπονδους κόμβους.',
+            en: 'Authenticate with Keep me signed in or offline Passkey, switch localization live across 4 languages, open the Operator Quick Guide (?), and manage federated nodes.',
+            es: 'Autentíquese con sesión persistente o Passkey sin conexión, cambie entre 4 idiomas en vivo, abra la guía rápida (?) y gestione nodos federados.',
+            fr: 'Authentifiez-vous avec session persistante ou clé Passkey hors ligne, changez la langue parmi 4 langues, ouvrez le guide (?) et gérez les nœuds fédérés.',
+            el: 'Συνδεθείτε με μόνιμη συνεδρία ή Passkey εκτός δικτύου, αλλάξτε ζωντανά μεταξύ 4 γλωσσών, ανοίξτε τον οδηγό χειριστή (?) και διαχειριστείτε ομόσπονδους κόμβους.',
         },
     ),
     makeGuide(
@@ -394,6 +394,25 @@ export const VIDEO_GUIDES_CATALOG: readonly VideoGuideEntry[] = [
             el: 'Ανοίξτε τον μεταφρασμένο Γρήγορο οδηγό (?) και λάβετε διαγνωστικό αρχείο .zip πελάτη + διακομιστή με αυτόματη απόκρυψη μυστικών.',
         },
     ),
+    makeGuide(
+        '19',
+        '19-viewer-users-passkeys-and-access',
+        'C',
+        '19.7s',
+        '1.9 MiB',
+        {
+            en: 'Manage Users, Bulk QR Invites, Offline Passkeys & Federation Tokens',
+            es: 'Gestionar usuarios, invitaciones QR masivas, Passkeys y tokens de federación',
+            fr: 'Gérer les utilisateurs, invitations QR groupées, Passkeys et jetons de fédération',
+            el: 'Διαχείριση χρηστών, μαζικών προσκλήσεων QR, Passkeys & διακριτικών ομοσπονδίας',
+        },
+        {
+            en: 'Enroll offline Passkeys, bulk-upload a CSV user list to generate ready-to-send startup messages and 1-tap setup QR codes, mint Federation Tokens, and download the hardware recovery checklist.',
+            es: 'Registre Passkeys sin conexión, cargue una lista CSV de usuarios para generar mensajes de inicio y códigos QR de un toque, cree tokens de federación y descargue la guía de recuperación.',
+            fr: 'Enregistrez des Passkeys hors ligne, importez une liste CSV d’utilisateurs pour générer messages de démarrage et codes QR en un geste, créez des jetons de fédération et téléchargez la liste de reprise.',
+            el: 'Καταχωρίστε Passkeys εκτός δικτύου, μεταφορτώστε λίστα CSV χρηστών για αυτόματα μηνύματα εκκίνησης και κωδικούς QR, εκδώστε διακριτικά ομοσπονδίας και λάβετε τη λίστα ανάκτησης υλικού.',
+        },
+    ),
 ];
 
 const GUIDE_BY_SLUG = new Map<string, VideoGuideEntry>(
@@ -425,7 +444,8 @@ const ROUTE_VIDEO_GUIDE_SLUGS: Record<string, readonly string[]> = {
     '/map': ['15-status-of-health-and-site-map', '06-admin-manual-lane-and-site-diagram'],
     '/national-view': ['16-national-statistics-and-reports'],
     '/report': ['16-national-statistics-and-reports', '17-vehicle-ocr-and-adjudication'],
-    '/servers': ['08-viewer-signin-language-and-nodes'],
+    '/users': ['19-viewer-users-passkeys-and-access', '08-viewer-signin-language-and-nodes'],
+    '/servers': ['08-viewer-signin-language-and-nodes', '19-viewer-users-passkeys-and-access'],
 };
 
 export function normalizeConsolePathname(pathname?: string | null): string {
@@ -449,7 +469,8 @@ export const CONSOLE_PAGE_CARD_GUIDE_SLUGS: readonly (readonly string[])[] = [
     ['16-national-statistics-and-reports'],
     ['16-national-statistics-and-reports'],
     ['14-airgapped-alarm-qr-transfer'],
-    ['08-viewer-signin-language-and-nodes'],
+    ['19-viewer-users-passkeys-and-access', '08-viewer-signin-language-and-nodes'],
+    ['08-viewer-signin-language-and-nodes', '19-viewer-users-passkeys-and-access'],
 ];
 
 export const REPORT_CARD_GUIDE_SLUGS: readonly (readonly string[])[] = [
@@ -468,6 +489,8 @@ export const GLOSSARY_INDEX_GUIDE_SLUGS: Readonly<Record<number, readonly string
     10: ['13-event-details-adjudication-and-daily-file'],
     11: ['03-archive-and-snapshot-backup'],
     12: ['17-vehicle-ocr-and-adjudication'],
+    13: ['19-viewer-users-passkeys-and-access', '08-viewer-signin-language-and-nodes'],
+    14: ['19-viewer-users-passkeys-and-access', '08-viewer-signin-language-and-nodes'],
 };
 
 export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
@@ -479,15 +502,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Close video',
         captionsNote: '1080p H.264 · synchronized English closed captions (.vtt) included; zero data loaded until played.',
         localCatalogCardTitle: 'Built-In How-To Video Guides (`/video-guides/index.html`)',
-        localCatalogCardDesc: '18 compressed 1080p workflow screen recordings (< 2 min each, ~22.5 MiB total) bundled directly inside OSCAR for offline and air-gapped workstations, with synchronized closed captions.',
+        localCatalogCardDesc: '19 compressed 1080p workflow screen recordings (< 2 min each, ~23.8 MiB total) bundled directly inside OSCAR for offline and air-gapped workstations, with synchronized closed captions.',
         openLocalCatalogButtonLabel: 'Open Local Video Guide Page',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Browse & Play All 18 Workflow Video Guides Inline',
+        inAppCatalogHeading: 'Browse & Play All 19 Workflow Video Guides Inline',
         inAppCatalogHint: 'Expand a track below and select any workflow to play it directly inside this dialog.',
         tracks: {
             A: 'Track A — CLI Deployment, Upgrades & Storage Lifecycle (01–03)',
             B: 'Track B — SensorHub Admin Configuration (04–07)',
-            C: 'Track C — OSCAR Viewer Console Operations (08–18)',
+            C: 'Track C — OSCAR Viewer Console Operations (08–19)',
         },
     },
     es: {
@@ -498,15 +521,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Cerrar vídeo',
         captionsNote: '1080p H.264 · incluye subtítulos sincronizados (.vtt en inglés); no descarga datos hasta reproducir.',
         localCatalogCardTitle: 'Videoguías prácticas integradas (`/video-guides/index.html`)',
-        localCatalogCardDesc: '18 grabaciones cortas en 1080p (< 2 min cada una, ~22,5 MiB en total) integradas localmente en OSCAR para estaciones sin conexión o aisladas, con subtítulos sincronizados.',
+        localCatalogCardDesc: '19 grabaciones cortas en 1080p (< 2 min cada una, ~23,8 MiB en total) integradas localmente en OSCAR para estaciones sin conexión o aisladas, con subtítulos sincronizados.',
         openLocalCatalogButtonLabel: 'Abrir catálogo local de videoguías',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Explorar y reproducir las 18 videoguías aquí mismo',
+        inAppCatalogHeading: 'Explorar y reproducir las 19 videoguías aquí mismo',
         inAppCatalogHint: 'Despliegue una sección y pulse cualquier guía para reproducirla directamente en este cuadro de diálogo.',
         tracks: {
             A: 'Bloque A — Despliegue CLI, actualizaciones y ciclo de almacenamiento (01–03)',
             B: 'Bloque B — Configuración en SensorHub Admin (04–07)',
-            C: 'Bloque C — Operaciones de consola en OSCAR Viewer (08–18)',
+            C: 'Bloque C — Operaciones de consola en OSCAR Viewer (08–19)',
         },
     },
     fr: {
@@ -517,15 +540,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Fermer la vidéo',
         captionsNote: '1080p H.264 · sous-titres synchronisés (.vtt en anglais) inclus ; aucune donnée chargée avant lecture.',
         localCatalogCardTitle: 'Guides vidéo pratiques intégrés (`/video-guides/index.html`)',
-        localCatalogCardDesc: '18 courtes captures 1080p (< 2 min chacune, ~22,5 Mio au total) embarquées localement dans OSCAR pour les postes hors ligne ou isolés, avec sous-titres synchronisés.',
+        localCatalogCardDesc: '19 courtes captures 1080p (< 2 min chacune, ~23,8 Mio au total) embarquées localement dans OSCAR pour les postes hors ligne ou isolés, avec sous-titres synchronisés.',
         openLocalCatalogButtonLabel: 'Ouvrir la page locale des guides vidéo',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Parcourir et lire les 18 guides vidéo intégrés',
+        inAppCatalogHeading: 'Parcourir et lire les 19 guides vidéo intégrés',
         inAppCatalogHint: 'Dépliez une catégorie ci-dessous et sélectionnez un guide pour le lire directement dans cette fenêtre.',
         tracks: {
             A: 'Volet A — Déploiement CLI, mises à niveau et cycle de stockage (01–03)',
             B: 'Volet B — Configuration dans SensorHub Admin (04–07)',
-            C: 'Volet C — Opérations de console dans OSCAR Viewer (08–18)',
+            C: 'Volet C — Opérations de console dans OSCAR Viewer (08–19)',
         },
     },
     el: {
@@ -536,15 +559,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Κλείσιμο βίντεο',
         captionsNote: '1080p H.264 · περιλαμβάνει συγχρονισμένους υπότιτλους (.vtt στα αγγλικά)· μηδενική φόρτωση δεδομένων πριν την αναπαραγωγή.',
         localCatalogCardTitle: 'Ενσωματωμένοι βιντεοοδηγοί εργασιών (`/video-guides/index.html`)',
-        localCatalogCardDesc: '18 συμπιεσμένα βίντεο 1080p (< 2 λεπ. έκαστο, ~22,5 MiB συνολικά) ενσωματωμένα τοπικά στο OSCAR για σταθμούς εκτός δικτύου, με συγχρονισμένους υπότιτλους.',
+        localCatalogCardDesc: '19 συμπιεσμένα βίντεο 1080p (< 2 λεπ. έκαστο, ~23,8 MiB συνολικά) ενσωματωμένα τοπικά στο OSCAR για σταθμούς εκτός δικτύου, με συγχρονισμένους υπότιτλους.',
         openLocalCatalogButtonLabel: 'Άνοιγμα τοπικής σελίδας βιντεοοδηγών',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Περιήγηση & αναπαραγωγή και των 18 βιντεοοδηγών εντός παραθύρου',
+        inAppCatalogHeading: 'Περιήγηση & αναπαραγωγή και των 19 βιντεοοδηγών εντός παραθύρου',
         inAppCatalogHint: 'Αναπτύξτε μια ενότητα παρακάτω και επιλέξτε οποιονδήποτε οδηγό για άμεση αναπαραγωγή.',
         tracks: {
             A: 'Ενότητα A — Εγκατάσταση CLI, αναβαθμίσεις & κύκλος αποθήκευσης (01–03)',
             B: 'Ενότητα B — Διαμόρφωση στο SensorHub Admin (04–07)',
-            C: 'Ενότητα C — Λειτουργίες κονσόλας στο OSCAR Viewer (08–18)',
+            C: 'Ενότητα C — Λειτουργίες κονσόλας στο OSCAR Viewer (08–19)',
         },
     },
 };

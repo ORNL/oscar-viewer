@@ -76,9 +76,16 @@ export default function NodeList({modeChangeCallback}: NodeListProps) {
             ) : (
                 <List>
                     {nodes.map((node: INode) => (
-                        <Card key={node.address + node.port} sx={{backgroundColor: getBGColor(node.isDefaultNode)}}>
+                        <Card key={node.id || (node.address + node.port)} sx={{backgroundColor: getBGColor(node.isDefaultNode)}}>
                             <ListItem sx={{m: 0}}>
-                                <ListItemText primary={node.name} secondary={node.address}/>
+                                <ListItemText
+                                    primary={node.name}
+                                    secondary={
+                                        node.serverNodeUid
+                                            ? `${node.address}:${node.port} • ${node.serverNodeUid}`
+                                            : `${node.address}:${node.port}`
+                                    }
+                                />
                                 <Button
                                     variant="contained"
                                     size={"small"}

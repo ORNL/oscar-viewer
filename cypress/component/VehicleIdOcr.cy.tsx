@@ -157,6 +157,25 @@ describe("Vehicle ID OCR ISO 6346 validation, threshold-hybrid auto-fill, and ch
         expect(parsedObs!.frameCount).to.equal(2);
         expect(parsedObs!.cameraId).to.equal("urn:osh:sensor:ffmpeg:cam50");
 
+        // Single-frame 10-character synthesized check digits must stay clickable chips without auto-filling.
+        const singleFrameSynthesized = VehicleOcrResult.fromObservation({
+            id: "ocr-obs-synth",
+            resultTime: "2026-11-14T00:00:06Z",
+            result: {
+                occupancyObsId: "obs-42",
+                idType: "container",
+                value: "EMCU 385408",
+                normalizedValue: "EMCU3854084",
+                checksumValid: true,
+                confidence: 0.94,
+                readCount: 1,
+            },
+        });
+        expect(singleFrameSynthesized).to.not.equal(null);
+        expect(singleFrameSynthesized!.value).to.equal("EMCU3854084");
+        expect(singleFrameSynthesized!.isoChecksumValid).to.equal(false);
+        expect(selectAutoFillCandidate([singleFrameSynthesized!])).to.equal(null);
+
         const lowPlate: IVehicleOcrResult = {
             id: "p-low",
             time: "2026-11-14T00:00:06Z",

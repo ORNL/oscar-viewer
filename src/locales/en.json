@@ -679,5 +679,15 @@
   "savedQueryDeletedAnnouncement": "Deleted saved query {name}.",
   "savedQueryConditionsSummary": "{count} filter condition(s)",
   "savedQueryCustomLabel": "Filtered Query",
-  "savedQueriesEmptyHint": "Apply a filter or Vehicle ID search to save a reusable query bookmark."
+  "savedQueriesEmptyHint": "Apply a filter or Vehicle ID search to save a reusable query bookmark.",
+  "usersAndAccess": "Users & Access",
+  "roleViewerBadge": "Read-Only",
+  "operationalViewUnauthorized": "Your account is not authorized for Operational View \"{view}\". Select an assigned gate view or contact an administrator.",
+  "nodeAuthMethod": "Authentication Method",
+  "nodeAuthSession": "Interactive Browser Session (Cookie / Passkey / SSO)",
+  "nodeAuthFederationToken": "Federation Service Token (Scoped Read-Only / Operator)",
+  "federationTokenLabel": "Federation Service Token",
+  "showSecret": "Show",
+  "hideSecret": "Hide",
+  "viewerReadOnlyAdjudicationNotice": "Read-only Viewer account: adjudication submission is disabled."
 }

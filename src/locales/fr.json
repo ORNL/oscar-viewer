@@ -679,5 +679,15 @@
   "savedQueryDeletedAnnouncement": "Requête {name} supprimée.",
   "savedQueryConditionsSummary": "{count} condition(s) de filtre",
   "savedQueryCustomLabel": "Requête filtrée",
-  "savedQueriesEmptyHint": "Appliquez un filtre ou une recherche d'ID véhicule pour enregistrer un favori."
+  "savedQueriesEmptyHint": "Appliquez un filtre ou une recherche d'ID véhicule pour enregistrer un favori.",
+  "usersAndAccess": "Utilisateurs et accès",
+  "roleViewerBadge": "Lecture seule",
+  "operationalViewUnauthorized": "Votre compte n’est pas autorisé pour la Vue opérationnelle « {view} ». Sélectionnez une vue assignée ou contactez un administrateur.",
+  "nodeAuthMethod": "Méthode d’authentification",
+  "nodeAuthSession": "Session navigateur interactive (Cookie / clé d’accès / SSO)",
+  "nodeAuthFederationToken": "Jeton de service de fédération (lecture seule / opérateur)",
+  "federationTokenLabel": "Jeton de service de fédération",
+  "showSecret": "Afficher",
+  "hideSecret": "Masquer",
+  "viewerReadOnlyAdjudicationNotice": "Compte Lecteur en lecture seule : l’envoi d’adjudications est désactivé."
 }

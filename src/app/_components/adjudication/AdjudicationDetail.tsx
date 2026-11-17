@@ -6,6 +6,7 @@
 "use client";
 
 import {
+    Alert,
     SnackbarCloseReason,
     Stack,
     Typography,
@@ -146,7 +147,8 @@ export default function AdjudicationDetail(props: {
     const [scannedData, setScannedData] = useState<ScannedDataWithWebId[]>([]);
     const scanner = useRef<QrScanner | null>(null);
 
-    const {laneMapRef, activeViewKey} = useContext(DataSourceContext);
+    const {laneMapRef, activeViewKey, currentSession} = useContext(DataSourceContext);
+    const isReadOnlyViewer = Boolean(currentSession?.isReadOnly);
     const laneMap = useSelector((state: RootState) => selectLaneMap(state));
     const laneUid = laneMap.get(props.event?.laneId)?.laneSystem?.properties?.properties?.uid;
     const effectiveLaneMap = laneMapRef?.current && laneMapRef.current.size > 0
@@ -757,7 +759,16 @@ export default function AdjudicationDetail(props: {
                 return;
             }
 
-            props.event.adjudicatedData = tempAdjData;
+            let updatedEvent = props.event;
+            if (Object.isFrozen(props.event) || !Object.isExtensible(props.event)) {
+                updatedEvent = Object.assign(
+                    Object.create(Object.getPrototypeOf(props.event)),
+                    props.event,
+                    {adjudicatedData: tempAdjData},
+                );
+            } else {
+                props.event.adjudicatedData = tempAdjData;
+            }
             markSessionCachedEventAdjudicated(
                 tempAdjData.occupancyObsId,
                 tempAdjData.adjudicationCode?.code,
@@ -766,8 +777,8 @@ export default function AdjudicationDetail(props: {
             setAdjSnackMsg(t('adjudicationSuccessful', {occupancyId: props.event.occupancyCount}));
             setColorStatus('success')
 
-            dispatch(setSelectedEvent(props.event));
-            dispatch(setAdjudicatedEventId(props.event.id));
+            dispatch(setSelectedEvent(updatedEvent));
+            dispatch(setAdjudicatedEventId(updatedEvent.id));
 
             setShouldFetchLogs(true);
             setRelatedSearchNonce(previous => previous + 1);
@@ -1656,6 +1667,13 @@ export default function AdjudicationDetail(props: {
                     </Grid>
 
                     <Grid item container xs={12} spacing={2} alignItems="center" justifyContent="flex-end">
+                        {isReadOnlyViewer && (
+                            <Grid item xs={12}>
+                                <Alert severity="info" data-testid="viewer-readonly-adjudication-alert">
+                                    {t('viewerReadOnlyAdjudicationNotice')}
+                                </Alert>
+                            </Grid>
+                        )}
                         <Grid item xs={"auto"}>
                             <Stack direction="row" spacing={2} alignItems="center">
                                 <SecondaryInspectionSelect
@@ -1667,6 +1685,7 @@ export default function AdjudicationDetail(props: {
                                     disableElevation
                                     variant={"contained"}
                                     color={"success"}
+                                    disabled={isReadOnlyViewer}
                                     onClick={sendAdjudicationData}
                                 >
                                     {t('submit')}

@@ -679,5 +679,15 @@
   "savedQueryDeletedAnnouncement": "Το ερώτημα {name} διαγράφηκε.",
   "savedQueryConditionsSummary": "{count} συνθήκες φίλτρου",
   "savedQueryCustomLabel": "Φιλτραρισμένο ερώτημα",
-  "savedQueriesEmptyHint": "Εφαρμόστε φίλτρο ή αναζήτηση ID οχήματος για αποθήκευση σελιδοδείκτη."
+  "savedQueriesEmptyHint": "Εφαρμόστε φίλτρο ή αναζήτηση ID οχήματος για αποθήκευση σελιδοδείκτη.",
+  "usersAndAccess": "Χρήστες & πρόσβαση",
+  "roleViewerBadge": "Μόνο ανάγνωση",
+  "operationalViewUnauthorized": "Ο λογαριασμός σας δεν έχει εξουσιοδότηση για τη Λειτουργική προβολή «{view}». Επιλέξτε ανατεθειμένη προβολή ή επικοινωνήστε με διαχειριστή.",
+  "nodeAuthMethod": "Μέθοδος ταυτοποίησης",
+  "nodeAuthSession": "Διαδραστική συνεδρία περιηγητή (Cookie / κλειδί πρόσβασης / SSO)",
+  "nodeAuthFederationToken": "Διακριτικό υπηρεσίας ομοσπονδίας (μόνο ανάγνωση / χειριστής)",
+  "federationTokenLabel": "Διακριτικό υπηρεσίας ομοσπονδίας",
+  "showSecret": "Εμφάνιση",
+  "hideSecret": "Απόκρυψη",
+  "viewerReadOnlyAdjudicationNotice": "Λογαριασμός Θεατή μόνο ανάγνωσης: η υποβολή αξιολόγησης είναι απενεργοποιημένη."
 }
