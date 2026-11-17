@@ -221,7 +221,23 @@ export default function WebIdAnalysis(props: {
         let accumulated: WebIdAnalysisResult[] = [];
         let capped = false;
 
-        if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+        // Exact match first: ask the server for this occupancy's results only. The unfiltered scan
+        // returns the stream oldest-first and stops after 25 pages, so on a busy node recent
+        // events' analyses were never read; the occupancy filter also keeps a secondary-inspection
+        // upload made hours after the event.
+        if (targetOccupancyObsId) {
+            try {
+                const exact = await readQueryPages(new ObservationFilter({
+                    filter: `occupancyObsId='${String(targetOccupancyObsId).replace(/'/g, "''")}'`,
+                }), MAX_SCAN_PAGES);
+                accumulated = exact.items;
+                capped = exact.capped;
+            } catch (error) {
+                console.warn("Filtered WebID query failed; falling back to a time window", error);
+            }
+        }
+
+        if (accumulated.length === 0 && Number.isFinite(startMs) && Number.isFinite(endMs)) {
             try {
                 const windowStartIso = new Date(Math.max(0, Math.min(startMs, endMs) - 5 * 60_000)).toISOString();
                 const windowEndIso = new Date(Math.max(startMs, endMs) + 30 * 60_000).toISOString();
