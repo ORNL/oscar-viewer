@@ -56,6 +56,7 @@ import {isAdjudicationControlStream} from "@/lib/data/oscar/Utilities";
 import {
     buildNodeBucketBaseUrl,
     FederatedVehicleSearchResult,
+    hydrateVehiclePassProfiles,
     isPassAlarming,
     isPassOpenAlarm,
     isPassSpectroscopic,
@@ -564,6 +565,33 @@ export default function VehiclePassComparisonDialog({
         }
     };
 
+    const handleLoadRadiationProfiles = useCallback(async () => {
+        if (!result || result.passes.length === 0) {
+            await runSearch(true);
+            return;
+        }
+        setLoadingProfiles(true);
+        setSearchError(null);
+        try {
+            const outcome = await hydrateVehiclePassProfiles({
+                passes: result.passes,
+                vehicleId: result.rawVehicleId || vehicleId,
+                fetchImpl,
+            });
+            if (outcome.usedFastPath) {
+                setResult(prev => (prev ? {...prev, passes: outcome.passes} : prev));
+                setProfilesLoaded(true);
+            } else {
+                await runSearch(true);
+            }
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
+            setSearchError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setLoadingProfiles(false);
+        }
+    }, [fetchImpl, result, runSearch, vehicleId]);
+
     // Build SVG trace paths when profilesLoaded is true (cap to 16 newest sampled passes for legibility)
     const profileChartData = useMemo(() => {
         const allWithSamples = passes
@@ -572,17 +600,31 @@ export default function VehiclePassComparisonDialog({
         if (allWithSamples.length === 0) return null;
         const withSamples = allWithSamples.slice(-16);
 
+        let minOffset = 0;
         let maxOffset = 1;
         let maxGamma = 10;
-        let maxNeutron = 5;
+        let maxNeutron = 0;
+        let hasNeutronAlarm = false;
         for (const {pass} of withSamples) {
+            if (pass.neutronAlarm) hasNeutronAlarm = true;
             for (const pt of pass.radiationProfile) {
+                if (pt.offsetSeconds < minOffset) minOffset = pt.offsetSeconds;
                 if (pt.offsetSeconds > maxOffset) maxOffset = pt.offsetSeconds;
                 if (pt.gammaCounts > maxGamma) maxGamma = pt.gammaCounts;
                 if (pt.neutronCounts > maxNeutron) maxNeutron = pt.neutronCounts;
             }
         }
-        return {withSamples, maxOffset, maxGamma, maxNeutron};
+        const spanOffset = Math.max(0.5, maxOffset - minOffset);
+        const showNeutronTraces = maxNeutron > 0 && (hasNeutronAlarm || maxNeutron >= 5);
+        return {
+            withSamples,
+            minOffset,
+            maxOffset,
+            spanOffset,
+            maxGamma,
+            maxNeutron: Math.max(5, maxNeutron),
+            showNeutronTraces,
+        };
     }, [passes]);
 
     const displayVehicleTitle = result?.formattedVehicleId || vehicleId || "—";
@@ -1132,7 +1174,7 @@ export default function VehiclePassComparisonDialog({
                                             )
                                         }
                                         disabled={loadingProfiles}
-                                        onClick={() => void runSearch(true)}
+                                        onClick={() => void handleLoadRadiationProfiles()}
                                         data-testid="vehicle-load-profiles-btn"
                                     >
                                         {t("vehicleLoadRadiationTraces")}
@@ -1145,28 +1187,42 @@ export default function VehiclePassComparisonDialog({
                                     {profileChartData ? (
                                         <Stack spacing={1}>
                                             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-                                                {profileChartData.withSamples.map(({pass, index}, seriesIdx) => (
-                                                    <Stack
-                                                        key={`legend-${pass.compositeKey}`}
-                                                        direction="row"
-                                                        spacing={0.75}
-                                                        alignItems="center"
-                                                    >
-                                                        <Box
-                                                            component="span"
-                                                            sx={{
-                                                                width: 12,
-                                                                height: 12,
-                                                                borderRadius: "50%",
-                                                                bgcolor: TRACE_COLORS[seriesIdx % TRACE_COLORS.length],
-                                                                display: "inline-block",
-                                                            }}
-                                                        />
-                                                        <Typography variant="caption" sx={{fontWeight: 600}}>
-                                                            {`#${index + 1} ${pass.laneName} (Peak G: ${pass.maxGammaCount})`}
-                                                        </Typography>
-                                                    </Stack>
-                                                ))}
+                                                {profileChartData.withSamples.map(({pass, index}, seriesIdx) => {
+                                                    const sampleMaxG = pass.radiationProfile.reduce(
+                                                        (m, pt) => Math.max(m, pt.gammaCounts),
+                                                        0,
+                                                    );
+                                                    const sampleMaxN = pass.radiationProfile.reduce(
+                                                        (m, pt) => Math.max(m, pt.neutronCounts),
+                                                        0,
+                                                    );
+                                                    const peakG = Math.max(pass.maxGammaCount, sampleMaxG);
+                                                    const peakN = Math.max(pass.maxNeutronCount, sampleMaxN);
+                                                    return (
+                                                        <Stack
+                                                            key={`legend-${pass.compositeKey}`}
+                                                            direction="row"
+                                                            spacing={0.75}
+                                                            alignItems="center"
+                                                        >
+                                                            <Box
+                                                                component="span"
+                                                                sx={{
+                                                                    width: 12,
+                                                                    height: 12,
+                                                                    borderRadius: "50%",
+                                                                    bgcolor: TRACE_COLORS[seriesIdx % TRACE_COLORS.length],
+                                                                    display: "inline-block",
+                                                                }}
+                                                            />
+                                                            <Typography variant="caption" sx={{fontWeight: 600}}>
+                                                                {peakN > 0 && profileChartData.showNeutronTraces
+                                                                    ? `#${index + 1} ${pass.laneName} (Peak G: ${peakG} / N: ${peakN})`
+                                                                    : `#${index + 1} ${pass.laneName} (Peak G: ${peakG})`}
+                                                            </Typography>
+                                                        </Stack>
+                                                    );
+                                                })}
                                             </Stack>
                                             <Box
                                                 component="svg"
@@ -1182,7 +1238,28 @@ export default function VehiclePassComparisonDialog({
                                                 }}
                                             >
                                                 <line x1="48" y1="16" x2="48" y2="152" stroke="currentColor" strokeOpacity="0.3" />
-                                                <line x1="48" y1="152" x2="704" y2="152" stroke="currentColor" strokeOpacity="0.3" />
+                                                <line x1="48" y1="152" x2="684" y2="152" stroke="currentColor" strokeOpacity="0.3" />
+                                                {profileChartData.minOffset < 0 && (
+                                                    <line
+                                                        x1={
+                                                            48 +
+                                                            ((0 - profileChartData.minOffset) /
+                                                                profileChartData.spanOffset) *
+                                                                636
+                                                        }
+                                                        y1="16"
+                                                        x2={
+                                                            48 +
+                                                            ((0 - profileChartData.minOffset) /
+                                                                profileChartData.spanOffset) *
+                                                                636
+                                                        }
+                                                        y2="152"
+                                                        stroke="currentColor"
+                                                        strokeOpacity="0.18"
+                                                        strokeDasharray="3 3"
+                                                    />
+                                                )}
                                                 <text x="8" y="24" fontSize="10" fill="currentColor">
                                                     {Math.round(profileChartData.maxGamma)}
                                                 </text>
@@ -1190,36 +1267,80 @@ export default function VehiclePassComparisonDialog({
                                                     0
                                                 </text>
                                                 <text x="48" y="170" fontSize="10" fill="currentColor">
-                                                    0s
+                                                    {`${profileChartData.minOffset.toFixed(1).replace(/\.0$/, "")}s`}
                                                 </text>
-                                                <text x="676" y="170" fontSize="10" fill="currentColor">
+                                                <text x="652" y="170" fontSize="10" fill="currentColor">
                                                     {`${profileChartData.maxOffset.toFixed(1)}s`}
                                                 </text>
+                                                {profileChartData.showNeutronTraces && (
+                                                    <text x="688" y="24" fontSize="10" fill="currentColor">
+                                                        {`N:${Math.round(profileChartData.maxNeutron)}`}
+                                                    </text>
+                                                )}
                                                 {profileChartData.withSamples.map(({pass}, seriesIdx) => {
                                                     const color = TRACE_COLORS[seriesIdx % TRACE_COLORS.length];
-                                                    const pts = pass.radiationProfile
-                                                        .map((pt) => {
-                                                            const x =
-                                                                48 +
-                                                                (Math.max(0, pt.offsetSeconds) /
-                                                                    Math.max(0.1, profileChartData.maxOffset)) *
-                                                                    656;
-                                                            const y =
-                                                                152 -
-                                                                (Math.max(0, pt.gammaCounts) /
-                                                                    Math.max(1, profileChartData.maxGamma)) *
-                                                                    132;
-                                                            return `${x.toFixed(1)},${y.toFixed(1)}`;
-                                                        })
+                                                    const coords = pass.radiationProfile.map((pt) => {
+                                                        const x =
+                                                            48 +
+                                                            ((pt.offsetSeconds - profileChartData.minOffset) /
+                                                                profileChartData.spanOffset) *
+                                                                636;
+                                                        const yGamma =
+                                                            152 -
+                                                            (Math.max(0, pt.gammaCounts) /
+                                                                Math.max(1, profileChartData.maxGamma)) *
+                                                                132;
+                                                        const yNeutron =
+                                                            152 -
+                                                            (Math.max(0, pt.neutronCounts) /
+                                                                Math.max(1, profileChartData.maxNeutron)) *
+                                                                132;
+                                                        return {x, yGamma, yNeutron, pt};
+                                                    });
+                                                    const gammaPts = coords
+                                                        .map(c => `${c.x.toFixed(1)},${c.yGamma.toFixed(1)}`)
                                                         .join(" ");
+                                                    const neutronPts = coords
+                                                        .map(c => `${c.x.toFixed(1)},${c.yNeutron.toFixed(1)}`)
+                                                        .join(" ");
+                                                    const hasPassNeutron =
+                                                        profileChartData.showNeutronTraces &&
+                                                        pass.radiationProfile.some(pt => pt.neutronCounts > 0);
                                                     return (
-                                                        <polyline
-                                                            key={`gamma-poly-${pass.compositeKey}`}
-                                                            fill="none"
-                                                            stroke={color}
-                                                            strokeWidth="2.25"
-                                                            points={pts}
-                                                        />
+                                                        <g key={`series-${pass.compositeKey}`}>
+                                                            {coords.length >= 2 && (
+                                                                <polyline
+                                                                    data-testid={`gamma-poly-${seriesIdx}`}
+                                                                    fill="none"
+                                                                    stroke={color}
+                                                                    strokeWidth="2.25"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    points={gammaPts}
+                                                                />
+                                                            )}
+                                                            {coords.length <= 12 &&
+                                                                coords.map((c, ptIdx) => (
+                                                                    <circle
+                                                                        key={`g-dot-${ptIdx}`}
+                                                                        cx={c.x.toFixed(1)}
+                                                                        cy={c.yGamma.toFixed(1)}
+                                                                        r={coords.length === 1 ? "3.5" : "2.2"}
+                                                                        fill={color}
+                                                                    />
+                                                                ))}
+                                                            {hasPassNeutron && coords.length >= 2 && (
+                                                                <polyline
+                                                                    data-testid={`neutron-poly-${seriesIdx}`}
+                                                                    fill="none"
+                                                                    stroke={color}
+                                                                    strokeWidth="1.6"
+                                                                    strokeDasharray="4 3"
+                                                                    strokeOpacity="0.82"
+                                                                    points={neutronPts}
+                                                                />
+                                                            )}
+                                                        </g>
                                                     );
                                                 })}
                                             </Box>

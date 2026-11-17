@@ -944,9 +944,39 @@ describe("Consolidated Vehicle ID Search, Multi-Occupancy Comparison, Linked Adj
             ],
         ]);
 
+        const observedSearchUrls: string[] = [];
         const mockCorrelationFetch: typeof fetch = async (input) => {
             const url = String(input);
             if (url.includes("/adjudication/vehicle-search")) {
+                observedSearchUrls.push(url);
+                if (url.includes("profileOnlyObsIds=")) {
+                    return new Response(
+                        JSON.stringify({
+                            vehicleId: "CSQU3054383",
+                            normalizedVehicleId: "CSQU3054383",
+                            matchMode: "equals",
+                            passes: [
+                                {
+                                    occupancyObsId: "obs-pass-1",
+                                    radiationProfile: [
+                                        {timestampMs: 1794664800000, offsetSeconds: 0, gammaCounts: 210, neutronCounts: 1},
+                                        {timestampMs: 1794664802000, offsetSeconds: 2, gammaCounts: 1890, neutronCounts: 2},
+                                        {timestampMs: 1794664805000, offsetSeconds: 5, gammaCounts: 240, neutronCounts: 1},
+                                    ],
+                                },
+                                {
+                                    occupancyObsId: "obs-pass-2",
+                                    radiationProfile: [
+                                        {timestampMs: 1794665040000, offsetSeconds: -0.5, gammaCounts: 195, neutronCounts: 2},
+                                        {timestampMs: 1794665042500, offsetSeconds: 2.0, gammaCounts: 1920, neutronCounts: 18},
+                                        {timestampMs: 1794665045500, offsetSeconds: 5.0, gammaCounts: 230, neutronCounts: 2},
+                                    ],
+                                },
+                            ],
+                        }),
+                        {status: 200, headers: {"Content-Type": "application/json"}},
+                    );
+                }
                 return new Response(
                     JSON.stringify({
                         vehicleId: "CSQU3054383",
@@ -992,12 +1022,12 @@ describe("Consolidated Vehicle ID Search, Multi-Occupancy Comparison, Linked Adj
                                 samplingTime: "2026-11-14T14:04:00.000Z",
                                 durationSeconds: 6,
                                 gammaAlarm: true,
-                                neutronAlarm: false,
+                                neutronAlarm: true,
                                 alarmCategoryCode: "",
-                                alarmStatusLabel: "Gamma",
+                                alarmStatusLabel: "Gamma + Neutron",
                                 emlAutoReleased: false,
                                 maxGammaCount: 1920,
-                                maxNeutronCount: 1,
+                                maxNeutronCount: 18,
                                 neutronBackground: 1,
                                 vehicleId: "CSQU3054383",
                                 normalizedVehicleId: "CSQU3054383",
@@ -1096,5 +1126,22 @@ describe("Consolidated Vehicle ID Search, Multi-Occupancy Comparison, Linked Adj
             .should("contain.text", "Compare Passes (2)")
             .click();
         cy.get('[data-testid="vehicle-pass-comparison-dialog"]').should("be.visible");
+        cy.get('[data-testid="vehicle-load-profiles-btn"]').scrollIntoView().click();
+        cy.get('[data-testid="vehicle-profile-chart"]', {timeout: 5000})
+            .should("be.visible")
+            .and("contain.text", "Peak G: 1920 / N: 18");
+        cy.get('[data-testid="gamma-poly-1"]')
+            .should("have.attr", "points")
+            .and((pts: string) => {
+                // Peak 1920 sample must map near top of chart (y = 20.0), not flatlined at y = 152.0
+                expect(pts).to.include(",20.0");
+            });
+        cy.get('[data-testid="neutron-poly-1"]').should("exist");
+        cy.wrap(null).then(() => {
+            expect(observedSearchUrls.some(u => u.includes("startTime="))).to.equal(true);
+            expect(
+                observedSearchUrls.some(u => decodeURIComponent(u).includes("profileOnlyObsIds=obs-pass-1,obs-pass-2")),
+            ).to.equal(true);
+        });
     });
 });

@@ -269,6 +269,11 @@ export default function AdjudicationDetail(props: {
         return "";
     }, [debouncedVehicleId, loggedAdjudications, ocrResults, props.event?.vehicleId]);
 
+    const relatedVehicleStartTimeIso = useMemo(
+        () => new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS["30d"]).toISOString(),
+        [effectiveCorrelationVehicleId, relatedSearchNonce],
+    );
+
     useEffect(() => {
         const normalized = normalizeVehicleId(effectiveCorrelationVehicleId);
         if (normalized.length < 3 || !effectiveLaneMap || effectiveLaneMap.size === 0) {
@@ -276,13 +281,12 @@ export default function AdjudicationDetail(props: {
             return;
         }
         const controller = new AbortController();
-        const startTimeIso = new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS["30d"]).toISOString();
         void searchVehiclePassesAcrossNodes({
             laneMap: effectiveLaneMap,
             vehicleId: effectiveCorrelationVehicleId,
             matchMode: "equals",
             activeViewKey,
-            startTimeIso,
+            startTimeIso: relatedVehicleStartTimeIso,
             signal: controller.signal,
             fetchImpl: props.ocrFetchImpl,
         })
@@ -302,7 +306,7 @@ export default function AdjudicationDetail(props: {
         effectiveCorrelationVehicleId,
         effectiveLaneMap,
         props.ocrFetchImpl,
-        relatedSearchNonce,
+        relatedVehicleStartTimeIso,
     ]);
 
     const showRelatedPassesBanner = useMemo(() => {
@@ -1814,6 +1818,7 @@ export default function AdjudicationDetail(props: {
                     matchMode="equals"
                     laneMap={effectiveLaneMap}
                     activeViewKey={activeViewKey}
+                    startTimeIso={relatedVehicleStartTimeIso}
                     initialResult={relatedVehicleResult}
                     highlightOccupancyObsId={props.event?.occupancyObsId ?? null}
                     onAdjudicationComplete={() => {

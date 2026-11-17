@@ -177,6 +177,7 @@ export interface SearchVehiclePassesOptions {
 
 const ISO_6346_NORMALIZED_RE = /^[A-Z]{3}[UJZR][0-9]{7}$/;
 const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
+export const MAX_HYDRATED_PROFILE_PASSES = 16;
 
 export function normalizeVehicleId(raw: unknown): string {
     if (typeof raw !== "string") return "";
@@ -970,6 +971,110 @@ export async function searchVehiclePassesAcrossNodes(
         truncated,
         unreachableNodes,
     };
+}
+
+export async function hydrateVehiclePassProfiles(options: {
+    passes: readonly VehiclePassItem[];
+    vehicleId?: string;
+    fetchImpl?: typeof fetch;
+    signal?: AbortSignal;
+}): Promise<{passes: VehiclePassItem[]; usedFastPath: boolean}> {
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const allPasses = Array.from(options.passes);
+    if (allPasses.length === 0) {
+        return {passes: [], usedFastPath: true};
+    }
+
+    const candidates = allPasses
+        .filter(p => Boolean(p.node) && Boolean(p.occupancyObsId))
+        .slice(-MAX_HYDRATED_PROFILE_PASSES);
+    if (candidates.length === 0) {
+        return {passes: allPasses, usedFastPath: false};
+    }
+
+    const byNodeId = new Map<string, {node: INode; obsIds: string[]}>();
+    for (const pass of candidates) {
+        if (!pass.node) continue;
+        const nodeKey = pass.node.id || pass.nodeId;
+        let group = byNodeId.get(nodeKey);
+        if (!group) {
+            group = {node: pass.node, obsIds: []};
+            byNodeId.set(nodeKey, group);
+        }
+        if (!group.obsIds.includes(pass.occupancyObsId)) {
+            group.obsIds.push(pass.occupancyObsId);
+        }
+    }
+
+    const profileMapByNodeObs = new Map<string, VehiclePassProfileSample[]>();
+    let anyNodeUnsupported = false;
+
+    await Promise.all(
+        Array.from(byNodeId.entries()).map(async ([nodeKey, group]) => {
+            const params = new URLSearchParams();
+            params.set("profileOnlyObsIds", group.obsIds.join(","));
+            params.set("includeProfiles", "true");
+            if (options.vehicleId?.trim()) {
+                params.set("vehicleId", options.vehicleId.trim());
+            }
+            const url = `${buildNodeBucketBaseUrl(group.node)}/adjudication/vehicle-search?${params.toString()}`;
+            const timeoutController = new AbortController();
+            const timeoutId = setTimeout(() => timeoutController.abort(), DEFAULT_SEARCH_TIMEOUT_MS);
+            const onParentAbort = () => timeoutController.abort();
+            options.signal?.addEventListener("abort", onParentAbort, {once: true});
+            try {
+                const resp = await fetchImpl(url, {
+                    method: "GET",
+                    credentials: "include",
+                    mode: "cors",
+                    cache: "no-store",
+                    headers: {
+                        ...group.node.getBasicAuthHeader(),
+                        Accept: "application/json",
+                    },
+                    signal: timeoutController.signal,
+                });
+                if (resp.status === 400 || resp.status === 404 || resp.status === 405) {
+                    anyNodeUnsupported = true;
+                    return;
+                }
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                const payload = await resp.json();
+                const rawPasses = Array.isArray(payload?.passes) ? payload.passes : [];
+                for (const rawPass of rawPasses) {
+                    const occId = String(rawPass?.occupancyObsId ?? "").trim();
+                    if (!occId || !Array.isArray(rawPass?.radiationProfile)) continue;
+                    const samples: VehiclePassProfileSample[] = rawPass.radiationProfile.map((s: any) => ({
+                        timestampMs: Number(s?.timestampMs ?? 0),
+                        offsetSeconds: Number(s?.offsetSeconds ?? 0),
+                        gammaCounts: Number(s?.gammaCounts ?? 0),
+                        neutronCounts: Number(s?.neutronCounts ?? 0),
+                    }));
+                    profileMapByNodeObs.set(`${nodeKey}|${occId}`, samples);
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                options.signal?.removeEventListener("abort", onParentAbort);
+            }
+        }),
+    );
+
+    if (anyNodeUnsupported) {
+        return {passes: allPasses, usedFastPath: false};
+    }
+
+    const updated = allPasses.map((pass) => {
+        const nodeKey = pass.node?.id || pass.nodeId;
+        const hydrated = profileMapByNodeObs.get(`${nodeKey}|${pass.occupancyObsId}`);
+        if (!hydrated) return pass;
+        return {
+            ...pass,
+            radiationProfile: hydrated,
+        };
+    });
+    return {passes: updated, usedFastPath: true};
 }
 
 export function serializeFederatedRemotePasses(
