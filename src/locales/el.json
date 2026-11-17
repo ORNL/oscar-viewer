@@ -689,6 +689,8 @@
   "savedQueryConditionsSummary": "{count} συνθήκες φίλτρου",
   "savedQueryCustomLabel": "Φιλτραρισμένο ερώτημα",
   "savedQueriesEmptyHint": "Εφαρμόστε φίλτρο ή αναζήτηση ID οχήματος για αποθήκευση σελιδοδείκτη.",
+  "mobileNoDataSince": "Χωρίς δεδομένα από {time}",
+  "viewEvent": "ΠΡΟΒΟΛΗ ΣΥΜΒΑΝΤΟΣ",
   "usersAndAccess": "Χρήστες & πρόσβαση",
   "usbBackups": "Αντίγραφα USB",
   "runtimeExtensions": "Επεκτάσεις",
