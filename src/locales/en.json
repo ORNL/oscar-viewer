@@ -691,6 +691,7 @@
   "savedQueriesEmptyHint": "Apply a filter or Vehicle ID search to save a reusable query bookmark.",
   "mobileNoDataSince": "No data since {time}",
   "viewEvent": "VIEW EVENT",
+  "mobileFaultsNotMonitored": "Portal faults and extended occupancy are not monitored on mobile detectors",
   "usersAndAccess": "Users & Access",
   "usbBackups": "USB Backups",
   "runtimeExtensions": "Runtime Extensions",

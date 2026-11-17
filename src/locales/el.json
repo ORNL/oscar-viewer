@@ -691,6 +691,7 @@
   "savedQueriesEmptyHint": "Εφαρμόστε φίλτρο ή αναζήτηση ID οχήματος για αποθήκευση σελιδοδείκτη.",
   "mobileNoDataSince": "Χωρίς δεδομένα από {time}",
   "viewEvent": "ΠΡΟΒΟΛΗ ΣΥΜΒΑΝΤΟΣ",
+  "mobileFaultsNotMonitored": "Τα σφάλματα πύλης και η παρατεταμένη κατάληψη δεν παρακολουθούνται σε φορητούς ανιχνευτές",
   "usersAndAccess": "Χρήστες & πρόσβαση",
   "usbBackups": "Αντίγραφα USB",
   "runtimeExtensions": "Επεκτάσεις",
