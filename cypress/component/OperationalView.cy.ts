@@ -1,7 +1,10 @@
 import {
     buildOperationalViewCatalog,
     getOperationalViewKeys,
+    mergeOperationalViewCatalogs,
     parseOperationalView,
+    resolveRouteForViewSwitch,
+    resolveScopedViewDropdownState,
     systemMatchesOperationalView,
     withOperationalView,
 } from "../../src/lib/data/oscar/OperationalView";
@@ -206,5 +209,89 @@ describe("operational view scoping", () => {
         expect(lanes.size).to.equal(0);
         expect(lane.properties.properties.keywords).to.deep.equal([]);
         expect(warn).to.have.been.called;
+    });
+
+    it("merges multi-node catalogs and computes RBAC-aware navbar dropdown states", () => {
+        const nodeALane1: any = geoJsonSystem("a-1", "urn:osh:system:lane:lane1", "Lane 1");
+        const nodeALane2: any = geoJsonSystem("a-2", "urn:osh:system:lane:lane2", "Lane 2");
+        nodeALane1.properties.properties.keywords = ["oscar:view:north-gate"];
+        nodeALane2.properties.properties.keywords = ["oscar:view:north-gate", "oscar:view:truck-portal"];
+
+        const nodeBLane1: any = geoJsonSystem("b-1", "urn:osh:system:lane:lane1", "Remote Lane 1");
+        nodeBLane1.properties.properties.keywords = ["oscar:view:south-gate"];
+
+        const merged = mergeOperationalViewCatalogs([
+            buildOperationalViewCatalog([nodeALane1, nodeALane2]),
+            buildOperationalViewCatalog([nodeBLane1]),
+        ]);
+
+        expect(merged.totalLaneCount).to.equal(3);
+        expect(merged.options).to.deep.equal([
+            {key: "north-gate", laneCount: 2},
+            {key: "south-gate", laneCount: 1},
+            {key: "truck-portal", laneCount: 1},
+        ]);
+
+        // Hidden when no views are configured and unscoped
+        expect(resolveScopedViewDropdownState({
+            availableViews: [],
+            allowedViews: [],
+            activeViewKey: null,
+            viewError: null,
+        })).to.deep.equal({
+            mode: "hidden",
+            includeAllLanes: true,
+            options: [],
+        });
+
+        // Unrestricted user gets All Lanes + all configured views
+        expect(resolveScopedViewDropdownState({
+            availableViews: merged.options,
+            allowedViews: [],
+            activeViewKey: "north-gate",
+            viewError: null,
+        })).to.deep.equal({
+            mode: "dropdown",
+            includeAllLanes: true,
+            options: merged.options,
+        });
+
+        // Single-view restricted user gets a non-interactive badge (no All Lanes)
+        expect(resolveScopedViewDropdownState({
+            availableViews: merged.options,
+            allowedViews: ["north-gate"],
+            activeViewKey: "north-gate",
+            viewError: null,
+        })).to.deep.equal({
+            mode: "badge",
+            includeAllLanes: false,
+            options: [{key: "north-gate", laneCount: 2}],
+        });
+
+        // Multi-view restricted user gets a dropdown strictly limited to allowedViews (no All Lanes)
+        expect(resolveScopedViewDropdownState({
+            availableViews: merged.options,
+            allowedViews: ["north-gate", "truck-portal"],
+            activeViewKey: "north-gate",
+            viewError: null,
+        })).to.deep.equal({
+            mode: "dropdown",
+            includeAllLanes: false,
+            options: [
+                {key: "north-gate", laneCount: 2},
+                {key: "truck-portal", laneCount: 1},
+            ],
+        });
+    });
+
+    it("resolves safe route targets when switching scoped views", () => {
+        expect(resolveRouteForViewSwitch("/event-log", "?restore=1", "north-gate"))
+            .to.equal("/event-log?restore=1&view=north-gate");
+        expect(resolveRouteForViewSwitch("/event-log", "?restore=1&view=north-gate", null))
+            .to.equal("/event-log?restore=1");
+        expect(resolveRouteForViewSwitch("/lane-view", "?view=north-gate", "south-gate"))
+            .to.equal("/?view=south-gate");
+        expect(resolveRouteForViewSwitch("/event-details", "?eventId=abc&view=north-gate", null))
+            .to.equal("/event-log");
     });
 });

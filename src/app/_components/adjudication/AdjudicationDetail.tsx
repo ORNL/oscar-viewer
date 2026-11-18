@@ -1495,6 +1495,18 @@ export default function AdjudicationDetail(props: {
                                         || effectiveCorrelationVehicleId,
                                 })}
                             </Typography>
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                data-testid="vehicle-related-window-note"
+                                sx={{textWrap: "pretty"}}
+                            >
+                                {relatedVehicleResult.truncated
+                                    ? t("vehicleRelatedWindowTruncatedSummary", {
+                                        limit: relatedVehicleResult.limitPerNode ?? 200,
+                                    })
+                                    : t("vehicleRelatedWindowSummary")}
+                            </Typography>
                             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
                                 <Chip
                                     size="small"

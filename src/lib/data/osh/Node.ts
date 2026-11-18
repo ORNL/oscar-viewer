@@ -431,8 +431,7 @@ export class Node implements INode {
         if (viewKey !== null) {
             const laneSystems = systems.filter((system) =>
                 system?.properties?.properties?.uid?.startsWith(LANE_SYSTEM_UID_PREFIX));
-            await Promise.all(laneSystems.map((system) =>
-                this.loadOperationalViewKeywords(system)));
+            await this.loadOperationalViewKeywordsBounded(laneSystems);
         }
 
         systems.sort((a, b) => {
@@ -533,8 +532,7 @@ export class Node implements INode {
 
             const laneSystems = systems.filter((system) =>
                 system?.properties?.properties?.uid?.startsWith(LANE_SYSTEM_UID_PREFIX));
-            await Promise.all(laneSystems.map((system) =>
-                this.loadOperationalViewKeywords(system)));
+            await this.loadOperationalViewKeywordsBounded(laneSystems);
             return buildOperationalViewCatalog(laneSystems);
         })();
 
@@ -545,6 +543,17 @@ export class Node implements INode {
             this.operationalViewCatalogPromise = null;
             throw error;
         }
+    }
+
+    private async loadOperationalViewKeywordsBounded(laneSystems: any[], concurrency = 8): Promise<void> {
+        let nextIndex = 0;
+        const workerCount = Math.max(1, Math.min(concurrency, laneSystems.length));
+        await Promise.all(Array.from({length: workerCount}, async () => {
+            while (nextIndex < laneSystems.length) {
+                const current = laneSystems[nextIndex++];
+                await this.loadOperationalViewKeywords(current);
+            }
+        }));
     }
 
     private async loadOperationalViewKeywords(system: any): Promise<void> {

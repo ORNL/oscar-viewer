@@ -229,7 +229,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Operational View (`?view=<key>`)',
-                meaning: 'Named workstation filter (such as `north-gate`) that scopes Dashboard, Events, Status of Health, and Reports to assigned lanes.',
+                meaning: 'Named workstation filter (such as `north-gate`) selectable from the top-bar Scoped View dropdown (or via `?view=<key>` URLs) that scopes Dashboard, Events, Status of Health, Map, and Reports to assigned lanes while respecting account `allowedViews` permissions.',
             },
             {
                 term: 'Retained 5-Frame Media',
@@ -402,7 +402,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Vista operativa (`?view=<clave>`)',
-                meaning: 'Filtro con nombre que limita la consola a los carriles asignados a esa estación de trabajo.',
+                meaning: 'Filtro con nombre seleccionable desde el menú desplegable Vista operativa de la barra superior (o mediante URLs `?view=<clave>`) que limita la consola a los carriles asignados respetando los permisos `allowedViews` del usuario.',
             },
             {
                 term: 'Medios retenidos de 5 fotogramas',
@@ -575,7 +575,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Vue opérationnelle (`?view=<clé>`)',
-                meaning: 'Filtre nommé limitant la console aux voies affectées à ce poste de travail.',
+                meaning: 'Filtre nommé sélectionnable depuis le menu déroulant Vue opérationnelle de la barre supérieure (ou via `?view=<clé>`) limitant la console aux voies affectées dans le respect des permissions `allowedViews` du compte.',
             },
             {
                 term: 'Médias conservés à 5 images',
@@ -748,7 +748,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Λειτουργική προβολή (`?view=<κλειδί>`)',
-                meaning: 'Επώνυμο φίλτρο που περιορίζει την κονσόλα στις λωρίδες που έχουν ανατεθεί στον σταθμό εργασίας.',
+                meaning: 'Επώνυμο φίλτρο επιλέξιμο από το αναπτυσσόμενο μενού Λειτουργική προβολή της επάνω γραμμής (ή μέσω URL `?view=<κλειδί>`) που περιορίζει την κονσόλα στις ανατεθειμένες λωρίδες βάσει των δικαιωμάτων `allowedViews`.',
             },
             {
                 term: 'Διατηρούμενα πολυμέσα 5 καρέ',

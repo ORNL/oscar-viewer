@@ -58,11 +58,13 @@ import {
 import {isAdjudicationControlStream} from "@/lib/data/oscar/Utilities";
 import {
     buildNodeBucketBaseUrl,
+    DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE,
     FederatedVehicleSearchResult,
     hydrateVehiclePassProfiles,
     isPassAlarming,
     isPassOpenAlarm,
     isPassSpectroscopic,
+    MAX_HYDRATED_PROFILE_PASSES,
     normalizeVehicleId,
     searchVehiclePassesAcrossNodes,
     submitVehicleIncidentReport,
@@ -294,7 +296,7 @@ export default function VehiclePassComparisonDialog({
         let active = true;
 
         void Promise.all(
-            result.passes.slice(0, 16).map(async (pass) => {
+            result.passes.slice(-MAX_HYDRATED_PROFILE_PASSES).map(async (pass) => {
                 const node = pass.node;
                 if (!node) return null;
 
@@ -763,6 +765,20 @@ export default function VehiclePassComparisonDialog({
                         </Box>
                     )}
 
+                    {!loading && result?.truncated && (
+                        <Alert
+                            severity="info"
+                            role="status"
+                            data-testid="vehicle-comparison-truncated-notice"
+                            sx={{"& .MuiAlert-message": {textWrap: "pretty"}}}
+                        >
+                            {t("vehicleSearchTruncatedNotice", {
+                                limit: (result.limitPerNode ?? DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE).toLocaleString(locale),
+                                shown: passes.length.toLocaleString(locale),
+                            })}
+                        </Alert>
+                    )}
+
                     {/* Loading indicator */}
                     {loading && (
                         <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="center" py={3}>
@@ -1102,9 +1118,22 @@ export default function VehiclePassComparisonDialog({
                     {/* Visual Continuity Filmstrip (OCR Crops & Retained Keyframes) */}
                     {Object.keys(thumbnailsByKey).length > 0 && (
                         <Box data-testid="vehicle-visual-filmstrip">
-                            <Typography variant="subtitle2" sx={{mb: 1, fontWeight: 700}}>
+                            <Typography variant="subtitle2" sx={{mb: passes.length > MAX_HYDRATED_PROFILE_PASSES ? 0.25 : 1, fontWeight: 700}}>
                                 {t("vehicleVisualContinuityTitle")}
                             </Typography>
+                            {passes.length > MAX_HYDRATED_PROFILE_PASSES && (
+                                <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    data-testid="vehicle-filmstrip-truncated-note"
+                                    sx={{display: "block", mb: 1, textWrap: "pretty"}}
+                                >
+                                    {t("vehicleRecentSubsetNotice", {
+                                        max: MAX_HYDRATED_PROFILE_PASSES,
+                                        total: passes.length.toLocaleString(locale),
+                                    })}
+                                </Typography>
+                            )}
                             <Stack
                                 direction="row"
                                 spacing={1.5}
@@ -1163,6 +1192,19 @@ export default function VehiclePassComparisonDialog({
                                     <Typography variant="caption" color="text.secondary">
                                         {t("vehicleProfileComparisonSubtitle")}
                                     </Typography>
+                                    {passes.length > MAX_HYDRATED_PROFILE_PASSES && (
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            data-testid="vehicle-profile-truncated-note"
+                                            sx={{display: "block", textWrap: "pretty"}}
+                                        >
+                                            {t("vehicleRecentSubsetNotice", {
+                                                max: MAX_HYDRATED_PROFILE_PASSES,
+                                                total: passes.length.toLocaleString(locale),
+                                            })}
+                                        </Typography>
+                                    )}
                                 </Box>
                                 {!profilesLoaded && (
                                     <Button

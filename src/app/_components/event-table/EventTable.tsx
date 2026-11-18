@@ -115,6 +115,7 @@ import {
 } from "@/lib/data/oscar/EventFilter";
 import VehiclePassComparisonDialog from "@/app/_components/vehicle/VehiclePassComparisonDialog";
 import {
+    DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE,
     FederatedVehicleSearchResult,
     normalizeVehicleId,
     searchVehiclePassesAcrossNodes,
@@ -1824,10 +1825,29 @@ export default function EventTable({
         return new Date(Math.max(0, baseMs - 86_400_000)).toISOString();
     }, [pageLoadedTime, rows, wantsVehicleIdColumn]);
 
+    const ocrWindowEndIso = useMemo(() => {
+        if (!wantsVehicleIdColumn || paginationModel.page === 0 || rows.length === 0) {
+            return null;
+        }
+        let latestMs = Number.NEGATIVE_INFINITY;
+        for (const row of rows) {
+            const ms = Date.parse(row.endTime || row.startTime);
+            if (Number.isFinite(ms) && ms > latestMs) {
+                latestMs = ms;
+            }
+        }
+        if (!Number.isFinite(latestMs)) {
+            return null;
+        }
+        const paddedUpperMs = Math.ceil((latestMs + 15 * 60_000) / 900_000) * 900_000;
+        return new Date(paddedUpperMs).toISOString();
+    }, [paginationModel.page, rows, wantsVehicleIdColumn]);
+
     const {ocrByObsId, adjudicatedVehicleIdByObsId} = useVehicleOcrMap({
         enabled: wantsVehicleIdColumn && !isVehicleSearchMode,
         lanes: visibleOcrLanes,
         windowStartIso: ocrWindowStartIso,
+        windowEndIso: ocrWindowEndIso,
     });
 
     const pendingQuietResolutionIdsRef = useRef<Set<string>>(new Set());
@@ -2781,11 +2801,67 @@ export default function EventTable({
                             })}
                         </Alert>
                     )}
+                    {isVehicleSearchMode && vehicleSearchResult?.truncated && (
+                        <Alert
+                            severity="info"
+                            role="status"
+                            data-testid="vehicle-search-truncated-notice"
+                            sx={{mt: 1, "& .MuiAlert-message": {textWrap: "pretty"}}}
+                        >
+                            {t("vehicleSearchTruncatedNotice", {
+                                limit: (vehicleSearchResult.limitPerNode ?? DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE).toLocaleString(locale),
+                                shown: vehicleFilteredRows.length.toLocaleString(locale),
+                            })}
+                        </Alert>
+                    )}
                 </Box>
+            )}
+            {isAlarmTable && (
+                <Stack
+                    direction={{xs: "column", sm: "row"}}
+                    spacing={1}
+                    alignItems={{xs: "flex-start", sm: "center"}}
+                    justifyContent="space-between"
+                    data-testid="dashboard-alarm-window-notice"
+                    sx={{
+                        px: 1.5,
+                        py: 0.75,
+                        borderBottom: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "action.hover",
+                    }}
+                >
+                    <Typography variant="caption" color="text.secondary" sx={{textWrap: "pretty"}}>
+                        {t("dashboardAlarmHorizonNotice", {
+                            window: timeWindowOptions.find(opt => opt.value === timeWindowPreset)?.label ?? timeWindowPreset,
+                        })}
+                    </Typography>
+                    <Button
+                        component="a"
+                        href={scopedHref("/event-log")}
+                        onClick={event => {
+                            event.preventDefault();
+                            router.push(scopedHref("/event-log"));
+                        }}
+                        size="small"
+                        color="primary"
+                        data-testid="dashboard-open-event-log-link"
+                        sx={{
+                            textTransform: "none",
+                            whiteSpace: "nowrap",
+                            py: 0,
+                            minBlockSize: "24px",
+                            "@media (pointer: coarse)": {minBlockSize: "44px"},
+                        }}
+                    >
+                        {t("openEventLogLink")}
+                    </Button>
+                </Stack>
             )}
             {!isEventLog && isVehicleSearchMode && vehicleSearchResult && vehicleSearchResult.passes.length > 0 && (
                 <Alert
                     severity="info"
+                    role="status"
                     sx={{mb: 1}}
                     action={
                         <Button
@@ -2808,11 +2884,28 @@ export default function EventTable({
                         </Button>
                     }
                 >
-                    {t("vehicleSearchSummaryChip", {
-                        passes: vehicleFilteredRows.length,
-                        lanes: vehicleSearchResult.summary.distinctLanes,
-                        nodes: vehicleSearchResult.summary.distinctNodes,
-                    })}
+                    <Stack spacing={0.25}>
+                        <span>
+                            {t("vehicleSearchSummaryChip", {
+                                passes: vehicleFilteredRows.length,
+                                lanes: vehicleSearchResult.summary.distinctLanes,
+                                nodes: vehicleSearchResult.summary.distinctNodes,
+                            })}
+                        </span>
+                        {vehicleSearchResult.truncated && (
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                data-testid="vehicle-search-truncated-notice"
+                                sx={{textWrap: "pretty"}}
+                            >
+                                {t("vehicleSearchTruncatedNotice", {
+                                    limit: (vehicleSearchResult.limitPerNode ?? DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE).toLocaleString(locale),
+                                    shown: vehicleFilteredRows.length.toLocaleString(locale),
+                                })}
+                            </Typography>
+                        )}
+                    </Stack>
                 </Alert>
             )}
             {(countQueryError || pageQueryError) && !isVehicleSearchMode && (

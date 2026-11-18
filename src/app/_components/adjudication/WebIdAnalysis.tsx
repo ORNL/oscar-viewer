@@ -3,14 +3,15 @@
 import React, {useCallback, useContext, useEffect, useState} from "react";
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
-import {DataGrid, GridColDef} from "@mui/x-data-grid";
-import { Box, Dialog, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
+import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { Alert, Box, Dialog, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import {
     acquireSharedConnection,
     findRealtimeDataSourceForStream,
     LaneMapEntry,
 } from "@/lib/data/oscar/LaneCollection";
 import DataStream from "osh-js/source/core/consysapi/datastream/DataStream";
+import ObservationFilter from "osh-js/source/core/consysapi/observation/ObservationFilter";
 import {IWebIdIsotope} from "@/lib/data/oscar/adjudication/WebId";
 import WebIdAnalysisResult from "@/lib/data/oscar/adjudication/WebId";
 import {WEB_ID_DEF} from "@/lib/data/Constants";
@@ -31,6 +32,7 @@ export default function WebIdAnalysis(props: {
 
     const [webIdLog, setWebIdLog] = useState<any[]>([]);
     const [filteredLog, setFilteredLog] = useState<any[]>([]);
+    const [webIdHistoryCapped, setWebIdHistoryCapped] = useState(false);
     const [expandDialog, setExpandDialog] = useState({ open: false, title: "", text: "" });
 
     const locale = getIntlLocale(language);
@@ -197,20 +199,58 @@ export default function WebIdAnalysis(props: {
             return;
         }
 
-        const accumulated: WebIdAnalysisResult[] = [];
-        let query = await webIdDatastream.searchObservations(undefined, 100);
-        let pagesRead = 0;
+        const MAX_SCAN_PAGES = 25;
+        const PAGE_BATCH_SIZE = 100;
+        const readQueryPages = async (filter: typeof ObservationFilter | undefined, maxPages: number) => {
+            const items: WebIdAnalysisResult[] = [];
+            const query = await webIdDatastream.searchObservations(filter, PAGE_BATCH_SIZE);
+            let pagesRead = 0;
+            while (query.hasNext() && pagesRead < maxPages) {
+                pagesRead += 1;
+                const obsCollection = await query.nextPage();
+                for (const obs of obsCollection) {
+                    items.push(new WebIdAnalysisResult(obs.resultTime, obs.result));
+                }
+            }
+            const capped = pagesRead >= maxPages && Boolean(query.hasNext());
+            return { items, capped };
+        };
 
-        while (query.hasNext() && pagesRead < 25) {
-            pagesRead += 1;
-            let obsCollection = await query.nextPage();
-            for (const obs of obsCollection) {
-                accumulated.push(new WebIdAnalysisResult(obs.resultTime, obs.result));
+        const startMs = Date.parse(props.event?.startTime ?? "");
+        const endMs = Date.parse(props.event?.endTime ?? "");
+        let accumulated: WebIdAnalysisResult[] = [];
+        let capped = false;
+
+        if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+            try {
+                const windowStartIso = new Date(Math.max(0, Math.min(startMs, endMs) - 5 * 60_000)).toISOString();
+                const windowEndIso = new Date(Math.max(startMs, endMs) + 30 * 60_000).toISOString();
+                const scoped = await readQueryPages(
+                    new ObservationFilter({ resultTime: `${windowStartIso}/${windowEndIso}` }),
+                    MAX_SCAN_PAGES,
+                );
+                const hasTargetMatch = targetOccupancyObsId
+                    ? scoped.items.some((item) => item?.occupancyObsId == targetOccupancyObsId)
+                    : scoped.items.length > 0;
+                if (hasTargetMatch) {
+                    accumulated = scoped.items;
+                    capped = scoped.capped;
+                }
+            } catch {
+                // Fall back to lane-wide scan if the server rejects resultTime on this stream
             }
         }
+
+        if (accumulated.length === 0) {
+            const fallback = await readQueryPages(undefined, MAX_SCAN_PAGES);
+            accumulated = fallback.items;
+            capped = fallback.capped;
+        }
+
         accumulated.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+        setWebIdHistoryCapped(capped);
         setWebIdLog(accumulated);
-    }, [currentLane, laneMapRef]);
+    }, [currentLane, laneMapRef, props.event?.endTime, props.event?.startTime, targetOccupancyObsId]);
 
     useEffect(() => {
         if (props.event && targetOccupancyObsId) {
@@ -291,6 +331,16 @@ export default function WebIdAnalysis(props: {
                 <Typography variant="h5">
                     {t('webIdAnalysisResults')}
                 </Typography>
+                {webIdHistoryCapped && (
+                    <Alert
+                        severity="info"
+                        role="status"
+                        data-testid="webid-history-cap-notice"
+                        sx={{ py: 0.25, "& .MuiAlert-message": { textWrap: "pretty" } }}
+                    >
+                        {t('webIdHistoryCapNotice', { max: (2500).toLocaleString(locale) })}
+                    </Alert>
+                )}
             </Stack>
             <Box sx={{ width: '100%' }}>
                 <DataGrid

@@ -29,7 +29,23 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import MediationIcon from '@mui/icons-material/Mediation';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
-import {Alert, Badge, Button, Chip, FormControlLabel, Menu, MenuItem, Slider, Stack, Switch, Tooltip} from '@mui/material';
+import {
+    Alert,
+    Badge,
+    Button,
+    Chip,
+    FormControl,
+    FormControlLabel,
+    InputLabel,
+    Menu,
+    MenuItem,
+    Select,
+    SelectChangeEvent,
+    Slider,
+    Stack,
+    Switch,
+    Tooltip,
+} from '@mui/material';
 import Link from 'next/link';
 import {Download, InsertChart, VolumeDown, VolumeUp} from "@mui/icons-material";
 import AlarmAudio from "@/app/_components/AlarmAudio";
@@ -52,6 +68,11 @@ import {setEventData} from "@/lib/state/EventDetailsSlice";
 import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
+import {
+    ALL_LANES_SELECT_VALUE,
+    resolveRouteForViewSwitch,
+    resolveScopedViewDropdownState,
+} from "@/lib/data/oscar/OperationalView";
 import HelpDialog from "@/app/_components/HelpDialog";
 import {RootState} from "@/lib/state/Store";
 
@@ -155,8 +176,45 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const dataSourceCtx = React.useContext(DataSourceContext);
     const activeViewKey = dataSourceCtx?.activeViewKey ?? null;
     const viewError = dataSourceCtx?.viewError ?? null;
+    const availableViews = dataSourceCtx?.availableViews ?? [];
+    const totalCatalogLaneCount = dataSourceCtx?.totalCatalogLaneCount ?? 0;
+    const setActiveView = dataSourceCtx?.setActiveView;
     const scopedHref = dataSourceCtx?.scopedHref ?? ((p: string) => p);
     const currentSession = dataSourceCtx?.currentSession ?? null;
+    const scopedViewLabelId = React.useId();
+    const scopedViewDropdown = React.useMemo(
+        () => resolveScopedViewDropdownState({
+            availableViews,
+            allowedViews: currentSession?.allowedViews ?? [],
+            activeViewKey,
+            viewError,
+        }),
+        [activeViewKey, availableViews, currentSession?.allowedViews, viewError],
+    );
+    const scopedSelectValue = React.useMemo(() => {
+        if (activeViewKey === null) {
+            return scopedViewDropdown.includeAllLanes ? ALL_LANES_SELECT_VALUE : "";
+        }
+        return scopedViewDropdown.options.some((opt) => opt.key === activeViewKey)
+            ? activeViewKey
+            : "";
+    }, [activeViewKey, scopedViewDropdown.includeAllLanes, scopedViewDropdown.options]);
+
+    const handleScopedViewChange = React.useCallback(
+        (event: SelectChangeEvent<string>) => {
+            const raw = event.target.value;
+            const nextKey = raw === ALL_LANES_SELECT_VALUE || raw === "" ? null : raw;
+            const currentPath = pathname || (typeof window !== "undefined" ? window.location.pathname : "/");
+            const currentSearch = typeof window !== "undefined" ? window.location.search : "";
+            const nextRoute = resolveRouteForViewSwitch(currentPath, currentSearch, nextKey);
+            setActiveView?.(nextKey);
+            const nextPathname = nextRoute.split("?")[0];
+            if (nextPathname !== currentPath) {
+                router.push(nextRoute);
+            }
+        },
+        [pathname, router, setActiveView],
+    );
     const savedVolume = useSelector(selectAlarmAudioVolume);
     const continuousAlarmAudio = useSelector(selectContinuousAlarmAudio);
     const visualUnreadAlert = useSelector(selectVisualUnreadAlert);
@@ -440,14 +498,63 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                         <Typography variant="h6" noWrap component="div" sx={{minInlineSize: 0, flexShrink: 1}}>
                             {t('appTitle')}
                         </Typography>
-                        {activeViewKey && (
+                        {scopedViewDropdown.mode === "badge" && activeViewKey && (
                             <Chip
                                 label={t('operationalViewValue', {view: activeViewKey})}
                                 color="primary"
                                 variant="outlined"
                                 size="small"
+                                data-testid="navbar-scoped-view-badge"
                                 sx={{flexShrink: 0}}
                             />
+                        )}
+                        {scopedViewDropdown.mode === "dropdown" && (
+                            <FormControl
+                                size="small"
+                                sx={{
+                                    flexShrink: 0,
+                                    minInlineSize: {xs: 136, sm: 184},
+                                    maxInlineSize: {xs: 180, sm: 260},
+                                }}
+                            >
+                                <InputLabel id={scopedViewLabelId}>{t('scopedViewMenuLabel')}</InputLabel>
+                                <Select
+                                    labelId={scopedViewLabelId}
+                                    label={t('scopedViewMenuLabel')}
+                                    value={scopedSelectValue}
+                                    displayEmpty={scopedSelectValue === "" && Boolean(activeViewKey)}
+                                    renderValue={
+                                        scopedSelectValue === "" && activeViewKey
+                                            ? () => activeViewKey
+                                            : undefined
+                                    }
+                                    onChange={handleScopedViewChange}
+                                    data-testid="navbar-scoped-view-select"
+                                    sx={{
+                                        minBlockSize: "32px",
+                                        "@media (pointer: coarse)": {minBlockSize: "44px"},
+                                    }}
+                                >
+                                    {scopedViewDropdown.includeAllLanes && (
+                                        <MenuItem value={ALL_LANES_SELECT_VALUE} data-testid="navbar-scoped-view-option-all">
+                                            {totalCatalogLaneCount > 0
+                                                ? t('scopedViewAllLanesCount', {count: totalCatalogLaneCount})
+                                                : t('scopedViewAllLanes')}
+                                        </MenuItem>
+                                    )}
+                                    {scopedViewDropdown.options.map((option) => (
+                                        <MenuItem
+                                            key={option.key}
+                                            value={option.key}
+                                            data-testid={`navbar-scoped-view-option-${option.key}`}
+                                        >
+                                            {typeof option.laneCount === "number"
+                                                ? t('scopedViewOptionWithCount', {view: option.key, count: option.laneCount})
+                                                : option.key}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
                         )}
                         <Stack direction="row" alignItems="center" spacing={1} sx={{flexShrink: 0}}>
                             {authenticatedUsername && (

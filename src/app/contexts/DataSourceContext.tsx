@@ -5,11 +5,18 @@ import {useSelector} from "react-redux";
 import {useAppDispatch} from "@/lib/state/Hooks";
 import {addNode, changeConfigNode, updateNode} from "@/lib/state/OSHSlice";
 import {setLaneMap} from "@/lib/state/OSCARLaneSlice";
+import {clearEventPreview, setSelectedRowId} from "@/lib/state/EventPreviewSlice";
 import {AppDispatch, RootState} from "@/lib/state/Store";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
 import {Node, NodeOptions} from "@/lib/data/osh/Node";
 import {discoverLanesIncrementally} from "@/lib/data/oscar/LaneDiscovery";
-import {parseOperationalView, withOperationalView} from "@/lib/data/oscar/OperationalView";
+import {
+    mergeOperationalViewCatalogs,
+    OperationalViewOption,
+    parseOperationalView,
+    resolveRouteForViewSwitch,
+    withOperationalView,
+} from "@/lib/data/oscar/OperationalView";
 import {fetchCurrentSession, OscarSessionInfo} from "@/lib/data/oscar/AuthSessionApi";
 
 
@@ -20,6 +27,9 @@ interface IDataSourceContext {
     readyLaneNames: ReadonlySet<string>;
     activeViewKey: string | null;
     viewError: "invalid" | "empty" | "unauthorized" | null;
+    availableViews: readonly OperationalViewOption[];
+    totalCatalogLaneCount: number;
+    setActiveView: (nextViewKey: string | null) => void;
     scopedHref: (path: string) => string;
     currentSession: OscarSessionInfo | null;
     refreshSession: () => Promise<void>;
@@ -62,6 +72,8 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
         error: "invalid" | null;
     }>({resolved: false, key: null, error: null});
     const [viewError, setViewError] = useState<"invalid" | "empty" | "unauthorized" | null>(null);
+    const [availableViews, setAvailableViews] = useState<OperationalViewOption[]>([]);
+    const [totalCatalogLaneCount, setTotalCatalogLaneCount] = useState(0);
     const discoveryGenerationRef = useRef(0);
 
     const refreshSession = useCallback(async () => {
@@ -292,6 +304,59 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
         init();
     }, [nodesConnectionKey, viewSelection, sessionLoaded, userAllowedViewsKey]);
 
+    useEffect(() => {
+        if (!sessionLoaded || (!laneMapReady && !viewError) || nodes.length === 0) {
+            if (nodes.length === 0) {
+                setAvailableViews([]);
+                setTotalCatalogLaneCount(0);
+            }
+            return;
+        }
+        let cancelled = false;
+        void Promise.allSettled(
+            nodes
+                .filter((node) => typeof node?.fetchOperationalViewCatalog === "function")
+                .map((node) => node.fetchOperationalViewCatalog()),
+        ).then((outcomes) => {
+            if (cancelled) return;
+            const catalogs = outcomes
+                .filter((o): o is PromiseFulfilledResult<Awaited<ReturnType<Node["fetchOperationalViewCatalog"]>>> => o.status === "fulfilled")
+                .map((o) => o.value);
+            const merged = mergeOperationalViewCatalogs(catalogs);
+            setAvailableViews(merged.options);
+            setTotalCatalogLaneCount(merged.totalLaneCount);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [laneMapReady, nodes, nodesConnectionKey, sessionLoaded, viewError]);
+
+    const setActiveView = useCallback(
+        (nextViewKey: string | null) => {
+            const normalized = nextViewKey && nextViewKey.trim().length > 0 ? nextViewKey.trim() : null;
+            dispatch(clearEventPreview());
+            dispatch(setSelectedRowId(null));
+            setViewSelection({
+                resolved: true,
+                key: normalized,
+                error: null,
+            });
+            if (typeof window !== "undefined") {
+                const nextUrl = resolveRouteForViewSwitch(
+                    window.location.pathname,
+                    window.location.search,
+                    normalized,
+                );
+                try {
+                    window.history.pushState(window.history.state, "", nextUrl);
+                } catch {
+                    // Ignore history API restrictions in embedded test harnesses
+                }
+            }
+        },
+        [dispatch],
+    );
+
     const scopedHref = useCallback(
         (path: string) => withOperationalView(
             path,
@@ -307,6 +372,9 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
             readyLaneNames,
             activeViewKey: effectiveViewResolution.effectiveKey,
             viewError,
+            availableViews,
+            totalCatalogLaneCount,
+            setActiveView,
             scopedHref,
             currentSession,
             refreshSession,
