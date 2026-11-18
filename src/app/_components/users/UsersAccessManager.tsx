@@ -46,6 +46,9 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
 import QrCode2RoundedIcon from '@mui/icons-material/QrCode2Rounded';
+import CloudRoundedIcon from '@mui/icons-material/CloudRounded';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import Link from 'next/link';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
 import { DataSourceContext } from '@/app/contexts/DataSourceContext';
 import { getIntlLocale } from '@/app/utils/LocaleUtils';
@@ -69,6 +72,7 @@ import {
     fetchCurrentSession,
     fetchMyPasskeys,
     isPasskeyRegistrationSupported,
+    normalizeTrustedHttpsConsoleUrl,
     OscarRoleId,
     OscarSessionInfo,
     PasskeyItem,
@@ -158,6 +162,9 @@ interface UsersUiCopy {
     cancelBtn: string;
     fedHeader: string;
     fedSubheader: string;
+    fedWhereToUseTitle: string;
+    fedWhereToUseBody: string;
+    openServersFedBtn: string;
     fedLabelInput: string;
     fedScopeInput: string;
     fedExpiryInput: string;
@@ -187,10 +194,16 @@ interface UsersUiCopy {
     oidcClientSecretLabel: string;
     oidcAdminGroupLabel: string;
     oidcOperatorGroupLabel: string;
+    oidcTrustedCaPathLabel: string;
+    externalConsoleUrlLabel: string;
+    externalConsoleUrlHelper: string;
+    externalConsoleUrlError: string;
+    openExternalSsoConsoleBtn: string;
     tunnelSsoTitle: string;
     tunnelSsoDesc: string;
     enableTunnelSsoLabel: string;
     tunnelHeaderLabel: string;
+    tunnelGroupsHeaderLabel: string;
     tunnelSecretLabel: string;
     tunnelAutoViewerLabel: string;
     savePolicyBtn: string;
@@ -254,7 +267,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         renameBtn: 'Rename',
         removeBtn: 'Remove',
         changePasswordTitle: 'Password (Works in Phone-Free Facilities & Offline)',
-        changePasswordDesc: 'Choose a password of at least 12 characters. Changing your password keeps this browser signed in and signs out any other sessions.',
+        changePasswordDesc: 'Choose a password of at least 12 characters. Changing your OSCAR password keeps this browser signed in, signs out any other OSCAR sessions, and does NOT require changing your Octelium Zero-Trust tunnel password (keeping separate tunnel and OSCAR credentials provides two-layer defense-in-depth).',
         currentPasswordLabel: 'Current password',
         newPasswordLabel: 'New password (12+ characters)',
         confirmPasswordLabel: 'Confirm new password',
@@ -294,6 +307,9 @@ const COPY: Record<Locale, UsersUiCopy> = {
         cancelBtn: 'Cancel',
         fedHeader: 'Federation Service Tokens',
         fedSubheader: 'Issue revocable, least-privilege tokens so remote headquarters or partner OSCAR nodes can subscribe to this site without sharing human passwords.',
+        fedWhereToUseTitle: 'Where to Use a Federation Token (2-Step Multi-Site Setup)',
+        fedWhereToUseBody: '1) Create an oscar_fed_... token below on the site being monitored.  2) On the monitoring / HQ OSCAR Viewer, open Servers (/servers) -> Add Server, set Authentication Method to "Federation Service Token", check Use HTTPS (port 443), and paste the token to stream into National View and Multi-Pass Vehicle Search.',
+        openServersFedBtn: 'Open Servers Page (Federation Token Mode)',
         fedLabelInput: 'Remote Organization / Node Label (e.g. HQ National Operations Center)',
         fedScopeInput: 'Access Level',
         fedExpiryInput: 'Expiration',
@@ -302,7 +318,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         fed365Days: '365 Days',
         mintFedTokenBtn: 'Create Federation Token',
         newFedTokenTitle: 'Copy Federation Token Now (Shown Once)',
-        newFedTokenHint: 'Paste this token into Nodes -> Add Server -> Federation Service Token on the remote OSCAR instance.',
+        newFedTokenHint: 'Paste this token into Servers (/servers) -> Add Server -> Authentication Method: Federation Service Token on the monitoring OSCAR instance.',
         noFedTokens: 'No federation service tokens issued on this node.',
         revokeBtn: 'Revoke',
         policyHeader: 'Session Lifetime, Corporate SSO & Tunnel Policy',
@@ -323,10 +339,16 @@ const COPY: Record<Locale, UsersUiCopy> = {
         oidcClientSecretLabel: 'OIDC Client Secret (leave blank to keep existing or for public PKCE)',
         oidcAdminGroupLabel: 'IdP Group -> Administrator',
         oidcOperatorGroupLabel: 'IdP Group -> Operator',
+        oidcTrustedCaPathLabel: 'OIDC Custom CA Certificate Path (Optional PEM .crt/.pem file or folder)',
+        externalConsoleUrlLabel: 'External SSO User Console URL (Optional HTTPS)',
+        externalConsoleUrlHelper: 'Optional shortcut button on Users & Roles (e.g. https://auth.hub.example.org/if/admin/). Stores zero Hub admin credentials on this OSCAR server.',
+        externalConsoleUrlError: 'Enter a valid https:// URL without embedded credentials (or leave blank).',
+        openExternalSsoConsoleBtn: 'Open Federated User Console',
         tunnelSsoTitle: 'Optional Zero Trust Tunnel Single Sign-On (Octelium)',
         tunnelSsoDesc: 'Automatically map verified Octelium tunnel users to local OSCAR sessions without double sign-in when authenticated with a shared secret.',
         enableTunnelSsoLabel: 'Enable Verified Tunnel Header SSO',
         tunnelHeaderLabel: 'Verified User Header',
+        tunnelGroupsHeaderLabel: 'Verified Groups Header (Optional Role Mapping)',
         tunnelSecretLabel: 'Tunnel Shared Secret (16+ chars, matched against X-Oscar-Tunnel-Secret)',
         tunnelAutoViewerLabel: 'Auto-provision unknown verified tunnel users as Read-Only Viewer',
         savePolicyBtn: 'Save Security Policy',
@@ -388,7 +410,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         renameBtn: 'Renombrar',
         removeBtn: 'Eliminar',
         changePasswordTitle: 'Contraseña (Instalaciones sin teléfonos y sin conexión)',
-        changePasswordDesc: 'Elija una contraseña de al menos 12 caracteres. Esta sesión permanecerá activa y se cerrarán las demás.',
+        changePasswordDesc: 'Elija una contraseña de al menos 12 caracteres. Cambiar su contraseña de OSCAR mantiene activa esta sesión, cierra las demás y NO requiere cambiar la contraseña del túnel Octelium Zero-Trust (mantener credenciales separadas ofrece defensa en profundidad).',
         currentPasswordLabel: 'Contraseña actual',
         newPasswordLabel: 'Nueva contraseña (12+ caracteres)',
         confirmPasswordLabel: 'Confirmar nueva contraseña',
@@ -428,6 +450,9 @@ const COPY: Record<Locale, UsersUiCopy> = {
         cancelBtn: 'Cancelar',
         fedHeader: 'Tokens de servicio de federación',
         fedSubheader: 'Emita tokens revocables de mínimo privilegio para que nodos remotos se conecten sin compartir contraseñas humanas.',
+        fedWhereToUseTitle: 'Dónde usar un token de federación (configuración multisitio en 2 pasos)',
+        fedWhereToUseBody: '1) Cree un token oscar_fed_... abajo en el sitio monitoreado.  2) En el visor OSCAR de monitoreo / sede central, abra Servidores (/servers) -> Añadir servidor, elija "Token de servicio de federación", active HTTPS (puerto 443) y pegue el token para Vista Nacional y Búsqueda multipasada.',
+        openServersFedBtn: 'Abrir Servidores (Modo Token de Federación)',
         fedLabelInput: 'Etiqueta de organización / nodo remoto',
         fedScopeInput: 'Nivel de acceso',
         fedExpiryInput: 'Caducidad',
@@ -436,7 +461,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         fed365Days: '365 días',
         mintFedTokenBtn: 'Crear token de federación',
         newFedTokenTitle: 'Copie el token ahora (se muestra una sola vez)',
-        newFedTokenHint: 'Pegue este token en Nodos -> Añadir servidor -> Token de federación en el sistema OSCAR remoto.',
+        newFedTokenHint: 'Pegue este token en Servidores (/servers) -> Añadir servidor -> Método de autenticación: Token de servicio de federación.',
         noFedTokens: 'No hay tokens de federación emitidos en este nodo.',
         revokeBtn: 'Revocar',
         policyHeader: 'Duración de sesión, SSO corporativo y túnel',
@@ -457,10 +482,16 @@ const COPY: Record<Locale, UsersUiCopy> = {
         oidcClientSecretLabel: 'Secreto de cliente OIDC (vacío para conservar actual)',
         oidcAdminGroupLabel: 'Grupo IdP -> Administrador',
         oidcOperatorGroupLabel: 'Grupo IdP -> Operador',
+        oidcTrustedCaPathLabel: 'Ruta de certificado CA personalizado OIDC (archivo o carpeta .crt/.pem opcional)',
+        externalConsoleUrlLabel: 'URL de consola externa de usuarios SSO (HTTPS opcional)',
+        externalConsoleUrlHelper: 'Acceso directo opcional en Usuarios y roles (ej. https://auth.hub.example.org/if/admin/). No almacena claves de administración del Hub.',
+        externalConsoleUrlError: 'Introduzca una URL https:// válida sin credenciales incrustadas (o déjela en blanco).',
+        openExternalSsoConsoleBtn: 'Abrir consola de usuarios SSO',
         tunnelSsoTitle: 'SSO opcional por túnel Zero Trust (Octelium)',
         tunnelSsoDesc: 'Asocia usuarios verificados del túnel Octelium a sesiones OSCAR sin doble inicio de sesión.',
         enableTunnelSsoLabel: 'Habilitar SSO por cabecera verificada del túnel',
         tunnelHeaderLabel: 'Cabecera de usuario',
+        tunnelGroupsHeaderLabel: 'Cabecera de grupos verificados (mapeo de rol opcional)',
         tunnelSecretLabel: 'Secreto compartido del túnel (16+ caracteres)',
         tunnelAutoViewerLabel: 'Crear perfil Lector automáticamente para usuarios del túnel',
         savePolicyBtn: 'Guardar política de seguridad',
@@ -522,7 +553,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         renameBtn: 'Renommer',
         removeBtn: 'Supprimer',
         changePasswordTitle: 'Mot de passe (Sites sans téléphone et hors ligne)',
-        changePasswordDesc: 'Choisissez un mot de passe d’au moins 12 caractères. Les autres sessions seront déconnectées.',
+        changePasswordDesc: 'Choisissez un mot de passe d’au moins 12 caractères. Modifier votre mot de passe OSCAR ne nécessite PAS de changer votre mot de passe de tunnel Zero-Trust Octelium (conserver des identifiants distincts assure une défense en profondeur).',
         currentPasswordLabel: 'Mot de passe actuel',
         newPasswordLabel: 'Nouveau mot de passe (12+ caractères)',
         confirmPasswordLabel: 'Confirmer le nouveau mot de passe',
@@ -562,6 +593,9 @@ const COPY: Record<Locale, UsersUiCopy> = {
         cancelBtn: 'Annuler',
         fedHeader: 'Jetons de service de fédération',
         fedSubheader: 'Créez des jetons révocables à privilège minimal pour connecter des nœuds OSCAR distants sans partager de mot de passe humain.',
+        fedWhereToUseTitle: 'Où utiliser un jeton de fédération (configuration multi-sites en 2 étapes)',
+        fedWhereToUseBody: '1) Créez un jeton oscar_fed_... ci-dessous sur le site surveillé.  2) Sur la console OSCAR de supervision, ouvrez Serveurs (/servers) -> Ajouter un serveur, sélectionnez « Jeton de service de fédération », cochez HTTPS (port 443) et collez le jeton pour alimenter la Vue Nationale et la Recherche multipassage.',
+        openServersFedBtn: 'Ouvrir Serveurs (Mode Jeton de Fédération)',
         fedLabelInput: 'Libellé de l’organisation / du nœud distant',
         fedScopeInput: 'Niveau d’accès',
         fedExpiryInput: 'Expiration',
@@ -570,7 +604,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         fed365Days: '365 jours',
         mintFedTokenBtn: 'Créer un jeton de fédération',
         newFedTokenTitle: 'Copiez ce jeton maintenant (affiché une seule fois)',
-        newFedTokenHint: 'Collez ce jeton dans Nœuds -> Ajouter un serveur -> Jeton de fédération sur le nœud OSCAR distant.',
+        newFedTokenHint: 'Collez ce jeton dans Serveurs (/servers) -> Ajouter un serveur -> Méthode d’authentification : Jeton de service de fédération.',
         noFedTokens: 'Aucun jeton de fédération actif sur ce nœud.',
         revokeBtn: 'Révoquer',
         policyHeader: 'Durée de session, SSO d’organisation et tunnel',
@@ -591,10 +625,16 @@ const COPY: Record<Locale, UsersUiCopy> = {
         oidcClientSecretLabel: 'Secret client OIDC (vide pour conserver)',
         oidcAdminGroupLabel: 'Groupe IdP -> Administrateur',
         oidcOperatorGroupLabel: 'Groupe IdP -> Opérateur',
+        oidcTrustedCaPathLabel: 'Chemin de certificat CA personnalisé OIDC (fichier ou dossier .crt/.pem facultatif)',
+        externalConsoleUrlLabel: 'URL de console externe des utilisateurs SSO (HTTPS facultatif)',
+        externalConsoleUrlHelper: 'Raccourci facultatif dans Utilisateurs et rôles (ex. https://auth.hub.example.org/if/admin/). Aucun jeton d’administration Hub stocké.',
+        externalConsoleUrlError: 'Saisissez une URL https:// valide sans identifiants intégrés (ou laissez vide).',
+        openExternalSsoConsoleBtn: 'Ouvrir la console utilisateurs SSO',
         tunnelSsoTitle: 'SSO facultatif par tunnel Zero Trust (Octelium)',
         tunnelSsoDesc: 'Associe automatiquement les utilisateurs vérifiés du tunnel Octelium à une session OSCAR.',
         enableTunnelSsoLabel: 'Activer le SSO par en-tête de tunnel vérifié',
         tunnelHeaderLabel: 'En-tête utilisateur vérifié',
+        tunnelGroupsHeaderLabel: 'En-tête de groupes vérifiés (mappage de rôle facultatif)',
         tunnelSecretLabel: 'Secret partagé du tunnel (16+ caractères)',
         tunnelAutoViewerLabel: 'Créer automatiquement un profil Lecteur pour les utilisateurs du tunnel',
         savePolicyBtn: 'Enregistrer la politique de sécurité',
@@ -656,7 +696,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         renameBtn: 'Μετονομασία',
         removeBtn: 'Αφαίρεση',
         changePasswordTitle: 'Κωδικός πρόσβασης (Χώροι χωρίς τηλέφωνα & εκτός σύνδεσης)',
-        changePasswordDesc: 'Επιλέξτε κωδικό τουλάχιστον 12 χαρακτήρων. Οι υπόλοιπες συνεδρίες θα αποσυνδεθούν.',
+        changePasswordDesc: 'Επιλέξτε κωδικό τουλάχιστον 12 χαρακτήρων. Η αλλαγή του κωδικού OSCAR ΔΕΝ απαιτεί αλλαγή του κωδικού σήραγγας Octelium Zero-Trust (η διατήρηση ξεχωριστών κωδικών προσφέρει άμυνα σε βάθος).',
         currentPasswordLabel: 'Τρέχων κωδικός',
         newPasswordLabel: 'Νέος κωδικός (12+ χαρακτήρες)',
         confirmPasswordLabel: 'Επιβεβαίωση νέου κωδικού',
@@ -696,6 +736,9 @@ const COPY: Record<Locale, UsersUiCopy> = {
         cancelBtn: 'Ακύρωση',
         fedHeader: 'Διακριτικά υπηρεσίας ομοσπονδίας',
         fedSubheader: 'Εκδώστε ανακλητά διακριτικά ελάχιστων προνομίων ώστε απομακρυσμένοι κόμβοι OSCAR να συνδέονται χωρίς κοινή χρήση κωδικών.',
+        fedWhereToUseTitle: 'Πού χρησιμοποιείται ένα διακριτικό ομοσπονδίας (ρύθμιση 2 βημάτων)',
+        fedWhereToUseBody: '1) Δημιουργήστε ένα διακριτικό oscar_fed_... παρακάτω στον παρακολουθούμενο κόμβο.  2) Στο OSCAR Viewer εποπτείας, ανοίξτε Διακομιστές (/servers) -> Προσθήκη διακομιστή, επιλέξτε «Διακριτικό υπηρεσίας ομοσπονδίας», ενεργοποιήστε HTTPS (θύρα 443) και επικολλήστε το διακριτικό για Εθνική Προβολή & Αναζήτηση πολλαπλών διελεύσεων.',
+        openServersFedBtn: 'Άνοιγμα Διακομιστών (Λειτουργία Διακριτικού Ομοσπονδίας)',
         fedLabelInput: 'Ετικέτα απομακρυσμένου οργανισμού / κόμβου',
         fedScopeInput: 'Επίπεδο πρόσβασης',
         fedExpiryInput: 'Λήξη',
@@ -704,7 +747,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         fed365Days: '365 ημέρες',
         mintFedTokenBtn: 'Δημιουργία διακριτικού ομοσπονδίας',
         newFedTokenTitle: 'Αντιγράψτε το διακριτικό τώρα (εμφανίζεται μία φορά)',
-        newFedTokenHint: 'Επικολλήστε το στο Κόμβοι -> Προσθήκη διακομιστή -> Διακριτικό ομοσπονδίας στον απομακρυσμένο κόμβο.',
+        newFedTokenHint: 'Επικολλήστε το στους Διακομιστές (/servers) -> Προσθήκη διακομιστή -> Μέθοδος ταυτοποίησης: Διακριτικό υπηρεσίας ομοσπονδίας.',
         noFedTokens: 'Δεν έχουν εκδοθεί διακριτικά ομοσπονδίας σε αυτόν τον κόμβο.',
         revokeBtn: 'Ανάκληση',
         policyHeader: 'Διάρκεια συνεδρίας, εταιρικό SSO & σήραγγα',
@@ -725,10 +768,16 @@ const COPY: Record<Locale, UsersUiCopy> = {
         oidcClientSecretLabel: 'Μυστικό πελάτη OIDC (κενό για διατήρηση)',
         oidcAdminGroupLabel: 'Ομάδα IdP -> Διαχειριστής',
         oidcOperatorGroupLabel: 'Ομάδα IdP -> Χειριστής',
+        oidcTrustedCaPathLabel: 'Διαδρομή προσαρμοσμένου πιστοποιητικού CA OIDC (προαιρετικό αρχείο/φάκελος .crt/.pem)',
+        externalConsoleUrlLabel: 'URL εξωτερικής κονσόλας χρηστών SSO (προαιρετικό HTTPS)',
+        externalConsoleUrlHelper: 'Προαιρετική συντόμευση στους Χρήστες & ρόλους (π.χ. https://auth.hub.example.org/if/admin/). Χωρίς αποθήκευση κλειδιών διαχείρισης Hub.',
+        externalConsoleUrlError: 'Εισαγάγετε έγκυρο URL https:// χωρίς ενσωματωμένα διαπιστευτήρια (ή αφήστε κενό).',
+        openExternalSsoConsoleBtn: 'Άνοιγμα κονσόλας χρηστών SSO',
         tunnelSsoTitle: 'Προαιρετικό SSO σήραγγας Zero Trust (Octelium)',
         tunnelSsoDesc: 'Αντιστοιχίζει επαληθευμένους χρήστες της σήραγγας Octelium σε συνεδρίες OSCAR.',
         enableTunnelSsoLabel: 'Ενεργοποίηση SSO επαληθευμένης κεφαλίδας σήραγγας',
         tunnelHeaderLabel: 'Κεφαλίδα χρήστη',
+        tunnelGroupsHeaderLabel: 'Κεφαλίδα επαληθευμένων ομάδων (προαιρετική αντιστοίχιση ρόλων)',
         tunnelSecretLabel: 'Κοινόχρηστο μυστικό σήραγγας (16+ χαρακτήρες)',
         tunnelAutoViewerLabel: 'Αυτόματη δημιουργία προφίλ Θεατή για χρήστες σήραγγας',
         savePolicyBtn: 'Αποθήκευση πολιτικής ασφαλείας',
@@ -762,6 +811,7 @@ export default function UsersAccessManager() {
     const copy = COPY[locale] || COPY.en;
     const bulkCopy = useBulkStrings(locale);
     const dataSourceCtx = React.useContext(DataSourceContext);
+    const scopedHref = dataSourceCtx?.scopedHref ?? ((p: string) => p);
 
     const [activeTab, setActiveTab] = React.useState(0);
     const [loading, setLoading] = React.useState(true);
@@ -817,6 +867,7 @@ export default function UsersAccessManager() {
     const [policyDraft, setPolicyDraft] = React.useState<SecurityPolicySummary | null>(null);
     const [oidcSecretDraft, setOidcSecretDraft] = React.useState('[UNCHANGED]');
     const [tunnelSecretDraft, setTunnelSecretDraft] = React.useState('[UNCHANGED]');
+    const [externalConsoleUrlError, setExternalConsoleUrlError] = React.useState<string | null>(null);
 
     const loadAll = React.useCallback(async () => {
         setLoading(true);
@@ -1098,10 +1149,18 @@ export default function UsersAccessManager() {
     const handleSavePolicy = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!policyDraft) return;
+        const rawConsoleUrl = (policyDraft.externalIdentityConsoleUrl ?? '').trim();
+        if (rawConsoleUrl && !normalizeTrustedHttpsConsoleUrl(rawConsoleUrl)) {
+            setExternalConsoleUrlError(copy.externalConsoleUrlError);
+            setBanner({ severity: 'error', text: copy.externalConsoleUrlError });
+            return;
+        }
+        setExternalConsoleUrlError(null);
         setBanner(null);
         try {
             const saved = await adminUpdateSecurityPolicy({
                 ...policyDraft,
+                externalIdentityConsoleUrl: rawConsoleUrl ? normalizeTrustedHttpsConsoleUrl(rawConsoleUrl) ?? '' : '',
                 oidcClientSecret: oidcSecretDraft,
                 trustedTunnelSharedSecret: tunnelSecretDraft,
             });
@@ -1158,6 +1217,9 @@ export default function UsersAccessManager() {
 
     const isAdmin = Boolean(session?.isAdmin);
     const rpSupported = passkeyData ? passkeyData.rpIdSupported : Boolean(session?.rpIdSupported);
+    const validExternalConsoleUrl = normalizeTrustedHttpsConsoleUrl(
+        policyDraft?.externalIdentityConsoleUrl ?? overview?.policy?.externalIdentityConsoleUrl,
+    );
 
     return (
         <Stack spacing={2.5} sx={{ maxWidth: 1360, mx: 'auto', width: '100%' }}>
@@ -1421,6 +1483,19 @@ export default function UsersAccessManager() {
                                     </Typography>
                                 </Box>
                                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                                    {validExternalConsoleUrl && (
+                                        <Button
+                                            component="a"
+                                            href={validExternalConsoleUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            variant="outlined"
+                                            endIcon={<OpenInNewRoundedIcon fontSize="small" aria-hidden="true" />}
+                                            data-testid="open-external-sso-console-btn"
+                                        >
+                                            {copy.openExternalSsoConsoleBtn}
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="outlined"
                                         startIcon={<GroupAddRoundedIcon />}
@@ -1622,6 +1697,32 @@ export default function UsersAccessManager() {
                                 </Typography>
                             </Box>
 
+                            <Alert
+                                severity="info"
+                                data-testid="fed-token-how-to-use-card"
+                                action={
+                                    <Button
+                                        component={Link}
+                                        href={scopedHref('/servers?auth=bearer')}
+                                        color="inherit"
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<CloudRoundedIcon fontSize="small" />}
+                                        data-testid="open-servers-federation-btn"
+                                        sx={{ whiteSpace: 'nowrap' }}
+                                    >
+                                        {copy.openServersFedBtn}
+                                    </Button>
+                                }
+                            >
+                                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                                    {copy.fedWhereToUseTitle}
+                                </Typography>
+                                <Typography variant="body2">
+                                    {copy.fedWhereToUseBody}
+                                </Typography>
+                            </Alert>
+
                             <Card variant="outlined">
                                 <CardContent>
                                     <Box component="form" onSubmit={handleCreateFedToken}>
@@ -1698,6 +1799,19 @@ export default function UsersAccessManager() {
                                         {oneTimeFedToken.token}
                                     </Box>
                                     <Typography variant="body2">{copy.newFedTokenHint}</Typography>
+                                    <Box sx={{ mt: 1 }}>
+                                        <Button
+                                            component={Link}
+                                            href={scopedHref('/servers?auth=bearer')}
+                                            size="small"
+                                            variant="outlined"
+                                            color="inherit"
+                                            startIcon={<CloudRoundedIcon fontSize="small" />}
+                                            data-testid="new-fed-token-open-servers-btn"
+                                        >
+                                            {copy.openServersFedBtn}
+                                        </Button>
+                                    </Box>
                                 </Alert>
                             )}
 
@@ -1959,10 +2073,56 @@ export default function UsersAccessManager() {
                                                     label={copy.oidcOperatorGroupLabel}
                                                     value={policyDraft.oidcOperatorGroup}
                                                     onChange={(e) => setPolicyDraft({ ...policyDraft, oidcOperatorGroup: e.target.value })}
+                                                    inputProps={{ spellCheck: false, autoCorrect: 'off', autoCapitalize: 'none' }}
+                                                />
+                                            </Grid>
+                                            <Grid item xs={12}>
+                                                <TextField
+                                                    fullWidth
+                                                    size="small"
+                                                    label={copy.oidcTrustedCaPathLabel}
+                                                    placeholder="/opt/oscar/trusted_certificates"
+                                                    value={policyDraft.oidcTrustedCaCertificatePath ?? ''}
+                                                    onChange={(e) =>
+                                                        setPolicyDraft({ ...policyDraft, oidcTrustedCaCertificatePath: e.target.value })
+                                                    }
+                                                    inputProps={{
+                                                        spellCheck: false,
+                                                        autoCorrect: 'off',
+                                                        autoCapitalize: 'none',
+                                                        'data-testid': 'oidc-trusted-ca-path-input',
+                                                    }}
                                                 />
                                             </Grid>
                                         </Grid>
                                     )}
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label={copy.externalConsoleUrlLabel}
+                                        placeholder="https://auth.hub.example.org/if/admin/"
+                                        value={policyDraft.externalIdentityConsoleUrl ?? ''}
+                                        error={Boolean(externalConsoleUrlError)}
+                                        helperText={externalConsoleUrlError || copy.externalConsoleUrlHelper}
+                                        onChange={(e) => {
+                                            if (externalConsoleUrlError) {
+                                                setExternalConsoleUrlError(null);
+                                            }
+                                            setPolicyDraft({ ...policyDraft, externalIdentityConsoleUrl: e.target.value });
+                                        }}
+                                        onBlur={() => {
+                                            const raw = (policyDraft.externalIdentityConsoleUrl ?? '').trim();
+                                            if (raw && !normalizeTrustedHttpsConsoleUrl(raw)) {
+                                                setExternalConsoleUrlError(copy.externalConsoleUrlError);
+                                            }
+                                        }}
+                                        inputProps={{
+                                            spellCheck: false,
+                                            autoCorrect: 'off',
+                                            autoCapitalize: 'none',
+                                            'data-testid': 'external-sso-console-url-input',
+                                        }}
+                                    />
                                 </Stack>
 
                                 <Divider />
@@ -1986,16 +2146,32 @@ export default function UsersAccessManager() {
                                     />
                                     {policyDraft.trustedTunnelSsoEnabled && (
                                         <Grid container spacing={2}>
-                                            <Grid item xs={12} sm={6}>
+                                            <Grid item xs={12} sm={4}>
                                                 <TextField
                                                     fullWidth
                                                     size="small"
                                                     label={copy.tunnelHeaderLabel}
                                                     value={policyDraft.trustedTunnelUserHeader}
                                                     onChange={(e) => setPolicyDraft({ ...policyDraft, trustedTunnelUserHeader: e.target.value })}
+                                                    inputProps={{ spellCheck: false, autoCorrect: 'off', autoCapitalize: 'none' }}
                                                 />
                                             </Grid>
-                                            <Grid item xs={12} sm={6}>
+                                            <Grid item xs={12} sm={4}>
+                                                <TextField
+                                                    fullWidth
+                                                    size="small"
+                                                    label={copy.tunnelGroupsHeaderLabel}
+                                                    value={policyDraft.trustedTunnelGroupsHeader ?? 'X-Octelium-Groups'}
+                                                    onChange={(e) => setPolicyDraft({ ...policyDraft, trustedTunnelGroupsHeader: e.target.value })}
+                                                    inputProps={{
+                                                        spellCheck: false,
+                                                        autoCorrect: 'off',
+                                                        autoCapitalize: 'none',
+                                                        'data-testid': 'tunnel-groups-header-input',
+                                                    }}
+                                                />
+                                            </Grid>
+                                            <Grid item xs={12} sm={4}>
                                                 <TextField
                                                     fullWidth
                                                     size="small"

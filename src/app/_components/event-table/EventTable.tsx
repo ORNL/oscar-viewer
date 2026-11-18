@@ -57,6 +57,9 @@ import {
 import {
     buildUpSetCoOccurrenceFromEvents,
     computeEventUpSetMask,
+    isUpSetFilterValidForData,
+    matchesUpSetFilter,
+    UpSetFilterSelection,
 } from "@/lib/data/oscar/adjudication/IsotopeMapping";
 import UpSetPlot from "@/app/_components/common/UpSetPlot";
 import {useCustomAdjudicationCodes} from "@/app/hooks/useCustomAdjudicationCodes";
@@ -1896,7 +1899,7 @@ export default function EventTable({
     }, [enrichRowsWithVehicleId, isVehicleSearchMode, rows, vehiclePageRows]);
 
     const [upSetExpanded, setUpSetExpanded] = useState(false);
-    const [selectedUpSetMask, setSelectedUpSetMask] = useState<number | null>(null);
+    const [selectedUpSetFilter, setSelectedUpSetFilter] = useState<UpSetFilterSelection | null>(null);
     const [upSetRefreshNonce, setUpSetRefreshNonce] = useState(0);
     const [upSetFetchState, setUpSetFetchState] = useState<{
         loading: boolean;
@@ -1972,7 +1975,7 @@ export default function EventTable({
                 setVehicleSearchError(null);
             }
             setUpSetExpanded(false);
-            setSelectedUpSetMask(null);
+            setSelectedUpSetFilter(null);
             setUpSetFetchState({loading: false, error: false, events: [], totalAlarmCount: 0, capped: false});
             clearSelection();
             setFilterEpoch(previous => previous + 1);
@@ -2218,27 +2221,27 @@ export default function EventTable({
     const upSetSummaryLoading = isEventLog && upSetExpanded && (isVehicleSearchMode ? vehicleSearchLoading : upSetFetchState.loading);
 
     useEffect(() => {
-        if (selectedUpSetMask == null) return;
+        if (selectedUpSetFilter == null) return;
         if (!upSetExpanded) {
-            setSelectedUpSetMask(null);
+            setSelectedUpSetFilter(null);
             return;
         }
-        if (!upSetSummaryLoading && (!eventLogUpSetData || !eventLogUpSetData.intersections.some(col => col.mask === selectedUpSetMask))) {
-            setSelectedUpSetMask(null);
+        if (!upSetSummaryLoading && !isUpSetFilterValidForData(eventLogUpSetData, selectedUpSetFilter)) {
+            setSelectedUpSetFilter(null);
         }
-    }, [eventLogUpSetData, selectedUpSetMask, upSetExpanded, upSetSummaryLoading]);
+    }, [eventLogUpSetData, selectedUpSetFilter, upSetExpanded, upSetSummaryLoading]);
 
     const upSetMatchedRows = useMemo<EventTableData[]>(() => {
-        if (!isEventLog || !upSetExpanded || selectedUpSetMask == null) return [];
-        return upSetSourceEvents.filter(row => computeEventUpSetMask(row) === selectedUpSetMask);
-    }, [isEventLog, selectedUpSetMask, upSetExpanded, upSetSourceEvents]);
+        if (!isEventLog || !upSetExpanded || selectedUpSetFilter == null) return [];
+        return upSetSourceEvents.filter(row => matchesUpSetFilter(computeEventUpSetMask(row), selectedUpSetFilter));
+    }, [isEventLog, selectedUpSetFilter, upSetExpanded, upSetSourceEvents]);
 
     const effectiveDisplayRows = useMemo<EventTableData[]>(() => {
-        if (!isEventLog || !upSetExpanded || selectedUpSetMask == null) return displayRows;
+        if (!isEventLog || !upSetExpanded || selectedUpSetFilter == null) return displayRows;
         const startIdx = paginationModel.page * PAGE_SIZE;
         const sliced = upSetMatchedRows.slice(startIdx, startIdx + PAGE_SIZE);
         return isVehicleSearchMode ? sliced : enrichRowsWithVehicleId(sliced);
-    }, [displayRows, enrichRowsWithVehicleId, isEventLog, isVehicleSearchMode, paginationModel.page, selectedUpSetMask, upSetExpanded, upSetMatchedRows]);
+    }, [displayRows, enrichRowsWithVehicleId, isEventLog, isVehicleSearchMode, paginationModel.page, selectedUpSetFilter, upSetExpanded, upSetMatchedRows]);
 
     const renderCompactHeader = useCallback((label: string) => {
         const unitMatch = label.match(/^(.*?)\s*(\([^)]+\))$/);
@@ -2595,7 +2598,7 @@ export default function EventTable({
         return new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS[activeVehicleQuery.window]).toISOString();
     }, [activeVehicleQuery]);
 
-    const isUpSetMaskFiltered = isEventLog && upSetExpanded && selectedUpSetMask != null;
+    const isUpSetMaskFiltered = isEventLog && upSetExpanded && selectedUpSetFilter != null;
     const tableRowCount = isUpSetMaskFiltered
         ? upSetMatchedRows.length
         : (isVehicleSearchMode ? vehicleFilteredRows.length : effectiveRowCount);
@@ -2833,8 +2836,8 @@ export default function EventTable({
                             setUpSetFetchState(previous => ({...previous, loading: true, error: false}));
                         }
                         setUpSetExpanded(nextOpen);
-                        if (!nextOpen && selectedUpSetMask !== null) {
-                            setSelectedUpSetMask(null);
+                        if (!nextOpen && selectedUpSetFilter !== null) {
+                            setSelectedUpSetFilter(null);
                             setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
                         }
                     }}
@@ -2919,9 +2922,9 @@ export default function EventTable({
                                     )}
                                     <UpSetPlot
                                         data={eventLogUpSetData}
-                                        selectedMask={selectedUpSetMask}
-                                        onSelectIntersection={col => {
-                                            setSelectedUpSetMask(col?.mask ?? null);
+                                        selectedFilter={selectedUpSetFilter}
+                                        onSelectFilter={nextFilter => {
+                                            setSelectedUpSetFilter(nextFilter);
                                             setPaginationModel(previous => (
                                                 previous.page === 0 ? previous : {...previous, page: 0}
                                             ));

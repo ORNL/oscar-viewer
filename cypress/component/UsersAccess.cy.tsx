@@ -1,8 +1,13 @@
 import React from "react";
+import {configureStore} from "@reduxjs/toolkit";
+import {Provider} from "react-redux";
 import {LanguageProvider} from "../../src/app/contexts/LanguageContext";
 import UsersAccessManager from "../../src/app/_components/users/UsersAccessManager";
+import NodeForm from "../../src/app/_components/servers/NodeForm";
+import oshReducer from "../../src/lib/state/OSHSlice";
 import {
     extractFederationServiceUser,
+    normalizeTrustedHttpsConsoleUrl,
     parseBulkUserRoster,
 } from "../../src/lib/data/oscar/AuthSessionApi";
 
@@ -17,6 +22,15 @@ describe("Users, Passkeys & Access Control Console", () => {
         expect(extractFederationServiceUser("  oscar_fed_abc123def4_Secret99  ")).to.equal("svc-fed-abc123def4");
         expect(extractFederationServiceUser("not_a_fed_token")).to.equal(null);
         expect(extractFederationServiceUser("")).to.equal(null);
+
+        expect(normalizeTrustedHttpsConsoleUrl("https://auth.hub.example.org/if/admin/")).to.equal(
+            "https://auth.hub.example.org/if/admin/",
+        );
+        expect(normalizeTrustedHttpsConsoleUrl("http://auth.hub.example.org")).to.equal(null);
+        expect(normalizeTrustedHttpsConsoleUrl("javascript:alert(1)")).to.equal(null);
+        expect(normalizeTrustedHttpsConsoleUrl("data:text/html,<h1>x</h1>")).to.equal(null);
+        expect(normalizeTrustedHttpsConsoleUrl("https://user:pass@auth.hub.example.org")).to.equal(null);
+        expect(normalizeTrustedHttpsConsoleUrl("")).to.equal(null);
 
         const parsed = parseBulkUserRoster(
             "username,role,display_name,views\n" +
@@ -351,15 +365,73 @@ describe("Users, Passkeys & Access Control Console", () => {
 
         // Open Federation Tokens tab and mint a read-only National View token
         cy.contains('[role="tab"]', "Federation Tokens").click();
+        cy.get('[data-testid="fed-token-how-to-use-card"]').should("be.visible");
+        cy.get('[data-testid="open-servers-federation-btn"]')
+            .should("be.visible")
+            .and("have.attr", "href", "/servers?auth=bearer");
         cy.contains("label", "Remote Organization / Node Label").parent().find("input").type("Regional HQ National View");
         cy.contains("button", "Create Federation Token").click();
 
         cy.wait("@createFedToken");
         cy.contains("oscar_fed_9a8b7c6d5e_OneTimeRawFederationSecretValue").should("be.visible");
+        cy.get('[data-testid="new-fed-token-open-servers-btn"]')
+            .should("be.visible")
+            .and("have.attr", "href", "/servers?auth=bearer");
         cy.contains("Regional HQ National View").should("be.visible");
 
         // Open Backup & Hardware Recovery tab
         cy.contains('[role="tab"]', "Backup & Hardware Recovery").click();
         cy.contains("Download Emergency Recovery Checklist (.txt)").should("be.visible");
+
+        // Configure External SSO Console URL + OIDC Custom CA + Trusted Tunnel Groups Header and verify Users & Roles shortcut
+        cy.intercept({method: "PUT", pathname: "/sensorhub/session/admin/policy"}, (req) => {
+            req.reply({
+                statusCode: 200,
+                body: {
+                    ...req.body,
+                    effectiveRpId: "oscar.local",
+                    rpIdSupported: true,
+                    oidcHasClientSecret: false,
+                    trustedTunnelHasSharedSecret: false,
+                },
+            });
+        }).as("savePolicy");
+
+        cy.contains('[role="tab"]', "Sign-In & SSO Policy").click();
+        cy.get('[data-testid="external-sso-console-url-input"]').type("http://insecure.example.org").blur();
+        cy.contains("Enter a valid https:// URL").should("be.visible");
+        cy.get('[data-testid="external-sso-console-url-input"]').clear().type("https://auth.hub.example.org/if/admin/");
+        cy.contains("Enter a valid https:// URL").should("not.exist");
+        cy.contains("button", "Save Security Policy").click();
+        cy.wait("@savePolicy");
+
+        cy.contains('[role="tab"]', "Users & Roles").click();
+        cy.get('[data-testid="open-external-sso-console-btn"]')
+            .should("be.visible")
+            .and("have.attr", "href", "https://auth.hub.example.org/if/admin/")
+            .and("have.attr", "rel", "noopener noreferrer");
+    });
+
+    it("surfaces 1-click Federation Service Token setup on Servers (NodeForm) and auto-switches when pasting oscar_fed_", () => {
+        const store = configureStore({
+            reducer: {oshSlice: oshReducer},
+            middleware: (getDefault) => getDefault({serializableCheck: false}),
+        });
+
+        cy.mount(
+            <Provider store={store}>
+                <LanguageProvider>
+                    <NodeForm isEditNode={false} modeChangeCallback={() => {}} />
+                </LanguageProvider>
+            </Provider>,
+        );
+
+        cy.get('[data-testid="node-form-federation-guide"]').should("be.visible");
+        cy.get('[data-testid="switch-to-federation-token-btn"]').click();
+        cy.get('[data-testid="node-federation-token-input"]').should("be.visible");
+        cy.get('input[name="port"]').should("have.value", "443");
+        cy.get('input[name="isSecure"]').should("be.checked");
+        cy.get('[data-testid="node-federation-token-input"]').type("oscar_fed_9a8b7c6d5e_Secret");
+        cy.get('[data-testid="node-federation-token-input"]').should("have.value", "oscar_fed_9a8b7c6d5e_Secret");
     });
 });

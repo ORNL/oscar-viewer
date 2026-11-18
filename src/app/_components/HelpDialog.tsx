@@ -134,11 +134,11 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Users & Access (`/users`)',
-                summary: 'Self-service account management for registering offline FIDO2 / WebAuthn Passkeys (Face ID, Touch ID, Windows Hello, YubiKey) and changing local passwords, plus non-IT Administrator controls for Users & Roles (`Administrator`, `Operator`, `Viewer`), Bulk CSV/Paste User Enrollment with ready-to-send startup messages and 1-tap Passkey/Password setup QR codes (`/login/enroll?token=oscar_inv_...`), Operational View user scoping, phone-free temporary passwords, Federation Service Tokens (`oscar_fed_...`), Corporate OIDC / Trusted Tunnel SSO policy, and the Backup & Hardware Replacement checklist.',
+                summary: 'Self-service account management for registering offline FIDO2 / WebAuthn Passkeys (Face ID, Touch ID, Windows Hello, YubiKey) and changing local passwords (independent from Octelium Zero-Trust tunnel credentials), plus non-IT Administrator controls for Users & Roles (`Administrator`, `Operator`, `Viewer`), Bulk CSV/Paste User Enrollment with ready-to-send startup messages and 1-tap Passkey/Password setup QR codes (`/login/enroll?token=oscar_inv_...`), Operational View user scoping, phone-free temporary passwords, Federation Service Tokens (`oscar_fed_...`) with 1-click launch into `/servers?auth=bearer`, Corporate or Self-Hosted (`ORNL/oscar-federation-hub`) OIDC / Trusted Tunnel SSO policy (`X-Octelium-Groups`, optional private-CA PEM trust, and 1-click Open Federated User Console), and the Backup & Hardware Replacement checklist.',
             },
             {
-                title: 'Nodes (`/servers`)',
-                summary: 'Configure federated remote OSCAR nodes using interactive browser session cookies, scoped Federation Service Tokens (`oscar_fed_...`), or memory-only Basic credentials.',
+                title: 'Servers (`/servers`)',
+                summary: 'Connect federated remote OSCAR sites for National View (`/national-view`) and Multi-Pass Vehicle Search (`/event-log`): click "Use Federation Token (oscar_fed_...)" (or set Authentication Method to Federation Service Token), check HTTPS (port 443), and paste the `oscar_fed_...` token minted on the remote site under Users & Access -> Federation Tokens.',
             },
         ],
         reportsIntro: 'Every report request generates a fresh file and overwrites any earlier file with the same parameters:',
@@ -157,7 +157,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Adjudication Report (`ADJUDICATION`)',
-                summary: 'Starts with the summed All Selected Lanes (`ALL_LANES`) Disposition and Isotope Results tables across all selected lanes, followed by individual Disposition and Isotope Results tables for each lane.',
+                summary: 'Starts with the All Selected Lanes (`ALL_LANES`) UpSet Alarm & Source-Category Co-Occurrence chart (populated categories listed first and rare SNM intersections rolled into a crimson `Other SNM` bar summing to the exact SNM total) plus summed Disposition and Isotope Results tables, followed by per-lane breakdowns.',
             },
             {
                 title: 'Adjudication Details Extract (`ADJUDICATION_DETAILS`)',
@@ -249,7 +249,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Federation Service Tokens (`oscar_fed_...`)',
-                meaning: 'Scoped Bearer / MQTT credentials issued in Users & Access (`/users`) for multi-site National View and Multi-Pass Vehicle Search federation without sharing administrator passwords (`Viewer` read-only role or `Operator` adjudication role, optionally restricted to specific Operational Views).',
+                meaning: 'Scoped Bearer / MQTT credentials for multi-site National View (`/national-view`) and Multi-Pass Vehicle Search (`/event-log`) without sharing human passwords: 1) create the token on the remote target site in Users & Access (`/users`) -> Federation Tokens (`Viewer` read-only or `Operator` role); 2) paste it on the monitoring site in Servers (`/servers`) -> Add Server -> Authentication Method: Federation Service Token.',
             },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
@@ -307,11 +307,11 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Usuarios y acceso (`/users`)',
-                summary: 'Gestión de cuenta personal para registrar llaves de acceso FIDO2 / WebAuthn sin internet (Face ID, Touch ID, Windows Hello, YubiKey) y cambiar contraseñas locales, además de controles administrativos sencillos para Usuarios y roles (`Administrador`, `Operador`, `Visor`), alcance por Vista operativa, contraseñas temporales, tokens de servicio de federación (`oscar_fed_...`), directiva SSO OIDC / túnel de confianza y guía de copia de seguridad y reemplazo de hardware.',
+                summary: 'Gestión de cuenta personal para registrar llaves de acceso FIDO2 / WebAuthn sin internet (Face ID, Touch ID, Windows Hello, YubiKey) y cambiar contraseñas locales (independientes del túnel Octelium Zero-Trust), además de controles administrativos para Usuarios y roles (`Administrador`, `Operador`, `Visor`), inscripción masiva CSV/pegado con códigos QR (`/login/enroll?token=oscar_inv_...`), alcance por Vista operativa, tokens de federación (`oscar_fed_...`) con acceso en 1 clic a `/servers?auth=bearer`, directiva SSO OIDC / túnel (`ORNL/oscar-federation-hub`, `X-Octelium-Groups`, CA PEM privada y acceso directo a la consola externa) y guía de copia de seguridad.',
             },
             {
-                title: 'Nodos (`/servers`)',
-                summary: 'Configuración de nodos OSCAR remotos federados mediante sesión de navegador, tokens de servicio de federación (`oscar_fed_...`) o credenciales Basic en memoria.',
+                title: 'Servidores (`/servers`)',
+                summary: 'Conexión de sitios OSCAR remotos federados para Vista Nacional (`/national-view`) y Búsqueda multipasada (`/event-log`): pulse "Usar token de federación (oscar_fed_...)" (o elija Token de servicio de federación), active HTTPS (puerto 443) y pegue el token creado en el sitio remoto en Usuarios y acceso -> Tokens de federación.',
             },
         ],
         reportsIntro: 'Cada solicitud genera un archivo nuevo y sobrescribe cualquier archivo previo con los mismos parámetros:',
@@ -480,11 +480,11 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Utilisateurs et accès (`/users`)',
-                summary: 'Gestion du compte personnel pour enregistrer des clés d’accès FIDO2 / WebAuthn hors ligne (Face ID, Touch ID, Windows Hello, YubiKey) et modifier le mot de passe local, ainsi que les contrôles administrateur simples pour Utilisateurs et rôles (`Administrateur`, `Opérateur`, `Lecteur`), le périmètre par Vue opérationnelle, les mots de passe temporaires, les jetons de service de fédération (`oscar_fed_...`), la politique SSO OIDC / tunnel de confiance et le guide de sauvegarde et remplacement matériel.',
+                summary: 'Gestion du compte personnel pour enregistrer des clés d’accès FIDO2 / WebAuthn hors ligne (Face ID, Touch ID, Windows Hello, YubiKey) et modifier le mot de passe local (indépendant du tunnel Octelium Zero-Trust), ainsi que les contrôles administrateur pour Utilisateurs et rôles (`Administrateur`, `Opérateur`, `Lecteur`), l’inscription groupée CSV avec codes QR (`/login/enroll?token=oscar_inv_...`), le périmètre par Vue opérationnelle, les jetons de fédération (`oscar_fed_...`) avec lien direct vers `/servers?auth=bearer`, la politique SSO OIDC / tunnel (`ORNL/oscar-federation-hub`, `X-Octelium-Groups`, CA PEM privée et raccourci vers la console externe) et le guide de sauvegarde.',
             },
             {
-                title: 'Nœuds (`/servers`)',
-                summary: 'Configuration des nœuds OSCAR distants fédérés par session navigateur, jeton de service de fédération (`oscar_fed_...`) ou identifiants Basic en mémoire.',
+                title: 'Serveurs (`/servers`)',
+                summary: 'Connexion des sites OSCAR distants fédérés pour la Vue Nationale (`/national-view`) et la Recherche multipassage (`/event-log`) : cliquez sur « Utiliser un jeton de fédération (oscar_fed_...) », cochez HTTPS (port 443) et collez le jeton créé sur le site distant dans Utilisateurs et accès -> Jetons de fédération.',
             },
         ],
         reportsIntro: 'Chaque demande génère un nouveau fichier et remplace tout rapport antérieur portant les mêmes paramètres :',
@@ -653,11 +653,11 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Χρήστες & πρόσβαση (`/users`)',
-                summary: 'Αυτοδιαχείριση λογαριασμού για εγγραφή κλειδιών πρόσβασης FIDO2 / WebAuthn εκτός δικτύου (Face ID, Touch ID, Windows Hello, YubiKey) και αλλαγή τοπικού κωδικού, καθώς και απλοί έλεγχοι διαχειριστή για Χρήστες & ρόλους (`Διαχειριστής`, `Χειριστής`, `Θεατής`), ανάθεση Λειτουργικών προβολών, προσωρινούς κωδικούς, διακριτικά υπηρεσίας ομοσπονδίας (`oscar_fed_...`), πολιτική SSO OIDC / έμπιστης σήραγγας και οδηγό αντιγράφων ασφαλείας & αντικατάστασης υλικού.',
+                summary: 'Αυτοδιαχείριση λογαριασμού για εγγραφή κλειδιών πρόσβασης FIDO2 / WebAuthn εκτός δικτύου (Face ID, Touch ID, Windows Hello, YubiKey) και αλλαγή τοπικού κωδικού (ανεξάρτητου από τη σήραγγα Octelium Zero-Trust), καθώς και έλεγχοι διαχειριστή για Χρήστες & ρόλους (`Διαχειριστής`, `Χειριστής`, `Θεατής`), μαζική εγγραφή CSV με κωδικούς QR (`/login/enroll?token=oscar_inv_...`), ανάθεση Λειτουργικών προβολών, διακριτικά ομοσπονδίας (`oscar_fed_...`) με άνοιγμα 1 κλικ στο `/servers?auth=bearer`, πολιτική SSO OIDC / σήραγγας (`ORNL/oscar-federation-hub`, `X-Octelium-Groups`, ιδιωτική CA PEM και εξωτερική κονσόλα χρηστών) και οδηγό αντιγράφων ασφαλείας.',
             },
             {
-                title: 'Κόμβοι (`/servers`)',
-                summary: 'Διαμόρφωση απομακρυσμένων ομοσπονδιακών κόμβων OSCAR με συνεδρία περιηγητή, διακριτικά υπηρεσίας ομοσπονδίας (`oscar_fed_...`) ή διαπιστευτήρια Basic στη μνήμη.',
+                title: 'Διακομιστές (`/servers`)',
+                summary: 'Σύνδεση απομακρυσμένων ομόσπονδων κόμβων OSCAR για Εθνική Προβολή (`/national-view`) και Αναζήτηση πολλαπλών διελεύσεων (`/event-log`): πατήστε «Χρήση διακριτικού ομοσπονδίας (oscar_fed_...)», ενεργοποιήστε HTTPS (θύρα 443) και επικολλήστε το διακριτικό που εκδόθηκε στον απομακρυσμένο κόμβο στη σελίδα Χρήστες & πρόσβαση -> Διακριτικά ομοσπονδίας.',
             },
         ],
         reportsIntro: 'Κάθε αίτημα δημιουργεί νέο αρχείο και αντικαθιστά τυχόν προηγούμενο αρχείο με τις ίδιες παραμέτρους:',

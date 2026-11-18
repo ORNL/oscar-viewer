@@ -40,6 +40,9 @@ import UpSetPlot from "@/app/_components/common/UpSetPlot";
 import {
     buildUpSetCoOccurrenceFromVehiclePasses,
     computeVehiclePassUpSetMask,
+    isUpSetFilterValidForData,
+    matchesUpSetFilter,
+    UpSetFilterSelection,
 } from "@/lib/data/oscar/adjudication/IsotopeMapping";
 import {
     AdjudicationCode,
@@ -203,7 +206,7 @@ export default function VehiclePassComparisonDialog({
         format: ReportOutputFormat;
     } | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
-    const [selectedUpSetMask, setSelectedUpSetMask] = useState<number | null>(null);
+    const [selectedUpSetFilter, setSelectedUpSetFilter] = useState<UpSetFilterSelection | null>(null);
 
     const runSearch = useCallback(
         async (includeProfiles: boolean, signal?: AbortSignal) => {
@@ -255,10 +258,10 @@ export default function VehiclePassComparisonDialog({
             setBatchStatus(null);
             setExportedReport(null);
             setExportError(null);
-            setSelectedUpSetMask(null);
+            setSelectedUpSetFilter(null);
             return;
         }
-        setSelectedUpSetMask(null);
+        setSelectedUpSetFilter(null);
 
         const normTarget = normalizeVehicleId(vehicleId);
         if (
@@ -384,11 +387,11 @@ export default function VehiclePassComparisonDialog({
     );
 
     useEffect(() => {
-        if (selectedUpSetMask === null || loading) return;
-        if (!vehicleUpSetData.intersections.some(col => col.mask === selectedUpSetMask)) {
-            setSelectedUpSetMask(null);
+        if (selectedUpSetFilter === null || loading) return;
+        if (!isUpSetFilterValidForData(vehicleUpSetData, selectedUpSetFilter)) {
+            setSelectedUpSetFilter(null);
         }
-    }, [loading, selectedUpSetMask, vehicleUpSetData]);
+    }, [loading, selectedUpSetFilter, vehicleUpSetData]);
 
     const displayedPassEntries = useMemo(
         () =>
@@ -396,10 +399,10 @@ export default function VehiclePassComparisonDialog({
                 .map((pass, idx) => ({pass, idx}))
                 .filter(
                     ({pass}) =>
-                        selectedUpSetMask === null
-                        || computeVehiclePassUpSetMask(pass) === selectedUpSetMask,
+                        selectedUpSetFilter === null
+                        || matchesUpSetFilter(computeVehiclePassUpSetMask(pass), selectedUpSetFilter),
                 ),
-        [passes, selectedUpSetMask],
+        [passes, selectedUpSetFilter],
     );
 
     const openAlarmPasses = useMemo(
@@ -775,8 +778,8 @@ export default function VehiclePassComparisonDialog({
                         <UpSetPlot
                             data={vehicleUpSetData}
                             title={t("vehicleHistoryUpSetTitle")}
-                            selectedMask={selectedUpSetMask}
-                            onSelectIntersection={col => setSelectedUpSetMask(col?.mask ?? null)}
+                            selectedFilter={selectedUpSetFilter}
+                            onSelectFilter={setSelectedUpSetFilter}
                             testId="vehicle-history-upset-plot"
                         />
                     )}

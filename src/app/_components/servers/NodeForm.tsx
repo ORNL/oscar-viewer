@@ -4,6 +4,7 @@
  */
 
 import {
+    Alert,
     Box,
     Button,
     Card,
@@ -21,6 +22,7 @@ import {
     TextField,
     Typography
 } from "@mui/material";
+import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
 import React, {useEffect, useState} from "react";
 import {addNode, selectNodes, updateNode} from "@/lib/state/OSHSlice";
 import {INode, Node, NodeAuthenticationMode, NodeOptions} from "@/lib/data/osh/Node";
@@ -61,23 +63,65 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
         if (isEditNode && editNode) {
             setNewNode(editNode);
         } else {
-            const node = new Node(newNodeOpts);
+            const wantsBearer =
+                typeof window !== "undefined"
+                && new URLSearchParams(window.location.search).get("auth") === "bearer";
+            const node = new Node(
+                wantsBearer
+                    ? {
+                          ...newNodeOpts,
+                          address: "",
+                          port: 443,
+                          authenticationMode: "bearer",
+                          isSecure: true,
+                      }
+                    : newNodeOpts,
+            );
             setNewNode(node);
         }
     }, [isEditNode, editNode]);
+
+    const activateFederationTokenMode = () => {
+        const nextPort = newNode.port === 8282 || newNode.port === 80 ? 443 : newNode.port;
+        const nextAddress = newNode.address === "localhost" ? "" : newNode.address;
+        const tNode = new Node({
+            ...newNode,
+            id: newNode.id,
+            address: nextAddress,
+            port: nextPort,
+            isSecure: true,
+            authenticationMode: "bearer",
+            auth: {...newNode.auth},
+        });
+        setNewNode(tNode);
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const {name, value, checked} = e.target;
 
         let tNode = new Node({...newNode, id: newNode.id, auth: {...newNode.auth}});
-        if (name === "username") {
-            tNode.auth.username = value;
-        } else if (name === "password") {
-            tNode.auth.password = value;
+        if (name === "username" || name === "password") {
+            if (value.trim().startsWith("oscar_fed_")) {
+                tNode.authenticationMode = "bearer";
+                tNode.auth.token = value.trim();
+                tNode.isSecure = true;
+                if (tNode.port === 8282 || tNode.port === 80) {
+                    tNode.port = 443;
+                }
+            } else if (name === "username") {
+                tNode.auth.username = value;
+            } else {
+                tNode.auth.password = value;
+            }
         } else if (name === "token") {
             tNode.auth.token = value;
         } else if (name === "isSecure") {
             tNode.isSecure = checked;
+            if (checked && (tNode.port === 8282 || tNode.port === 80)) {
+                tNode.port = 443;
+            } else if (!checked && tNode.port === 443) {
+                tNode.port = 8282;
+            }
         } else if (name === "port") {
             tNode.port = Number.parseInt(value) || (tNode.isSecure ? 443 : 80);
         } else if (name === 'address'){
@@ -94,9 +138,13 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
 
     const handleAuthModeChange = (e: SelectChangeEvent<string>) => {
         const nextMode = e.target.value as NodeAuthenticationMode;
+        const shouldDefaultHttps = nextMode === "bearer" && !newNode.isSecure && (newNode.port === 8282 || newNode.port === 80);
         const tNode = new Node({
             ...newNode,
             id: newNode.id,
+            isSecure: shouldDefaultHttps ? true : newNode.isSecure,
+            port: shouldDefaultHttps ? 443 : newNode.port,
+            address: nextMode === "bearer" && newNode.address === "localhost" ? "" : newNode.address,
             authenticationMode: nextMode,
             auth: {...newNode.auth},
         });
@@ -280,6 +328,33 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
                         onChange={handleChange}
                     />
 
+                    {newNode.authenticationMode === "bearer" ? (
+                        <Alert severity="info" data-testid="node-form-federation-guide">
+                            {t('nodeFederationActiveHint')}
+                        </Alert>
+                    ) : (
+                        <Alert
+                            severity="info"
+                            data-testid="node-form-federation-guide"
+                            action={
+                                <Button
+                                    type="button"
+                                    color="inherit"
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={<VpnKeyRoundedIcon fontSize="small" />}
+                                    data-testid="switch-to-federation-token-btn"
+                                    onClick={activateFederationTokenMode}
+                                    sx={{whiteSpace: "nowrap"}}
+                                >
+                                    {t('useFederationTokenQuickBtn')}
+                                </Button>
+                            }
+                        >
+                            {t('nodeFederationPrompt')}
+                        </Alert>
+                    )}
+
                     <FormControl fullWidth>
                         <InputLabel id="node-auth-mode-label">{t('nodeAuthMethod')}</InputLabel>
                         <Select
@@ -287,6 +362,7 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
                             label={t('nodeAuthMethod')}
                             value={newNode.authenticationMode}
                             onChange={handleAuthModeChange}
+                            data-testid="node-auth-mode-select"
                         >
                             <MenuItem value="session">{t('nodeAuthSession')}</MenuItem>
                             <MenuItem value="bearer">{t('nodeAuthFederationToken')}</MenuItem>
@@ -308,6 +384,7 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
                                     spellCheck: false,
                                     autoCorrect: "off",
                                     autoCapitalize: "none",
+                                    "data-testid": "node-federation-token-input",
                                 }}
                             />
                             <Button

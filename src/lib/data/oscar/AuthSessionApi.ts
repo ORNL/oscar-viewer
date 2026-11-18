@@ -92,8 +92,11 @@ export interface SecurityPolicySummary {
     oidcAdminGroup: string;
     oidcOperatorGroup: string;
     oidcDefaultRole: string;
+    oidcTrustedCaCertificatePath?: string;
+    externalIdentityConsoleUrl?: string;
     trustedTunnelSsoEnabled: boolean;
     trustedTunnelUserHeader: string;
+    trustedTunnelGroupsHeader?: string;
     trustedTunnelHasSharedSecret: boolean;
     trustedTunnelAutoProvisionViewer: boolean;
 }
@@ -550,6 +553,37 @@ export function extractFederationServiceUser(rawToken: string): string | null {
     const trimmed = rawToken.trim();
     const match = /^oscar_fed_([0-9a-f]{8,24})_[A-Za-z0-9_-]+$/.exec(trimmed);
     return match ? `svc-fed-${match[1]}` : null;
+}
+
+/**
+ * Validates and normalizes an optional HTTPS external SSO user-management console URL
+ * using structured Origin / URL parsing (rejecting opaque "null" origins, non-HTTPS
+ * schemes such as http:/javascript:/data:, and embedded URL credentials).
+ */
+export function normalizeTrustedHttpsConsoleUrl(rawUrl?: string | null): string | null {
+    const trimmed = (rawUrl ?? '').trim();
+    if (!trimmed) return null;
+    try {
+        if ('Origin' in globalThis) {
+            const parsedOrigin = (globalThis as any).Origin.from(trimmed);
+            if (!parsedOrigin || parsedOrigin.opaque === true) {
+                return null;
+            }
+        }
+        const parsed = new URL(trimmed);
+        if (
+            parsed.origin === 'null'
+            || parsed.protocol !== 'https:'
+            || !parsed.hostname
+            || parsed.username !== ''
+            || parsed.password !== ''
+        ) {
+            return null;
+        }
+        return parsed.toString();
+    } catch {
+        return null;
+    }
 }
 
 const ROLE_ALIASES: Record<string, OscarRoleId> = {

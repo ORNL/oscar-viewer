@@ -6,7 +6,7 @@
 import {useSelector} from "react-redux";
 import {removeNode, selectNodes, setNodes} from "@/lib/state/OSHSlice";
 import {RootState} from "@/lib/state/Store";
-import {Box, Button, Card, Snackbar, SnackbarCloseReason, Typography} from "@mui/material";
+import {Box, Button, Card, Chip, Snackbar, SnackbarCloseReason, Stack, Typography} from "@mui/material";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
@@ -79,7 +79,22 @@ export default function NodeList({modeChangeCallback}: NodeListProps) {
                         <Card key={node.id || (node.address + node.port)} sx={{backgroundColor: getBGColor(node.isDefaultNode)}}>
                             <ListItem sx={{m: 0}}>
                                 <ListItemText
-                                    primary={node.name}
+                                    primary={
+                                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                                            <span>{node.name}</span>
+                                            <Chip
+                                                size="small"
+                                                variant="outlined"
+                                                label={
+                                                    node.authenticationMode === "bearer"
+                                                        ? t('nodeAuthBadgeFederation')
+                                                        : node.authenticationMode === "basic"
+                                                            ? t('nodeAuthBadgeBasic')
+                                                            : t('nodeAuthBadgeSession')
+                                                }
+                                            />
+                                        </Stack>
+                                    }
                                     secondary={
                                         node.serverNodeUid
                                             ? `${node.address}:${node.port} • ${node.serverNodeUid}`
