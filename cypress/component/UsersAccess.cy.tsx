@@ -433,5 +433,11 @@ describe("Users, Passkeys & Access Control Console", () => {
         cy.get('input[name="isSecure"]').should("be.checked");
         cy.get('[data-testid="node-federation-token-input"]').type("oscar_fed_9a8b7c6d5e_Secret");
         cy.get('[data-testid="node-federation-token-input"]').should("have.value", "oscar_fed_9a8b7c6d5e_Secret");
+
+        // Pasting a full https:// URL into Address normalizes to hostname + HTTPS 443 on blur
+        cy.get('input[name="address"]').clear().type("https://west-gate.hub.example.org/sensorhub").blur();
+        cy.get('input[name="address"]').should("have.value", "west-gate.hub.example.org");
+        cy.get('input[name="port"]').should("have.value", "443");
+        cy.get('input[name="isSecure"]').should("be.checked");
     });
 });

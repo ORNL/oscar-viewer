@@ -259,5 +259,8 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
         cy.get('[data-testid="help-catalog-watch-19"]').should("be.visible").click();
         cy.get('[data-testid="help-video-element"] source')
             .should("have.attr", "src", "/video-guides/videos/19-viewer-users-passkeys-and-access.mp4");
+        cy.get('[data-testid="help-catalog-watch-20"]').should("be.visible").click();
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/20-multi-node-federation-vehicle-search-and-report.mp4");
     });
 });

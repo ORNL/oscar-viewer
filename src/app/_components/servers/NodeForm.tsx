@@ -30,6 +30,43 @@ import {useAppDispatch} from "@/lib/state/Hooks";
 import {useSelector} from "react-redux";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 
+export function normalizeNodeAddressInput(
+    rawAddress: string,
+    currentPort: number,
+    currentSecure: boolean,
+): { address: string; port: number; isSecure: boolean } {
+    const trimmed = (rawAddress || "").trim();
+    if (!trimmed) {
+        return { address: "", port: currentPort, isSecure: currentSecure };
+    }
+    if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            const parsed = new URL(trimmed);
+            if (parsed.hostname) {
+                const isHttps = parsed.protocol.toLowerCase() === "https:";
+                const explicitPort = parsed.port ? Number.parseInt(parsed.port, 10) : 0;
+                const nextPort = explicitPort > 0
+                    ? explicitPort
+                    : (isHttps ? (currentPort === 8282 || currentPort === 80 ? 443 : currentPort) : currentPort);
+                return {
+                    address: parsed.hostname,
+                    port: nextPort,
+                    isSecure: isHttps || currentSecure,
+                };
+            }
+        } catch {
+            // Fall through to lightweight stripping when URL is still incomplete
+        }
+    }
+    const withoutScheme = trimmed.replace(/^https?:\/\//i, "");
+    const hostPort = withoutScheme.split("/")[0] || "";
+    return {
+        address: hostPort.trim(),
+        port: currentPort,
+        isSecure: /^https:\/\//i.test(trimmed) ? true : currentSecure,
+    };
+}
+
 
 export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
     isEditNode: boolean,
@@ -200,9 +237,38 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
         }
     }
 
-    const handleAddSave = async(e: React.FormEvent)=> {
+    const handleAddressBlur = () => {
+        const normalized = normalizeNodeAddressInput(newNode.address, newNode.port, newNode.isSecure);
+        if (
+            normalized.address !== newNode.address
+            || normalized.port !== newNode.port
+            || normalized.isSecure !== newNode.isSecure
+        ) {
+            setNewNode(new Node({
+                ...newNode,
+                id: newNode.id,
+                address: normalized.address,
+                port: normalized.port,
+                isSecure: normalized.isSecure,
+                auth: {...newNode.auth},
+            }));
+        }
+    };
 
-        let reachable = await checkReachable(newNode)
+    const handleAddSave = async(e: React.FormEvent)=> {
+        e.preventDefault();
+        const normalized = normalizeNodeAddressInput(newNode.address, newNode.port, newNode.isSecure);
+        const candidateNode = new Node({
+            ...newNode,
+            id: newNode.id,
+            address: normalized.address,
+            port: normalized.port,
+            isSecure: normalized.isSecure,
+            auth: {...newNode.auth},
+        });
+        setNewNode(candidateNode);
+
+        let reachable = await checkReachable(candidateNode)
         setOpenSnack(true)
 
         if(!reachable){
@@ -216,7 +282,7 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
         setColorStatus('success')
         setOpenSnack(true);
 
-        const nodeToSave = new Node({...newNode, id: newNode.id, auth: {...newNode.auth}});
+        const nodeToSave = new Node({...candidateNode, id: candidateNode.id, auth: {...candidateNode.auth}});
         if (nodeToSave.authenticationMode === "session")
             nodeToSave.clearRuntimeCredentials();
 
@@ -315,17 +381,44 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
                 }
             </Typography>
 
-            <Box component="form" sx={{margin: 2}}>
+            <Box component="form" onSubmit={handleAddSave} sx={{margin: 2}}>
                 <Stack spacing={3}>
                     {isEditNode ? <Typography variant={"h6"}>{t('editingNode', {id: editNode.id})}</Typography> : null}
                     <TextField label={t('name')} name="name" value={newNode.name} onChange={handleChange}/>
-                    <TextField label={t('address')} name="address" value={newNode.address} onChange={handleChange}/>
-                    <TextField label={t('port')} name="port" value={newNode.port} onChange={handleChange}/>
+                    <TextField
+                        label={t('address')}
+                        name="address"
+                        value={newNode.address}
+                        onChange={handleChange}
+                        onBlur={handleAddressBlur}
+                        inputProps={{
+                            spellCheck: false,
+                            autoCorrect: "off",
+                            autoCapitalize: "none",
+                        }}
+                    />
+                    <TextField
+                        label={t('port')}
+                        name="port"
+                        value={newNode.port}
+                        onChange={handleChange}
+                        inputProps={{
+                            inputMode: "numeric",
+                            spellCheck: false,
+                            autoCorrect: "off",
+                            autoCapitalize: "none",
+                        }}
+                    />
                     <TextField
                         label={t('csApiEndpoint')}
                         name="csAPIEndpoint"
                         value={newNode.csAPIEndpoint}
                         onChange={handleChange}
+                        inputProps={{
+                            spellCheck: false,
+                            autoCorrect: "off",
+                            autoCapitalize: "none",
+                        }}
                     />
 
                     {newNode.authenticationMode === "bearer" ? (
@@ -443,9 +536,10 @@ export default function NodeForm({isEditNode, modeChangeCallback, editNode}: {
                     </Typography>
 
                     <Stack direction="row" spacing={2}>
-                        <Button variant={"contained"} color={"primary"}
-                                onClick={handleAddSave}>{isEditNode ? t('saveChanges') : t('addNode')}</Button>
-                        <Button variant={"outlined"} color={"secondary"}
+                        <Button type="submit" variant={"contained"} color={"primary"}>
+                            {isEditNode ? t('saveChanges') : t('addNode')}
+                        </Button>
+                        <Button type="button" variant={"outlined"} color={"secondary"}
                                 onClick={() => modeChangeCallback(false, null)}>{t('cancel')}</Button>
                     </Stack>
 

@@ -32,6 +32,7 @@ import {
     sendCommand
 } from "@/lib/data/oscar/OSCARCommands";
 import {
+    buildNodeBucketBaseUrl,
     buildVehicleIncidentReportSpec,
     normalizeVehicleId,
     searchVehiclePassesAcrossNodes,
@@ -174,6 +175,7 @@ function parseCsvPreview(text: string): ExtractPreviewTable {
     const passNumIdx = findIdx("Pass #");
     const alarmStatusIdx = findIdx("Alarm Status");
     if (passNumIdx >= 0 && alarmStatusIdx >= 0) {
+        const nodeNameIdx = findIdx("Node Name");
         const nodeIdx = findIdx("Node ID");
         const sysTypeIdx = findIdx("System Type");
         const startUtcIdx = findIdx("Start Time (UTC)");
@@ -194,18 +196,21 @@ function parseCsvPreview(text: string): ExtractPreviewTable {
                 "Isotopes",
                 "Disposition",
             ],
-            rows: dataRows.map((r, idx) => [
-                `#${r[passNumIdx] || idx + 1}`,
-                `${nodeIdx >= 0 && r[nodeIdx] ? `${r[nodeIdx]} · ` : ""}${r[laneIdx] || "Lane"}${sysTypeIdx >= 0 && r[sysTypeIdx] ? ` (${r[sysTypeIdx]})` : ""}`,
-                startUtcIdx >= 0 ? (r[startUtcIdx] ?? "") : "",
-                vehIdIdx >= 0 ? (r[vehIdIdx] ?? "") : "",
-                r[alarmStatusIdx] ?? "",
-                `${maxGammaIdx >= 0 ? (r[maxGammaIdx] ?? "0") : "0"} / ${maxNeutronIdx >= 0 ? (r[maxNeutronIdx] ?? "0") : "0"}`,
-                confIsoIdx >= 0 ? (r[confIsoIdx] ?? "") : "",
-                latestDispCodeIdx >= 0 && r[latestDispCodeIdx]
-                    ? `${r[latestDispCodeIdx]}: ${latestDispLblIdx >= 0 ? (r[latestDispLblIdx] ?? "") : ""}`
-                    : (latestDispLblIdx >= 0 ? (r[latestDispLblIdx] ?? "") : ""),
-            ]),
+            rows: dataRows.map((r, idx) => {
+                const csvNodeLabel = (nodeNameIdx >= 0 && r[nodeNameIdx]) ? r[nodeNameIdx] : (nodeIdx >= 0 ? r[nodeIdx] : "");
+                return [
+                    `#${r[passNumIdx] || idx + 1}`,
+                    `${csvNodeLabel ? `${csvNodeLabel} · ` : ""}${r[laneIdx] || "Lane"}${sysTypeIdx >= 0 && r[sysTypeIdx] ? ` (${r[sysTypeIdx]})` : ""}`,
+                    startUtcIdx >= 0 ? (r[startUtcIdx] ?? "") : "",
+                    vehIdIdx >= 0 ? (r[vehIdIdx] ?? "") : "",
+                    r[alarmStatusIdx] ?? "",
+                    `${maxGammaIdx >= 0 ? (r[maxGammaIdx] ?? "0") : "0"} / ${maxNeutronIdx >= 0 ? (r[maxNeutronIdx] ?? "0") : "0"}`,
+                    confIsoIdx >= 0 ? (r[confIsoIdx] ?? "") : "",
+                    latestDispCodeIdx >= 0 && r[latestDispCodeIdx]
+                        ? `${r[latestDispCodeIdx]}: ${latestDispLblIdx >= 0 ? (r[latestDispLblIdx] ?? "") : ""}`
+                        : (latestDispLblIdx >= 0 ? (r[latestDispLblIdx] ?? "") : ""),
+                ];
+            }),
             totalRows,
         };
     }
@@ -263,9 +268,14 @@ function parseJsonPreview(text: string): ExtractPreviewTable {
                 const latestAdj = Array.isArray(pass?.adjudications) && pass.adjudications.length > 0
                     ? pass.adjudications[pass.adjudications.length - 1]
                     : null;
+                const nodeLabel = String(pass?.nodeName || pass?.nodeId || "").trim();
+                const rawLaneLabel = String(pass?.laneName || pass?.laneUid || "Lane").trim();
+                const displayNodeLane = nodeLabel && !rawLaneLabel.startsWith(`${nodeLabel} - `)
+                    ? `${nodeLabel} · ${rawLaneLabel}`
+                    : rawLaneLabel;
                 return [
                     `#${idx + 1}`,
-                    `${pass?.nodeId ? `${pass.nodeId} · ` : ""}${pass?.laneName || pass?.laneUid || "Lane"}${pass?.systemType ? ` (${pass.systemType})` : ""}`,
+                    `${displayNodeLane}${pass?.systemType ? ` (${pass.systemType})` : ""}`,
                     String(pass?.startTime ?? ""),
                     String(pass?.vehicleId ?? ""),
                     String(pass?.alarmStatusLabel ?? ""),
@@ -697,8 +707,8 @@ export default function ReportGeneratorView() {
             );
 
             const buildBucketReportUrl = (reportPath: string) => {
-                const isTls = nodeSnapshot.isSecure ? "https://" : "http://";
-                return `${isTls}${nodeSnapshot.address}:${nodeSnapshot.port}${nodeSnapshot.oshPathRoot}/buckets/${reportPath}`;
+                const cleanPath = String(reportPath || "").replace(/^\/+/, "");
+                return `${buildNodeBucketBaseUrl(nodeSnapshot)}/${cleanPath}`;
             };
 
             if (response.status === 200) {
