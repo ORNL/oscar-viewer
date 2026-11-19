@@ -50,7 +50,7 @@ import {
 } from '@mui/material';
 import Link from 'next/link';
 import {Download, InsertChart, VolumeDown, VolumeUp} from "@mui/icons-material";
-import AlarmAudio from "@/app/_components/AlarmAudio";
+import AlarmAudio, { applyAlarmAudioVolume } from "@/app/_components/AlarmAudio";
 import {
     selectAlarmAudioVolume,
     selectContinuousAlarmAudio,
@@ -345,6 +345,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const handleVolumeChange = (event: Event, newValue: number | number[]) => {
         const volume = newValue as number;
         setVolumeValue(volume);
+        applyAlarmAudioVolume(volume);
         dispatch(setAlarmAudioVolume(volume));
     };
 

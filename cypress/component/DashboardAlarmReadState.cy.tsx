@@ -12,6 +12,7 @@ import eventDataReducer, {
     setDashboardUnreadAlarmCount,
 } from "../../src/lib/state/EventDataSlice";
 import oscarClientReducer, {
+    setAlarmAudioVolume,
     setContinuousAlarmAudio,
 } from "../../src/lib/state/OSCARClientSlice";
 import eventPreviewReducer from "../../src/lib/state/EventPreviewSlice";
@@ -627,6 +628,96 @@ describe("Site-shared per-lane Dashboard alarm read state and latching audio", (
         });
         cy.wrap(null).should(() => {
             expect(fakeAudio.loop).to.equal(false);
+            expect(isPaused).to.equal(true);
+        });
+    });
+
+    it("updates active one-shot alarm playback volume immediately and mutes/pauses when dragged to 0 (#49)", () => {
+        const store = configureStore({
+            reducer: {
+                eventLogSlice: eventDataReducer,
+                oscarClientSlice: oscarClientReducer,
+            },
+        });
+
+        const fakeAudio = getAlarmAudio();
+        let isPaused = true;
+        Object.defineProperty(fakeAudio, "paused", {
+            configurable: true,
+            get: () => isPaused,
+        });
+        cy.stub(fakeAudio, "play").callsFake(async () => {
+            isPaused = false;
+        });
+        cy.stub(fakeAudio, "pause").callsFake(() => {
+            isPaused = true;
+        });
+
+        store.dispatch(setContinuousAlarmAudio(false));
+        store.dispatch(setAlarmAudioVolume(60));
+
+        cy.mount(
+            <Provider store={store as any}>
+                <LanguageProvider>
+                    <div>
+                        <button type="button" data-testid="gesture-unlock-oneshot">Unlock</button>
+                        <AlarmAudio />
+                    </div>
+                </LanguageProvider>
+            </Provider>,
+        );
+
+        cy.get('[data-testid="gesture-unlock-oneshot"]').click();
+        cy.then(() => {
+            expect(isPaused).to.equal(true);
+            expect(fakeAudio.muted).to.equal(false);
+            expect(fakeAudio.volume).to.be.closeTo(0.6, 0.001);
+            // Trigger one-shot alarm; triggerAlarm resets to false immediately while clip continues playing.
+            store.dispatch(setAlarmTrigger(true));
+        });
+
+        cy.wrap(null).should(() => {
+            expect(isPaused).to.equal(false);
+            expect(store.getState().eventLogSlice.triggerAlarm).to.equal(false);
+            expect(fakeAudio.volume).to.be.closeTo(0.6, 0.001);
+        });
+
+        // Adjust volume mid-playback (60 -> 25 -> 85): takes effect immediately without waiting for next trigger.
+        cy.then(() => {
+            store.dispatch(setAlarmAudioVolume(25));
+        });
+        cy.wrap(null).should(() => {
+            expect(isPaused).to.equal(false);
+            expect(fakeAudio.muted).to.equal(false);
+            expect(fakeAudio.volume).to.be.closeTo(0.25, 0.001);
+        });
+
+        cy.then(() => {
+            store.dispatch(setAlarmAudioVolume(85));
+        });
+        cy.wrap(null).should(() => {
+            expect(isPaused).to.equal(false);
+            expect(fakeAudio.muted).to.equal(false);
+            expect(fakeAudio.volume).to.be.closeTo(0.85, 0.001);
+        });
+
+        // Dragging slider to 0 (mute) mid-playback immediately mutes and stops the playing clip.
+        cy.then(() => {
+            store.dispatch(setAlarmAudioVolume(0));
+        });
+        cy.wrap(null).should(() => {
+            expect(fakeAudio.volume).to.equal(0);
+            expect(fakeAudio.muted).to.equal(true);
+            expect(isPaused).to.equal(true);
+        });
+
+        // Restoring volume above 0 unmutes for future alarms without resuming the already-stopped one-shot clip.
+        cy.then(() => {
+            store.dispatch(setAlarmAudioVolume(40));
+        });
+        cy.wrap(null).should(() => {
+            expect(fakeAudio.volume).to.be.closeTo(0.4, 0.001);
+            expect(fakeAudio.muted).to.equal(false);
             expect(isPaused).to.equal(true);
         });
     });
