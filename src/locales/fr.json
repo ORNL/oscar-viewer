@@ -689,6 +689,7 @@
   "savedQueryCustomLabel": "Requête filtrée",
   "savedQueriesEmptyHint": "Appliquez un filtre ou une recherche d'ID véhicule pour enregistrer un favori.",
   "usersAndAccess": "Utilisateurs et accès",
+  "usbBackups": "Sauvegardes USB",
   "roleViewerBadge": "Lecture seule",
   "operationalViewUnauthorized": "Votre compte n’est pas autorisé pour la Vue opérationnelle « {view} ». Sélectionnez une vue assignée ou contactez un administrateur.",
   "nodeAuthMethod": "Méthode d’authentification",

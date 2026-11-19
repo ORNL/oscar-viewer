@@ -23,6 +23,7 @@ import WarningRoundedIcon from '@mui/icons-material/WarningRounded';
 import LocationOnRoundedIcon from '@mui/icons-material/LocationOnRounded';
 import CloudRoundedIcon from '@mui/icons-material/CloudRounded';
 import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded';
+import UsbRoundedIcon from '@mui/icons-material/UsbRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -392,6 +393,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             icon: <ManageAccountsRoundedIcon/>,
             href: "/users",
         },
+        ...(currentSession?.isAdmin !== false
+            ? [{
+                title: t('usbBackups'),
+                icon: <UsbRoundedIcon/>,
+                href: "/usb-backups",
+            }]
+            : []),
         {
             title: t('servers'),
             icon: <CloudRoundedIcon/>,

@@ -2270,7 +2270,7 @@ export default function UsersAccessManager() {
                                 </Grid>
                             </Grid>
 
-                            <Box>
+                            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
                                 <Button
                                     variant="contained"
                                     startIcon={<DownloadRoundedIcon />}
@@ -2278,7 +2278,15 @@ export default function UsersAccessManager() {
                                 >
                                     {copy.downloadChecklistBtn}
                                 </Button>
-                            </Box>
+                                <Button
+                                    component={Link}
+                                    href="/usb-backups"
+                                    variant="outlined"
+                                    startIcon={<OpenInNewRoundedIcon />}
+                                >
+                                    USB NVMe Backups
+                                </Button>
+                            </Stack>
                         </Stack>
                     )}
                 </Box>
