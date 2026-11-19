@@ -251,6 +251,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Federation Service Tokens (`oscar_fed_...`)',
                 meaning: 'Scoped Bearer / MQTT credentials for multi-site National View (`/national-view`) and Multi-Pass Vehicle Search (`/event-log`) without sharing human passwords: 1) create the token on the remote target site in Users & Access (`/users`) -> Federation Tokens (`Viewer` read-only or `Operator` role); 2) paste it on the monitoring site in Servers (`/servers`) -> Add Server -> Authentication Method: Federation Service Token.',
             },
+            {
+                term: 'Pluggable Runtime Extensions & Regional Packs (`/extensions`)',
+                meaning: 'Upgrade-safe administrator hub for hot-swapping regional OCR model/plate-rule packs (`OcrEngine` SPI or ONNX `.zip`), offline regional `.pmtiles` vector/raster basemaps (`/var/lib/oscar/archive/maps/`), secondary-inspection spectroscopy isotope libraries, trusted enterprise X.509 CA certificates, disposition policy packs, and EML plugins without overwriting OSCAR’s shipped built-in defaults.',
+            },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
         adminLinkLabel: 'Open SensorHub Admin & In-UI Operator Manual (`/sensorhub/admin`)',
@@ -423,6 +427,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 term: 'Tokens de servicio de federación (`oscar_fed_...`)',
                 meaning: 'Credenciales Bearer / MQTT con alcance limitado emitidas en Usuarios y acceso (`/users`) para federación multisitio de Vista Nacional y búsqueda multipasada de vehículos sin compartir contraseñas de administrador (rol `Visor` de solo lectura o `Operador`).',
+            },
+            {
+                term: 'Extensiones de ejecución y paquetes regionales (`/extensions`)',
+                meaning: 'Panel administrativo persistente ante actualizaciones para intercambiar en caliente modelos y reglas regionales OCR, mapas base regionales sin conexión `.pmtiles`, bibliotecas de isótopos de espectroscopia secundaria, certificados CA X.509 empresariales, paquetes de códigos de adjudicación y complementos EML conservando los valores predeterminados integrados.',
             },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
@@ -597,6 +605,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Jetons de service de fédération (`oscar_fed_...`)',
                 meaning: 'Identifiants Bearer / MQTT à périmètre restreint créés dans Utilisateurs et accès (`/users`) pour la fédération multi-sites de la Vue Nationale et de la recherche multipassage de véhicules sans partager de mots de passe administrateur (rôle `Lecteur` ou `Opérateur`).',
             },
+            {
+                term: 'Extensions d’exécution et packs régionaux (`/extensions`)',
+                meaning: 'Espace administrateur persistant lors des mises à niveau permettant de remplacer à chaud les modèles et règles OCR régionaux, les fonds de carte `.pmtiles` hors ligne, les bibliothèques spectroscopiques, les certificats CA X.509 d’entreprise, les packs de codes d’adjudication et les modules EML tout en préservant les solutions par défaut intégrées.',
+            },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
         adminLinkLabel: 'Ouvrir l’administration SensorHub et le manuel intégré (`/sensorhub/admin`)',
@@ -769,6 +781,10 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 term: 'Διακριτικά υπηρεσίας ομοσπονδίας (`oscar_fed_...`)',
                 meaning: 'Περιορισμένα διαπιστευτήρια Bearer / MQTT που εκδίδονται στη σελίδα Χρήστες & πρόσβαση (`/users`) για ομοσπονδία Εθνικής προβολής και αναζήτησης πολλαπλών διελεύσεων οχημάτων χωρίς κοινή χρήση κωδικών διαχειριστή (ρόλος `Θεατής` μόνο ανάγνωσης ή `Χειριστής`).',
+            },
+            {
+                term: 'Επεκτάσεις εκτέλεσης & τοπικά πακέτα (`/extensions`)',
+                meaning: 'Μόνιμο κέντρο διαχείρισης (προστατευμένο κατά τις αναβαθμίσεις) για άμεση αντικατάσταση μοντέλων/κανόνων OCR, τοπικών χαρτών `.pmtiles` εκτός σύνδεσης, βιβλιοθηκών φασματοσκοπίας ισοτόπων, πιστοποιητικών CA X.509, πακέτων κωδίκων κρίσης και προσθέτων EML διατηρώντας τις ενσωματωμένες προεπιλογές.',
             },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',

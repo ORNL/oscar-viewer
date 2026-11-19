@@ -690,6 +690,7 @@
   "savedQueriesEmptyHint": "Apply a filter or Vehicle ID search to save a reusable query bookmark.",
   "usersAndAccess": "Users & Access",
   "usbBackups": "USB Backups",
+  "runtimeExtensions": "Runtime Extensions",
   "roleViewerBadge": "Read-Only",
   "operationalViewUnauthorized": "Your account is not authorized for Operational View \"{view}\". Select an assigned gate view or contact an administrator.",
   "nodeAuthMethod": "Authentication Method",
