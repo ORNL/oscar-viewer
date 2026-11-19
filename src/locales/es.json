@@ -728,5 +728,8 @@
   "eventChartSampleCapNotice": "La ocupación extendida supera los 5 minutos: el gráfico muestra las {max} muestras más recientes por canal detector.",
   "liveChartRollingWindowNotice": "Ventana móvil en vivo: {max} muestras más recientes por canal detector.",
   "alarmTransferSeriesTruncatedNotice": "La ocupación extendida superó {max} muestras por canal; el archivo exportado contiene las primeras {max} observaciones.",
-  "webIdHistoryCapNotice": "Mostrando análisis de isótopos WebID coincidentes dentro de los últimos {max} registros del carril."
+  "webIdHistoryCapNotice": "Mostrando análisis de isótopos WebID coincidentes dentro de los últimos {max} registros del carril.",
+  "newestFirst": "Más recientes primero",
+  "dashboardSortedByTimeAnnouncement": "Alarmas ordenadas por hora, más recientes primero",
+  "dashboardSortedByPriorityAnnouncement": "Alarmas ordenadas por categoría de prioridad"
 }

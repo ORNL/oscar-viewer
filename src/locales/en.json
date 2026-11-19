@@ -728,5 +728,8 @@
   "eventChartSampleCapNotice": "Extended occupancy exceeds 5 minutes: chart displays the most recent {max} samples per detector channel.",
   "liveChartRollingWindowNotice": "Live rolling window: most recent {max} samples per detector channel.",
   "alarmTransferSeriesTruncatedNotice": "Extended occupancy exceeded {max} samples per channel; exported file contains the first {max} observations.",
-  "webIdHistoryCapNotice": "Showing WebID isotope analyses matched within the latest {max} lane records."
+  "webIdHistoryCapNotice": "Showing WebID isotope analyses matched within the latest {max} records.",
+  "newestFirst": "Newest first",
+  "dashboardSortedByTimeAnnouncement": "Alarms sorted newest first by time",
+  "dashboardSortedByPriorityAnnouncement": "Alarms sorted by priority category"
 }

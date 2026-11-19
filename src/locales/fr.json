@@ -728,5 +728,8 @@
   "eventChartSampleCapNotice": "L'occupation prolongée dépasse 5 minutes : le graphique affiche les {max} échantillons les plus récents par canal détecteur.",
   "liveChartRollingWindowNotice": "Fenêtre glissante en direct : {max} échantillons les plus récents par canal détecteur.",
   "alarmTransferSeriesTruncatedNotice": "L'occupation prolongée a dépassé {max} échantillons par canal ; le fichier exporté contient les {max} premières observations.",
-  "webIdHistoryCapNotice": "Affichage des analyses isotopiques WebID trouvées parmi les {max} derniers enregistrements de la voie."
+  "webIdHistoryCapNotice": "Affichage des analyses isotopiques WebID trouvées parmi les {max} derniers enregistrements de la voie.",
+  "newestFirst": "Plus récentes d'abord",
+  "dashboardSortedByTimeAnnouncement": "Alarmes triées par heure, des plus récentes aux plus anciennes",
+  "dashboardSortedByPriorityAnnouncement": "Alarmes triées par catégorie de priorité"
 }

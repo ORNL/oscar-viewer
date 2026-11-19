@@ -28,6 +28,7 @@ import {
     GridColumnVisibilityModel,
     GridRowParams,
     GridRowSelectionModel,
+    GridSortModel,
 } from "@mui/x-data-grid";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
@@ -45,7 +46,7 @@ import {
     LaneMapEntry,
     type SharedConnectionLease,
 } from "@/lib/data/oscar/LaneCollection";
-import {EventTableData, sortEventsByAlarmPriority} from "@/lib/data/oscar/TableHelpers";
+import {EventTableData, sortEventsByAlarmPriority, sortEventsByTimeDesc} from "@/lib/data/oscar/TableHelpers";
 import {
     adjudicationCodeMarker,
     AdjudicationCodes,
@@ -214,6 +215,11 @@ export default function EventTable({
     const effectiveUnreadOnly = isAlarmTable && unreadOnly;
     const lastHandledAckNonceRef = useRef(dashboardAcknowledgeNonce);
     const [ackStatusMessage, setAckStatusMessage] = useState("");
+    const [sortByTimeOnly, setSortByTimeOnly] = useState(false);
+    const effectiveSortByTimeOnly = isAlarmTable && sortByTimeOnly;
+    const effectiveSortByTimeOnlyRef = useRef(effectiveSortByTimeOnly);
+    effectiveSortByTimeOnlyRef.current = effectiveSortByTimeOnly;
+    const [sortModel, setSortModel] = useState<GridSortModel>([{field: "status", sort: "asc"}]);
     const [timeWindowPreset, setTimeWindowPreset] = useState<AlarmTimeWindowPreset>("15d");
     const activeAlarmWindowMs = isAlarmTable
         ? ALARM_TIME_WINDOW_PRESET_MS[timeWindowPreset]
@@ -663,6 +669,12 @@ export default function EventTable({
     }, [stableLaneMap, tableMode, currentLane]);
 
     const pageQueryPlans = useMemo<QueryPlan[]>(() => {
+        if (effectiveSortByTimeOnly) {
+            return queryPlans.map(plan => ({
+                ...plan,
+                key: `${plan.key}\u001ftime-desc`,
+            }));
+        }
         const priorities = tableMode === "alarmtable"
             ? EVENT_PRIORITY_FILTERS.slice(0, 3)
             : EVENT_PRIORITY_FILTERS;
@@ -671,7 +683,7 @@ export default function EventTable({
             key: `${plan.key}\u001f${priorityFilter}`,
             filter: combineServerFilters(plan.filter, priorityFilter),
         })));
-    }, [queryPlans, tableMode]);
+    }, [effectiveSortByTimeOnly, queryPlans, tableMode]);
 
     const bulkQueryPlans = useMemo<QueryPlan[]>(() => queryPlans.map(plan => ({
         ...plan,
@@ -822,6 +834,7 @@ export default function EventTable({
         pageLoadedTime,
         phenomenonTimeForCutoff,
         rowFilter: isRowUnread,
+        sortComparator: effectiveSortByTimeOnly ? sortEventsByTimeDesc : sortEventsByAlarmPriority,
         extraFetchRows: effectiveUnreadOnly ? postWatermarkReadKeysSummary.totalEstimatedCount : 0,
         filterModeActive: effectiveUnreadOnly,
         disjointPriorityPlans: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
@@ -970,7 +983,7 @@ export default function EventTable({
                     setRowCount(previous => previous + 1);
                     if (currentPageRef.current !== 0) return;
                     setRows(previous => deduplicateEvents([event, ...previous])
-                        .sort(sortEventsByAlarmPriority)
+                        .sort(effectiveSortByTimeOnlyRef.current ? sortEventsByTimeDesc : sortEventsByAlarmPriority)
                         .slice(0, PAGE_SIZE));
                 } catch (error) {
                     console.error("Error processing live occupancy event", error);
@@ -1068,6 +1081,19 @@ export default function EventTable({
     const handleToggleUnreadOnly = useCallback(() => {
         dispatch(toggleDashboardUnreadOnly());
     }, [dispatch]);
+
+    const handleToggleSortByTimeOnly = useCallback(() => {
+        const next = !sortByTimeOnly;
+        setSortByTimeOnly(next);
+        setSortModel(next ? [{field: "startTime", sort: "desc"}] : [{field: "status", sort: "asc"}]);
+        setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
+        setFilterEpoch(previous => previous + 1);
+        setAckStatusMessage(
+            next
+                ? t("dashboardSortedByTimeAnnouncement")
+                : t("dashboardSortedByPriorityAnnouncement"),
+        );
+    }, [sortByTimeOnly, t]);
 
     const timeWindowOptions = useMemo<ToolbarTimeWindowOption[]>(
         () => [
@@ -3103,6 +3129,9 @@ export default function EventTable({
                                     unreadOnly: effectiveUnreadOnly,
                                     unreadOnlyLabel: t("unreadOnly"),
                                     onToggleUnreadOnly: handleToggleUnreadOnly,
+                                    sortByTimeOnly: effectiveSortByTimeOnly,
+                                    sortByTimeOnlyLabel: t("newestFirst"),
+                                    onToggleSortByTimeOnly: handleToggleSortByTimeOnly,
                                     timeWindowPreset,
                                     timeWindowOptions,
                                     timeWindowGroupLabel: t("alarmTimeWindow"),
@@ -3118,9 +3147,8 @@ export default function EventTable({
                         },
                         columnsManagement: {getTogglableColumns: getColumnList},
                     }}
-                    initialState={{
-                        sorting: {sortModel: [{field: "status", sort: "asc"}]},
-                    }}
+                    sortModel={sortModel}
+                    onSortModelChange={setSortModel}
                     getCellClassName={(params: GridCellParams<any, any, string>) => {
                         if (params.value === "Gamma") return "highlightGamma";
                         if (params.value === "Neutron") return "highlightNeutron";

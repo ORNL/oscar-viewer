@@ -145,6 +145,7 @@ export interface UseAbortableEventQueriesArgs {
     pageLoadedTime: string;
     phenomenonTimeForCutoff?: (cutoff: string, plan?: EventQueryPlan) => string | undefined;
     rowFilter?: (row: EventTableData) => boolean;
+    sortComparator?: (left: EventTableData, right: EventTableData) => number;
     extraFetchRows?: number;
     filterModeActive?: boolean;
     /**
@@ -209,6 +210,7 @@ export function useAbortableEventQueries({
     pageLoadedTime,
     phenomenonTimeForCutoff,
     rowFilter,
+    sortComparator = sortEventsByAlarmPriority,
     extraFetchRows = 0,
     filterModeActive = false,
     disjointPriorityPlans = false,
@@ -242,8 +244,10 @@ export function useAbortableEventQueries({
         controller: AbortController;
     } | null>(null);
     const rowFilterRef = useRef(rowFilter);
+    const sortComparatorRef = useRef(sortComparator);
     const extraFetchRowsRef = useRef(extraFetchRows);
     rowFilterRef.current = rowFilter;
+    sortComparatorRef.current = sortComparator;
     extraFetchRowsRef.current = extraFetchRows;
 
     const clearPendingPageDebounce = useCallback(() => {
@@ -450,7 +454,7 @@ export function useAbortableEventQueries({
             const deduped = deduplicateEvents(results.flat());
             const activeRowFilter = filterModeActive ? rowFilterRef.current : undefined;
             const filtered = activeRowFilter ? deduped.filter(activeRowFilter) : deduped;
-            const merged = filtered.sort(sortEventsByAlarmPriority);
+            const merged = filtered.sort(sortComparatorRef.current);
             setRows(merged.slice(targetPage * pageSize, required));
             currentPageRef.current = targetPage;
             setPageQueryError(false);
