@@ -474,6 +474,13 @@ describe("Site-shared per-lane Dashboard alarm read state and latching audio", (
             </AppRouterContext.Provider>,
         );
 
+        // Redundant sub-toolbar horizon banner is absent while quick window presets remain accessible.
+        cy.get('[data-testid="dashboard-alarm-window-notice"]').should("not.exist");
+        cy.contains("Showing active alarms from the last").should("not.exist");
+        cy.get('[data-testid="toolbar-time-window-15d"]')
+            .should("be.visible")
+            .and("have.attr", "aria-pressed", "true");
+
         // All 3 rows initially render as unread (.unread-alarm-row, bold 700, unread dot present).
         cy.contains(".MuiDataGrid-row", "501")
             .should("have.class", "unread-alarm-row")

@@ -2845,48 +2845,6 @@ export default function EventTable({
                     )}
                 </Box>
             )}
-            {isAlarmTable && (
-                <Stack
-                    direction={{xs: "column", sm: "row"}}
-                    spacing={1}
-                    alignItems={{xs: "flex-start", sm: "center"}}
-                    justifyContent="space-between"
-                    data-testid="dashboard-alarm-window-notice"
-                    sx={{
-                        px: 1.5,
-                        py: 0.75,
-                        borderBottom: "1px solid",
-                        borderColor: "divider",
-                        bgcolor: "action.hover",
-                    }}
-                >
-                    <Typography variant="caption" color="text.secondary" sx={{textWrap: "pretty"}}>
-                        {t("dashboardAlarmHorizonNotice", {
-                            window: timeWindowOptions.find(opt => opt.value === timeWindowPreset)?.label ?? timeWindowPreset,
-                        })}
-                    </Typography>
-                    <Button
-                        component="a"
-                        href={scopedHref("/event-log")}
-                        onClick={event => {
-                            event.preventDefault();
-                            router.push(scopedHref("/event-log"));
-                        }}
-                        size="small"
-                        color="primary"
-                        data-testid="dashboard-open-event-log-link"
-                        sx={{
-                            textTransform: "none",
-                            whiteSpace: "nowrap",
-                            py: 0,
-                            minBlockSize: "24px",
-                            "@media (pointer: coarse)": {minBlockSize: "44px"},
-                        }}
-                    >
-                        {t("openEventLogLink")}
-                    </Button>
-                </Stack>
-            )}
             {!isEventLog && isVehicleSearchMode && vehicleSearchResult && vehicleSearchResult.passes.length > 0 && (
                 <Alert
                     severity="info"
