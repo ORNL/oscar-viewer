@@ -204,7 +204,7 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
             });
     });
 
-    it("surfaces route-aware contextual video guides, click-to-play WebVTT player, and 19-module offline catalog", () => {
+    it("surfaces route-aware contextual video guides, click-to-play WebVTT player, and 26-module offline catalog", () => {
         window.localStorage.setItem("language", "es");
 
         cy.mount(
@@ -262,5 +262,11 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
         cy.get('[data-testid="help-catalog-watch-20"]').should("be.visible").click();
         cy.get('[data-testid="help-video-element"] source')
             .should("have.attr", "src", "/video-guides/videos/20-multi-node-federation-vehicle-search-and-report.mp4");
+        cy.get('[data-testid="help-catalog-watch-24"]').should("be.visible").click();
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/24-continual-and-occasional-usb-backups.mp4");
+        cy.get('[data-testid="help-catalog-watch-25"]').should("be.visible").click();
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/25-pluggable-runtime-extensions-and-pmtiles.mp4");
     });
 });

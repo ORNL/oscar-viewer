@@ -68,7 +68,7 @@ const EXT_COPY: Record<Locale, ExtUiCopy> = {
             'Ship ready-to-use built-in defaults out of the box while allowing air-gapped sites to hot-swap OCR models, offline .pmtiles regional basemaps, secondary spectroscopy libraries, enterprise CA certificates, disposition policy packs, and EML plugins.',
         adminRequired: 'Administrator privileges are required to manage runtime extensions and regional packs.',
         upgradeSafeNote:
-            'Upgrade-Safe Guarantee: All uploaded packs and certificates are stored in persistent state/archive volumes (/var/lib/oscar/extensions/ and /var/lib/oscar/archive/maps/) and are never overwritten during OSCAR version upgrades. Resetting any tab immediately restores OSCAR’s shipped built-in default.',
+            'Upgrade-Safe Guarantee: All uploaded packs and certificates are stored in persistent state volumes (/var/lib/oscar/extensions/ including /var/lib/oscar/extensions/maps-storage/) and are never overwritten during OSCAR version upgrades. Resetting any tab immediately restores OSCAR’s shipped built-in default.',
         tablistLabel: 'Runtime extension categories',
         refreshBtn: 'Refresh Status',
         shippedDefaultBadge: 'SHIPPED DEFAULT ACTIVE',
@@ -834,7 +834,7 @@ export default function RuntimeExtensionsManager() {
                                             {status.maps.storedPacks?.length > 0 && (
                                                 <Box sx={{ mt: 2.5 }}>
                                                     <Typography variant="subtitle2" component="h3" sx={{ mb: 1 }}>
-                                                        Stored Regional Archives (/var/lib/oscar/archive/maps/)
+                                                        Stored Regional Archives (/var/lib/oscar/extensions/maps-storage/)
                                                     </Typography>
                                                     <table className="oscar-ext-table">
                                                         <caption className="visually-hidden">Stored PMTiles archives</caption>
@@ -888,7 +888,7 @@ export default function RuntimeExtensionsManager() {
                                                                                                 fileName: pack.fileName,
                                                                                             },
                                                                                             title: `Delete ${pack.fileName}?`,
-                                                                                            body: 'This permanently deletes the .pmtiles file from /var/lib/oscar/archive/maps/.',
+                                                                                            body: 'This permanently deletes the .pmtiles file from /var/lib/oscar/extensions/maps-storage/.',
                                                                                             confirmLabel: 'Delete Archive',
                                                                                         })
                                                                                     }

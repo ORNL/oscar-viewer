@@ -118,7 +118,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Map (`/map`)',
-                summary: 'Full-screen georeferenced site diagram or tile map with live color-coded lane markers.',
+                summary: 'Full-screen georeferenced site diagram or tile map (including air-gapped regional `.pmtiles` vector/raster basemaps under `Offline: <Layer Name>`) with live color-coded lane markers.',
             },
             {
                 title: 'National (`/national-view`)',
@@ -139,6 +139,14 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Servers (`/servers`)',
                 summary: 'Connect federated remote OSCAR sites for National View (`/national-view`) and Multi-Pass Vehicle Search (`/event-log`): click "Use Federation Token (oscar_fed_...)" (or set Authentication Method to Federation Service Token), check HTTPS (port 443), and paste the `oscar_fed_...` token minted on the remote site under Users & Access -> Federation Tokens.',
+            },
+            {
+                title: 'USB Backups (`/usb-backups`)',
+                summary: 'Administrator manager for zero-downtime (`0.0 s` portal outage) incremental backups to an external USB 3.x NVMe SSD (`NTFS` default), supporting Continual Background Sync (with automatic USB reconnect catch-up), Occasional / On-Demand Visit Sync, 1-click Safely Eject USB Drive (`SAFE_TO_UNPLUG`), SHA-256 verification, and off-site `oscar-backup-key.txt` escrow download.',
+            },
+            {
+                title: 'Runtime Extensions (`/extensions`)',
+                summary: 'Upgrade-safe administrator hub for hot-swapping regional OCR model & Unicode plate-rule packs, air-gapped `.pmtiles` v3 regional basemaps, secondary-inspection spectroscopy isotope libraries, trusted enterprise X.509 CA certificates, disposition policy packs, and EML plugins while preserving OSCAR’s shipped built-in defaults.',
             },
         ],
         reportsIntro: 'Every report request generates a fresh file and overwrites any earlier file with the same parameters:',
@@ -253,14 +261,18 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Pluggable Runtime Extensions & Regional Packs (`/extensions`)',
-                meaning: 'Upgrade-safe administrator hub for hot-swapping regional OCR model/plate-rule packs (`OcrEngine` SPI or ONNX `.zip`), offline regional `.pmtiles` vector/raster basemaps (`/var/lib/oscar/archive/maps/`), secondary-inspection spectroscopy isotope libraries, trusted enterprise X.509 CA certificates, disposition policy packs, and EML plugins without overwriting OSCAR’s shipped built-in defaults.',
+                meaning: 'Upgrade-safe administrator hub for hot-swapping regional OCR model/plate-rule packs (`OcrEngine` SPI or ONNX `.zip`), offline regional `.pmtiles` vector/raster basemaps (`/var/lib/oscar/extensions/maps-storage/`), secondary-inspection spectroscopy isotope libraries, trusted enterprise X.509 CA certificates, disposition policy packs, and EML plugins without overwriting OSCAR’s shipped built-in defaults.',
+            },
+            {
+                term: 'Continual & Occasional USB NVMe Backups (`/usb-backups`)',
+                meaning: 'Zero-downtime (`0.0 s` portal outage) content-addressed incremental backup to an external USB 3.x NVMe SSD (`NTFS` default, readable on Windows, macOS, and Linux laptops). Supports Continual Background Sync (with automatic catch-up on USB reconnect), Occasional Visit Sync, 1-click Safely Eject (`SAFE_TO_UNPLUG`), laptop delta copy (`COPY-TO-ANOTHER-DRIVE.bat` / `./copy-to-another-drive.sh`), and cold-iron recovery (`oscar usb-backup restore`).',
             },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
         adminLinkLabel: 'Open SensorHub Admin & In-UI Operator Manual (`/sensorhub/admin`)',
         adminLinkDesc: 'Requires administrator sign-in. Select OSCAR Service or any sensor module and open its README tab for the localized manual.',
         videoGuidesLinkLabel: 'Open OSCAR How-To Video Guides (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '19 bite-sized (< 2 min) narrated/captioned screen recordings covering certificate trust, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, health monitoring, support bundles, and multi-format reports.',
+        videoGuidesLinkDesc: '26 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, USB NVMe backups, pluggable extensions & offline .pmtiles maps, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
         supportBundleTitle: 'Troubleshooting & Support Bundle (`.zip`)',
         supportBundleDesc: 'Downloads a single diagnostic `.zip` combining recent browser console/network diagnostics with OSCAR server logs, module states, and JVM/storage health. If the server cannot be reached or fails to start, run `./oscar.sh support-bundle` (Linux) or `oscar.bat support-bundle` (Windows) on the host.',
         supportBundlePrivacyNote: 'Privacy & security: collected only to diagnose technical issues; passwords, tokens, session cookies, RTSP credentials, and private keys are automatically scrubbed.',
@@ -316,6 +328,14 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Servidores (`/servers`)',
                 summary: 'Conexión de sitios OSCAR remotos federados para Vista Nacional (`/national-view`) y Búsqueda multipasada (`/event-log`): pulse "Usar token de federación (oscar_fed_...)" (o elija Token de servicio de federación), active HTTPS (puerto 443) y pegue el token creado en el sitio remoto en Usuarios y acceso -> Tokens de federación.',
+            },
+            {
+                title: 'Copias USB (`/usb-backups`)',
+                summary: 'Gestión administrativa de copias incrementales sin interrupción (`0.0 s`) en unidades externas SSD NVMe USB 3.x (`NTFS` predeterminado), con Sincronización Continua Automática, Sincronización Ocasional, Expulsión Segura con 1 clic (`SEGURO PARA DESCONECTAR`), verificación SHA-256 y descarga de `oscar-backup-key.txt`.',
+            },
+            {
+                title: 'Extensiones de ejecución (`/extensions`)',
+                summary: 'Centro administrativo persistente ante actualizaciones para cambiar en caliente modelos y reglas regionales OCR, mapas regionales sin conexión `.pmtiles` v3, bibliotecas de espectroscopia secundaria, certificados CA X.509, paquetes de códigos de adjudicación y complementos EML conservando los valores predeterminados integrados.',
             },
         ],
         reportsIntro: 'Cada solicitud genera un archivo nuevo y sobrescribe cualquier archivo previo con los mismos parámetros:',
@@ -430,14 +450,18 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Extensiones de ejecución y paquetes regionales (`/extensions`)',
-                meaning: 'Panel administrativo persistente ante actualizaciones para intercambiar en caliente modelos y reglas regionales OCR, mapas base regionales sin conexión `.pmtiles`, bibliotecas de isótopos de espectroscopia secundaria, certificados CA X.509 empresariales, paquetes de códigos de adjudicación y complementos EML conservando los valores predeterminados integrados.',
+                meaning: 'Panel administrativo persistente ante actualizaciones para intercambiar en caliente modelos y reglas regionales OCR, mapas base regionales sin conexión `.pmtiles` (`/var/lib/oscar/extensions/maps-storage/`), bibliotecas de isótopos de espectroscopia secundaria, certificados CA X.509 empresariales, paquetes de códigos de adjudicación y complementos EML conservando los valores predeterminados integrados.',
+            },
+            {
+                term: 'Copias de seguridad USB NVMe continuas y ocasionales (`/usb-backups`)',
+                meaning: 'Copia incremental sin tiempo de inactividad (`0.0 s`) en un SSD externo USB 3.x NVMe (`NTFS` predeterminado, compatible con Windows, macOS y Linux), con sincronización continua o bajo demanda, expulsión segura en 1 clic (`SAFE_TO_UNPLUG`), copia diferencial en portátil y restauración completa (`oscar usb-backup restore`).',
             },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
         adminLinkLabel: 'Abrir administración de SensorHub y manual integrado (`/sensorhub/admin`)',
         adminLinkDesc: 'Requiere cuenta de administrador. Seleccione el Servicio OSCAR o cualquier módulo y abra la pestaña README.',
         videoGuidesLinkLabel: 'Abrir videoguías prácticas de OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '19 vídeos cortos (< 2 min) con subtítulos sobre certificados, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, estado de salud, paquetes de soporte e informes.',
+        videoGuidesLinkDesc: '26 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, copias USB NVMe, extensiones y mapas .pmtiles sin conexión, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
         supportBundleTitle: 'Diagnóstico y paquete de soporte (`.zip`)',
         supportBundleDesc: 'Descarga un archivo `.zip` de diagnóstico que combina eventos recientes del navegador con registros del servidor OSCAR, estado de módulos y salud de JVM/almacenamiento. Si el servidor no responde o no arranca, ejecute `./oscar.sh support-bundle` (Linux) u `oscar.bat support-bundle` (Windows) en el servidor.',
         supportBundlePrivacyNote: 'Privacidad y seguridad: se recopila únicamente para diagnosticar incidencias técnicas; contraseñas, tokens, cookies de sesión, credenciales RTSP y claves privadas se redactan automáticamente.',
@@ -493,6 +517,14 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Serveurs (`/servers`)',
                 summary: 'Connexion des sites OSCAR distants fédérés pour la Vue Nationale (`/national-view`) et la Recherche multipassage (`/event-log`) : cliquez sur « Utiliser un jeton de fédération (oscar_fed_...) », cochez HTTPS (port 443) et collez le jeton créé sur le site distant dans Utilisateurs et accès -> Jetons de fédération.',
+            },
+            {
+                title: 'Sauvegardes USB (`/usb-backups`)',
+                summary: 'Gestion administrateur des sauvegardes incrémentielles sans interruption (`0,0 s`) sur SSD externe USB 3.x NVMe (`NTFS` par défaut), avec synchronisation continue ou occasionnelle, éjection sécurisée en 1 clic (`PRÊT À DÉBRANCHER`), vérification SHA-256 et téléchargement de `oscar-backup-key.txt`.',
+            },
+            {
+                title: 'Extensions d’exécution (`/extensions`)',
+                summary: 'Espace administrateur persistant lors des mises à niveau pour remplacer à chaud les modèles et règles OCR régionaux, les fonds de carte `.pmtiles` v3 hors ligne, les bibliothèques spectroscopiques, les certificats CA X.509, les packs de codes d’adjudication et les modules EML tout en conservant les solutions par défaut intégrées.',
             },
         ],
         reportsIntro: 'Chaque demande génère un nouveau fichier et remplace tout rapport antérieur portant les mêmes paramètres :',
@@ -607,14 +639,18 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Extensions d’exécution et packs régionaux (`/extensions`)',
-                meaning: 'Espace administrateur persistant lors des mises à niveau permettant de remplacer à chaud les modèles et règles OCR régionaux, les fonds de carte `.pmtiles` hors ligne, les bibliothèques spectroscopiques, les certificats CA X.509 d’entreprise, les packs de codes d’adjudication et les modules EML tout en préservant les solutions par défaut intégrées.',
+                meaning: 'Espace administrateur persistant lors des mises à niveau permettant de remplacer à chaud les modèles et règles OCR régionaux, les fonds de carte `.pmtiles` hors ligne (`/var/lib/oscar/extensions/maps-storage/`), les bibliothèques spectroscopiques, les certificats CA X.509 d’entreprise, les packs de codes d’adjudication et les modules EML tout en préservant les solutions par défaut intégrées.',
+            },
+            {
+                term: 'Sauvegardes USB NVMe continues et occasionnelles (`/usb-backups`)',
+                meaning: 'Sauvegarde incrémentielle sans coupure (`0,0 s`) sur SSD externe USB 3.x NVMe (`NTFS` par défaut, lisible sous Windows, macOS et Linux), avec synchronisation continue ou à la demande, éjection sécurisée en 1 clic (`SAFE_TO_UNPLUG`), copie delta sur portable et restauration complète (`oscar usb-backup restore`).',
             },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
         adminLinkLabel: 'Ouvrir l’administration SensorHub et le manuel intégré (`/sensorhub/admin`)',
         adminLinkDesc: 'Connexion administrateur requise. Sélectionnez le Service OSCAR ou un module et ouvrez l’onglet README.',
         videoGuidesLinkLabel: 'Ouvrir les guides vidéo pratiques OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '19 courtes vidéos (< 2 min) sous-titrées couvrant certificats, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, état de santé, archives d’assistance et rapports.',
+        videoGuidesLinkDesc: '26 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, sauvegardes USB NVMe, extensions et cartes .pmtiles hors ligne, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
         supportBundleTitle: 'Dépannage et archive d’assistance (`.zip`)',
         supportBundleDesc: 'Télécharge une archive `.zip` réunissant les diagnostics récents du navigateur et les journaux du serveur OSCAR, l’état des modules et la santé JVM/stockage. Si le serveur est injoignable ou ne démarre pas, exécutez `./oscar.sh support-bundle` (Linux) ou `oscar.bat support-bundle` (Windows) sur l’hôte.',
         supportBundlePrivacyNote: 'Confidentialité et sécurité : collecté uniquement pour le diagnostic technique ; mots de passe, jetons, cookies de session, identifiants RTSP et clés privées sont automatiquement masqués.',
@@ -670,6 +706,14 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             {
                 title: 'Διακομιστές (`/servers`)',
                 summary: 'Σύνδεση απομακρυσμένων ομόσπονδων κόμβων OSCAR για Εθνική Προβολή (`/national-view`) και Αναζήτηση πολλαπλών διελεύσεων (`/event-log`): πατήστε «Χρήση διακριτικού ομοσπονδίας (oscar_fed_...)», ενεργοποιήστε HTTPS (θύρα 443) και επικολλήστε το διακριτικό που εκδόθηκε στον απομακρυσμένο κόμβο στη σελίδα Χρήστες & πρόσβαση -> Διακριτικά ομοσπονδίας.',
+            },
+            {
+                title: 'Αντίγραφα USB (`/usb-backups`)',
+                summary: 'Διαχείριση αυξητικών αντιγράφων ασφαλείας μηδενικής διακοπής (`0,0 s`) σε εξωτερικό SSD USB 3.x NVMe (`NTFS` προεπιλογή), με Συνεχή ή Περιστασιακό Συγχρονισμό, Ασφαλή Εξαγωγή 1 κλικ (`ΑΣΦΑΛΗΣ ΑΠΟΣΥΝΔΕΣΗ`), επαλήθευση SHA-256 και λήψη του `oscar-backup-key.txt`.',
+            },
+            {
+                title: 'Επεκτάσεις εκτέλεσης (`/extensions`)',
+                summary: 'Μόνιμο κέντρο διαχειριστή (προστατευμένο σε αναβαθμίσεις) για άμεση αντικατάσταση μοντέλων/κανόνων OCR, τοπικών χαρτών `.pmtiles` v3 εκτός δικτύου, βιβλιοθηκών φασματοσκοπίας ισοτόπων, πιστοποιητικών CA X.509, πακέτων κωδίκων κρίσης και προσθέτων EML διατηρώντας τις ενσωματωμένες προεπιλογές.',
             },
         ],
         reportsIntro: 'Κάθε αίτημα δημιουργεί νέο αρχείο και αντικαθιστά τυχόν προηγούμενο αρχείο με τις ίδιες παραμέτρους:',
@@ -784,14 +828,18 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Επεκτάσεις εκτέλεσης & τοπικά πακέτα (`/extensions`)',
-                meaning: 'Μόνιμο κέντρο διαχείρισης (προστατευμένο κατά τις αναβαθμίσεις) για άμεση αντικατάσταση μοντέλων/κανόνων OCR, τοπικών χαρτών `.pmtiles` εκτός σύνδεσης, βιβλιοθηκών φασματοσκοπίας ισοτόπων, πιστοποιητικών CA X.509, πακέτων κωδίκων κρίσης και προσθέτων EML διατηρώντας τις ενσωματωμένες προεπιλογές.',
+                meaning: 'Μόνιμο κέντρο διαχείρισης (προστατευμένο κατά τις αναβαθμίσεις) για άμεση αντικατάσταση μοντέλων/κανόνων OCR, τοπικών χαρτών `.pmtiles` εκτός σύνδεσης (`/var/lib/oscar/extensions/maps-storage/`), βιβλιοθηκών φασματοσκοπίας ισοτόπων, πιστοποιητικών CA X.509, πακέτων κωδίκων κρίσης και προσθέτων EML διατηρώντας τις ενσωματωμένες προεπιλογές.',
+            },
+            {
+                term: 'Συνεχή & περιστασιακά αντίγραφα ασφαλείας USB NVMe (`/usb-backups`)',
+                meaning: 'Αυξητικά αντίγραφα ασφαλείας μηδενικής διακοπής (`0,0 s`) σε εξωτερικό SSD USB 3.x NVMe (`NTFS` προεπιλογή, συμβατό με Windows, macOS και Linux), με συνεχή ή κατ’ απαίτηση συγχρονισμό, ασφαλή εξαγωγή 1 κλικ (`SAFE_TO_UNPLUG`), μεταφορά σε φορητό υπολογιστή και πλήρη επαναφορά (`oscar usb-backup restore`).',
             },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',
         adminLinkLabel: 'Άνοιγμα διαχείρισης SensorHub & ενσωματωμένου εγχειριδίου (`/sensorhub/admin`)',
         adminLinkDesc: 'Απαιτείται σύνδεση διαχειριστή. Επιλέξτε την Υπηρεσία OSCAR ή οποιαδήποτε μονάδα και ανοίξτε την καρτέλα README.',
         videoGuidesLinkLabel: 'Άνοιγμα βιντεοοδηγών εργασιών OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '19 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για πιστοποιητικά, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, κατάσταση υγείας, πακέτα υποστήριξης και αναφορές.',
+        videoGuidesLinkDesc: '26 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, αντίγραφα USB NVMe, επεκτάσεις & χάρτες .pmtiles εκτός σύνδεσης, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
         supportBundleTitle: 'Αντιμετώπιση προβλημάτων & πακέτο υποστήριξης (`.zip`)',
         supportBundleDesc: 'Λήψη ενιαίου διαγνωστικού αρχείου `.zip` που συνδυάζει συμβάντα του περιηγητή με αρχεία καταγραφής διακομιστή OSCAR, κατάσταση μονάδων και υγεία JVM/αποθήκευσης. Εάν ο διακομιστής δεν αποκρίνεται ή δεν εκκινεί, εκτελέστε `./oscar.sh support-bundle` (Linux) ή `oscar.bat support-bundle` (Windows) στον κεντρικό υπολογιστή.',
         supportBundlePrivacyNote: 'Απόρρητο & ασφάλεια: συλλέγονται αποκλειστικά για τεχνική διάγνωση· κωδικοί, διακριτικά, cookies συνεδρίας, διαπιστευτήρια RTSP και ιδιωτικά κλειδιά αφαιρούνται αυτόματα.',
