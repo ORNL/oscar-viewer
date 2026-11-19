@@ -731,5 +731,7 @@
   "webIdHistoryCapNotice": "Εμφάνιση αναλύσεων ισοτόπων WebID εντός των τελευταίων {max} εγγραφών της λωρίδας.",
   "newestFirst": "Νεότερα πρώτα",
   "dashboardSortedByTimeAnnouncement": "Συναγερμοί ταξινομημένοι χρονικά, νεότεροι πρώτα",
-  "dashboardSortedByPriorityAnnouncement": "Συναγερμοί ταξινομημένοι κατά κατηγορία προτεραιότητας"
+  "dashboardSortedByPriorityAnnouncement": "Συναγερμοί ταξινομημένοι κατά κατηγορία προτεραιότητας",
+  "eventsSortedByTimeAnnouncement": "Συμβάντα ταξινομημένα χρονικά, νεότερα πρώτα",
+  "eventsSortedByPriorityAnnouncement": "Συμβάντα ταξινομημένα κατά κατηγορία προτεραιότητας"
 }

@@ -1378,5 +1378,86 @@ describe("Site-shared per-lane Dashboard alarm read state and latching audio", (
         cy.get(".MuiDataGrid-row").eq(0).should("contain.text", "3003");
         cy.get(".MuiDataGrid-row").eq(1).should("contain.text", "3002");
         cy.get(".MuiDataGrid-row").eq(2).should("contain.text", "3001");
+
+        // Also verify Events (tableMode="eventlog") exposes Newest first and places newer None/Gamma events first
+        cy.then(() => {
+            const newestNoneStart = new Date(nowMs - 30_000).toISOString();
+            const newestNoneEnd = new Date(nowMs - 20_000).toISOString();
+            obsRows.unshift({
+                id: "obs-none-newest",
+                properties: {id: "obs-none-newest", "datastream@id": "ds-occ-sort"},
+                phenomenonTime: newestNoneEnd,
+                resultTime: newestNoneEnd,
+                result: {
+                    occupancyCount: 3000,
+                    startTime: newestNoneStart,
+                    endTime: newestNoneEnd,
+                    gammaAlarm: false,
+                    neutronAlarm: false,
+                    maxGamma: 180,
+                    maxNeutron: 1,
+                    adjudicatedIds: [],
+                    videoPaths: [],
+                },
+            });
+            fakeNode.getObservationsApi = async () => ({
+                searchObservations: async (obsFilter: any) => {
+                    const filterStr = decodeURIComponent(obsFilter?.props?.filter ?? "");
+                    const matched = obsRows.filter(item => {
+                        if (filterStr.includes("gammaAlarm=true AND neutronAlarm=true")) {
+                            return item.result.gammaAlarm && item.result.neutronAlarm;
+                        }
+                        if (filterStr.includes("gammaAlarm=false AND neutronAlarm=true")) {
+                            return !item.result.gammaAlarm && item.result.neutronAlarm;
+                        }
+                        if (filterStr.includes("gammaAlarm=true AND neutronAlarm=false")) {
+                            return item.result.gammaAlarm && !item.result.neutronAlarm;
+                        }
+                        if (filterStr.includes("gammaAlarm=false AND neutronAlarm=false")) {
+                            return !item.result.gammaAlarm && !item.result.neutronAlarm;
+                        }
+                        return true;
+                    });
+                    return {fetchData: async () => matched};
+                },
+            });
+
+            cy.mount(
+                <AppRouterContext.Provider value={mockRouter}>
+                    <Provider store={store}>
+                        <LanguageProvider>
+                            <DataSourceContext.Provider value={{
+                                laneMapRef: {current: laneMap},
+                                activeViewKey: null,
+                                viewError: null,
+                                scopedHref: (href: string) => href,
+                            } as any}>
+                                <EventTable
+                                    key="eventlog-instance"
+                                    tableMode="eventlog"
+                                    viewAdjudicated
+                                    laneMap={laneMap}
+                                />
+                            </DataSourceContext.Provider>
+                        </LanguageProvider>
+                    </Provider>
+                </AppRouterContext.Provider>,
+            );
+        });
+
+        cy.get('[data-testid="toolbar-sort-time-only"]').should("have.attr", "aria-pressed", "false");
+        cy.get(".MuiDataGrid-row").eq(0).should("contain.text", "3003");
+        cy.get(".MuiDataGrid-row").eq(3).should("contain.text", "3000");
+
+        cy.get('[data-testid="toolbar-sort-time-only"]').click();
+        cy.get('[data-testid="toolbar-sort-time-only"]').should("have.attr", "aria-pressed", "true");
+        cy.get('[data-testid="alarm-acknowledge-status"]').should(
+            "contain.text",
+            "Events sorted newest first by time",
+        );
+        cy.get(".MuiDataGrid-row").eq(0).should("contain.text", "3000");
+        cy.get(".MuiDataGrid-row").eq(1).should("contain.text", "3001");
+        cy.get(".MuiDataGrid-row").eq(2).should("contain.text", "3002");
+        cy.get(".MuiDataGrid-row").eq(3).should("contain.text", "3003");
     });
 });

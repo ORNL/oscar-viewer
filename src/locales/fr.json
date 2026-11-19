@@ -731,5 +731,7 @@
   "webIdHistoryCapNotice": "Affichage des analyses isotopiques WebID trouvées parmi les {max} derniers enregistrements de la voie.",
   "newestFirst": "Plus récentes d'abord",
   "dashboardSortedByTimeAnnouncement": "Alarmes triées par heure, des plus récentes aux plus anciennes",
-  "dashboardSortedByPriorityAnnouncement": "Alarmes triées par catégorie de priorité"
+  "dashboardSortedByPriorityAnnouncement": "Alarmes triées par catégorie de priorité",
+  "eventsSortedByTimeAnnouncement": "Événements triés par heure, des plus récents aux plus anciens",
+  "eventsSortedByPriorityAnnouncement": "Événements triés par catégorie de priorité"
 }

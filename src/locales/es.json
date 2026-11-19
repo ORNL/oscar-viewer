@@ -731,5 +731,7 @@
   "webIdHistoryCapNotice": "Mostrando análisis de isótopos WebID coincidentes dentro de los últimos {max} registros del carril.",
   "newestFirst": "Más recientes primero",
   "dashboardSortedByTimeAnnouncement": "Alarmas ordenadas por hora, más recientes primero",
-  "dashboardSortedByPriorityAnnouncement": "Alarmas ordenadas por categoría de prioridad"
+  "dashboardSortedByPriorityAnnouncement": "Alarmas ordenadas por categoría de prioridad",
+  "eventsSortedByTimeAnnouncement": "Eventos ordenados por hora, más recientes primero",
+  "eventsSortedByPriorityAnnouncement": "Eventos ordenados por categoría de prioridad"
 }

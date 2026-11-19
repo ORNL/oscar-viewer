@@ -377,4 +377,95 @@ describe("Vehicle ID OCR ISO 6346 validation, threshold-hybrid auto-fill, and ch
         cy.get('input[name="vehicleId"]').should("have.value", "TN9911K");
         cy.contains("Auto-filled from lane OCR").should("be.visible");
     });
+
+    it("auto-populates Vehicle ID once readyLaneNames finishes hydrating a late-loading OCR lane on direct Event Details links", () => {
+        const directEvent = makeEvent({
+            id: 42,
+            laneId: "Lane42",
+            occupancyCount: "942",
+            startTime: "2026-11-19T00:41:20.000Z",
+            endTime: "2026-11-19T00:41:26.000Z",
+            occupancyObsId: "0i9btj4704",
+        });
+
+        function DelayedLaneHydrationHarness() {
+            const storeRef = useRef(createTestStore());
+            const laneMapRef = useRef<Map<string, any>>(new Map());
+            const [readyLanes, setReadyLanes] = useState<Set<string>>(() => new Set(["Lane01"]));
+
+            (window as any).__hydrateLane42 = () => {
+                laneMapRef.current.set("Lane42", {
+                    laneName: "Lane42",
+                    parentNode: {
+                        id: "node-1",
+                        address: "127.0.0.1",
+                        port: 8282,
+                        isSecure: false,
+                        isDefaultNode: true,
+                        oshPathRoot: "/sensorhub",
+                        bucketsEndpoint: "/buckets",
+                        getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+                        getBasicAuthHeader: () => ({}),
+                    },
+                    datastreams: [
+                        {
+                            properties: {
+                                id: "ds-ocr-42",
+                                outputName: "vehicleOcr",
+                                observedProperties: [{definition: "http://www.opengis.net/def/VehicleOCR"}],
+                            },
+                            searchObservations: async () => ({
+                                nextPage: async () => [
+                                    {
+                                        id: "ocr-obs-42",
+                                        resultTime: "2026-11-19T00:41:27.561Z",
+                                        result: {
+                                            value: "FCI0971023 5",
+                                            normalizedValue: "FCIU9710235",
+                                            idType: "container",
+                                            checksumValid: true,
+                                            confidence: 0.9478,
+                                            readCount: 1,
+                                            occupancyObsId: "0i9btj4704",
+                                            sampleTime: "2026-11-19T00:41:27.561Z",
+                                            evidenceImagePath: "",
+                                        },
+                                    },
+                                ],
+                            }),
+                        },
+                    ],
+                    datastreamSourceMap: new Map(),
+                });
+                setReadyLanes(new Set(["Lane01", "Lane42"]));
+            };
+
+            return (
+                <Provider store={storeRef.current}>
+                    <LanguageProvider>
+                        <DataSourceContext.Provider
+                            value={{
+                                laneMapRef,
+                                laneMapReady: true,
+                                readyLaneNames: readyLanes,
+                                activeViewKey: null,
+                                scopedHref: (href: string) => href,
+                            } as any}
+                        >
+                            <AdjudicationDetail event={directEvent} ocrFetchImpl={mockCropFetch} />
+                        </DataSourceContext.Provider>
+                    </LanguageProvider>
+                </Provider>
+            );
+        }
+
+        cy.mount(<DelayedLaneHydrationHarness />);
+        cy.get('input[name="vehicleId"]').should("have.value", "");
+
+        cy.window().then((win: any) => {
+            win.__hydrateLane42();
+        });
+        cy.get('input[name="vehicleId"]').should("have.value", "FCIU9710235");
+        cy.contains("Auto-filled from lane OCR").should("be.visible");
+    });
 });

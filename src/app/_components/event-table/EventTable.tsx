@@ -216,7 +216,8 @@ export default function EventTable({
     const lastHandledAckNonceRef = useRef(dashboardAcknowledgeNonce);
     const [ackStatusMessage, setAckStatusMessage] = useState("");
     const [sortByTimeOnly, setSortByTimeOnly] = useState(false);
-    const effectiveSortByTimeOnly = isAlarmTable && sortByTimeOnly;
+    const supportsSortByTimeToggle = isAlarmTable || isEventLog;
+    const effectiveSortByTimeOnly = supportsSortByTimeToggle && sortByTimeOnly;
     const effectiveSortByTimeOnlyRef = useRef(effectiveSortByTimeOnly);
     effectiveSortByTimeOnlyRef.current = effectiveSortByTimeOnly;
     const [sortModel, setSortModel] = useState<GridSortModel>([{field: "status", sort: "asc"}]);
@@ -1084,16 +1085,18 @@ export default function EventTable({
 
     const handleToggleSortByTimeOnly = useCallback(() => {
         const next = !sortByTimeOnly;
+        restoredSnapshotRef.current = null;
+        setRestoredSnapshot(null);
         setSortByTimeOnly(next);
         setSortModel(next ? [{field: "startTime", sort: "desc"}] : [{field: "status", sort: "asc"}]);
         setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
         setFilterEpoch(previous => previous + 1);
         setAckStatusMessage(
             next
-                ? t("dashboardSortedByTimeAnnouncement")
-                : t("dashboardSortedByPriorityAnnouncement"),
+                ? t(isAlarmTable ? "dashboardSortedByTimeAnnouncement" : "eventsSortedByTimeAnnouncement")
+                : t(isAlarmTable ? "dashboardSortedByPriorityAnnouncement" : "eventsSortedByPriorityAnnouncement"),
         );
-    }, [sortByTimeOnly, t]);
+    }, [isAlarmTable, sortByTimeOnly, t]);
 
     const timeWindowOptions = useMemo<ToolbarTimeWindowOption[]>(
         () => [
@@ -2652,7 +2655,7 @@ export default function EventTable({
 
     return (
         <Box sx={{display: "flex", flexDirection: "column", ...(isEventLog ? {minHeight: 860} : {height: 800}), width: "100%"}}>
-            {isAlarmTable && (
+            {supportsSortByTimeToggle && (
                 <Box
                     role="status"
                     aria-live="polite"
@@ -3124,14 +3127,18 @@ export default function EventTable({
                             onSelectAllFiltered: selectAllFilteredAlarms,
                             onClearSelection: clearSelection,
                             onBulkAdjudicate: () => setBulkDialogOpen(true),
+                            ...(supportsSortByTimeToggle
+                                ? {
+                                    sortByTimeOnly: effectiveSortByTimeOnly,
+                                    sortByTimeOnlyLabel: t("newestFirst"),
+                                    onToggleSortByTimeOnly: handleToggleSortByTimeOnly,
+                                }
+                                : {}),
                             ...(isAlarmTable
                                 ? {
                                     unreadOnly: effectiveUnreadOnly,
                                     unreadOnlyLabel: t("unreadOnly"),
                                     onToggleUnreadOnly: handleToggleUnreadOnly,
-                                    sortByTimeOnly: effectiveSortByTimeOnly,
-                                    sortByTimeOnlyLabel: t("newestFirst"),
-                                    onToggleSortByTimeOnly: handleToggleSortByTimeOnly,
                                     timeWindowPreset,
                                     timeWindowOptions,
                                     timeWindowGroupLabel: t("alarmTimeWindow"),

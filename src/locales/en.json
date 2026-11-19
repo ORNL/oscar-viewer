@@ -731,5 +731,7 @@
   "webIdHistoryCapNotice": "Showing WebID isotope analyses matched within the latest {max} records.",
   "newestFirst": "Newest first",
   "dashboardSortedByTimeAnnouncement": "Alarms sorted newest first by time",
-  "dashboardSortedByPriorityAnnouncement": "Alarms sorted by priority category"
+  "dashboardSortedByPriorityAnnouncement": "Alarms sorted by priority category",
+  "eventsSortedByTimeAnnouncement": "Events sorted newest first by time",
+  "eventsSortedByPriorityAnnouncement": "Events sorted by priority category"
 }

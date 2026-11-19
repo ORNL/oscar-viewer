@@ -200,8 +200,41 @@ export default function AdjudicationDetail(props: {
         return () => window.clearTimeout(timer);
     }, [vehicleId, vehicleIdTouched]);
 
+    const [adjSnackMsg, setAdjSnackMsg] = useState('');
+    const [colorStatus, setColorStatus] = useState('');
+    const [openSnack, setOpenSnack] = useState(false);
+    const [shouldFetchLogs, setShouldFetchLogs] = useState<boolean>(false);
+    const [loggedAdjudications, setLoggedAdjudications] = useState<AdjudicationData[]>([]);
+
     useEffect(() => {
         if (vehicleIdTouched || vehicleId.trim().length > 0) return;
+
+        let priorVehicleId = "";
+        for (let idx = loggedAdjudications.length - 1; idx >= 0; idx -= 1) {
+            const candidate = loggedAdjudications[idx]?.vehicleId?.trim() ?? "";
+            if (candidate.length > 0) {
+                priorVehicleId = candidate;
+                break;
+            }
+        }
+        if (!priorVehicleId && props.event?.vehicleId && !props.event.vehicleIdFromOcr) {
+            priorVehicleId = props.event.vehicleId.trim();
+        }
+        if (priorVehicleId) {
+            setVehicleId(priorVehicleId);
+            setVehicleIdAutoFilled(false);
+            setAdjData(previous => {
+                if (!previous) return previous;
+                const updated = Object.assign(
+                    Object.create(Object.getPrototypeOf(previous)),
+                    previous,
+                ) as AdjudicationData;
+                updated.setVehicleId(priorVehicleId);
+                return updated;
+            });
+            return;
+        }
+
         const candidate = selectAutoFillCandidate(ocrResults);
         if (!candidate) return;
         setVehicleId(candidate.value);
@@ -215,13 +248,7 @@ export default function AdjudicationDetail(props: {
             updated.setVehicleId(candidate.value);
             return updated;
         });
-    }, [ocrResults, vehicleId, vehicleIdTouched]);
-
-    const [adjSnackMsg, setAdjSnackMsg] = useState('');
-    const [colorStatus, setColorStatus] = useState('');
-    const [openSnack, setOpenSnack] = useState(false);
-    const [shouldFetchLogs, setShouldFetchLogs] = useState<boolean>(false);
-    const [loggedAdjudications, setLoggedAdjudications] = useState<AdjudicationData[]>([]);
+    }, [loggedAdjudications, ocrResults, props.event?.vehicleId, props.event?.vehicleIdFromOcr, vehicleId, vehicleIdTouched]);
     const [webIdResults, setWebIdResults] = useState<WebIdAnalysisResult[]>([]);
     const [selectedWebIdResultId, setSelectedWebIdResultId] = useState<string[]>([]);
     const [isSubmittingWebId, setIsSubmittingWebId] = useState(false);
