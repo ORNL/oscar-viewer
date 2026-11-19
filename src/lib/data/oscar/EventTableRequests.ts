@@ -4,6 +4,7 @@ import {runWithConcurrency} from "@/lib/data/oscar/BulkAdjudication";
 import {eventSelectionKey} from "@/lib/data/oscar/EventFilter";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
 import {EventTableData, sortEventsByAlarmPriority} from "@/lib/data/oscar/TableHelpers";
+import {isTunnelAuthReloadPending} from "@/lib/data/oscar/TunnelSessionSelfHeal";
 
 export interface EventQueryPlan {
     key: string;
@@ -316,7 +317,12 @@ export function useAbortableEventQueries({
             setRowCount(counts.reduce((sum, count) => sum + count, 0));
             setCountQueryError(false);
         } catch (error) {
-            if (controller.signal.aborted || isAbortRequestError(error) || requestId !== countRequestRef.current) return;
+            if (
+                controller.signal.aborted
+                || isAbortRequestError(error)
+                || isTunnelAuthReloadPending()
+                || requestId !== countRequestRef.current
+            ) return;
             console.error("Error fetching filtered event counts", error);
             setCountQueryError(true);
         } finally {
@@ -459,7 +465,12 @@ export function useAbortableEventQueries({
             currentPageRef.current = targetPage;
             setPageQueryError(false);
         } catch (error) {
-            if (controller.signal.aborted || isAbortRequestError(error) || requestId !== pageRequestRef.current) return;
+            if (
+                controller.signal.aborted
+                || isAbortRequestError(error)
+                || isTunnelAuthReloadPending()
+                || requestId !== pageRequestRef.current
+            ) return;
             console.error("Error fetching filtered events", error);
             setRows([]);
             setPageQueryError(true);
