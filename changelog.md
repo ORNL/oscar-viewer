@@ -1,6 +1,12 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.1
+
+### Changed
+
+- Updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.1` (`oscar-3.11.1.zip`) in alignment with the `3.11.1 (Amber)` security and bare-metal provisioning release.
+
 ## 3.11.0
 
 ### Added
