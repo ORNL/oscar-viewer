@@ -115,6 +115,28 @@ const MOCK_STATUS = {
         loadedAt: '',
         lastError: '',
     },
+    uff: {
+        enabled: false,
+        customActive: false,
+        activeSource: 'disabled',
+        sourceType: 'smb',
+        shareUrl: '',
+        subPath: '',
+        localPath: '',
+        domain: '',
+        username: '',
+        passwordConfigured: false,
+        correlationWindowMinutes: 60,
+        allowFuzzyOcrMatch: true,
+        updatedAt: '',
+        indexedCount: 0,
+        uff2Count: 0,
+        uff3Count: 0,
+        scanners: [],
+        lastRefreshAt: '',
+        lastRefreshDurationMs: 0,
+        lastError: '',
+    },
 };
 
 describe('RuntimeExtensionsManager & PMTiles Helpers', () => {
@@ -211,6 +233,10 @@ describe('RuntimeExtensionsManager & PMTiles Helpers', () => {
         cy.get('[data-testid="ext-dialog-confirm-btn"]').click();
         cy.wait('@resetMaps');
         cy.contains('OpenStreetMap Streets + Esri World Imagery').should('be.visible');
+
+        // Verify 7th Cargo NII (WCO UFF) tab is disabled by default with zero background clutter
+        cy.get('[data-testid="ext-tab-uff"]').click();
+        cy.get('[data-testid="uff-ext-disabled-note"]').should('be.visible');
     });
 
     it('blocks non-admin operators with an informative warning banner', () => {

@@ -268,5 +268,8 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
         cy.get('[data-testid="help-catalog-watch-25"]').should("be.visible").click();
         cy.get('[data-testid="help-video-element"] source')
             .should("have.attr", "src", "/video-guides/videos/25-pluggable-runtime-extensions-and-pmtiles.mp4");
+        cy.get('[data-testid="help-catalog-watch-27"]').should("be.visible").click();
+        cy.get('[data-testid="help-video-element"] source')
+            .should("have.attr", "src", "/video-guides/videos/27-cargo-uff-smb-and-xray-inspection.mp4");
     });
 });

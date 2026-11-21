@@ -29,8 +29,16 @@ import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import FolderSharedRoundedIcon from '@mui/icons-material/FolderSharedRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
 import { fetchCurrentSession, OscarSessionInfo } from '@/lib/data/oscar/AuthSessionApi';
+import {
+    CargoUffConnectionTestResult,
+    invalidateCargoUffActiveCache,
+    testCargoUffConnection,
+} from '@/lib/data/oscar/CargoUffApi';
 import {
     downloadExtensionArtifact,
     ExtensionDomain,
@@ -89,6 +97,7 @@ const EXT_COPY: Record<Locale, ExtUiCopy> = {
             'trusted-certs': 'Trusted CA Certificates',
             'policy-packs': 'Adjudication Policy Packs',
             eml: 'EML Alarm Assessment',
+            uff: 'Cargo NII (WCO UFF)',
         },
     },
     es: {
@@ -118,6 +127,7 @@ const EXT_COPY: Record<Locale, ExtUiCopy> = {
             'trusted-certs': 'Certificados CA de confianza',
             'policy-packs': 'Paquetes de códigos de adjudicación',
             eml: 'Evaluación de alarmas EML',
+            uff: 'Carga NII (WCO UFF)',
         },
     },
     fr: {
@@ -147,6 +157,7 @@ const EXT_COPY: Record<Locale, ExtUiCopy> = {
             'trusted-certs': 'Certificats CA approuvés',
             'policy-packs': 'Packs de codes d’adjudication',
             eml: 'Évaluation d’alarme EML',
+            uff: 'Fret NII (OMD UFF)',
         },
     },
     el: {
@@ -176,6 +187,7 @@ const EXT_COPY: Record<Locale, ExtUiCopy> = {
             'trusted-certs': 'Έμπιστα πιστοποιητικά CA',
             'policy-packs': 'Πακέτα κωδίκων κρίσης',
             eml: 'Αξιολόγηση συναγερμών EML',
+            uff: 'Φορτίο NII (WCO UFF)',
         },
     },
 };
@@ -187,6 +199,7 @@ const TAB_ORDER: ExtensionDomain[] = [
     'trusted-certs',
     'policy-packs',
     'eml',
+    'uff',
 ];
 
 function formatBytes(bytes?: number): string {
@@ -255,6 +268,22 @@ export default function RuntimeExtensionsManager() {
     // Spectroscopy execution mode
     const [specMode, setSpecMode] = React.useState<'fallback' | 'override'>('fallback');
 
+    // Cargo NII (WCO UFF) SMB / Local share form state
+    const [uffEnabled, setUffEnabled] = React.useState(false);
+    const [uffSourceType, setUffSourceType] = React.useState<'smb' | 'local'>('smb');
+    const [uffShareUrl, setUffShareUrl] = React.useState('');
+    const [uffSubPath, setUffSubPath] = React.useState('');
+    const [uffLocalPath, setUffLocalPath] = React.useState('');
+    const [uffDomain, setUffDomain] = React.useState('');
+    const [uffUsername, setUffUsername] = React.useState('');
+    const [uffPassword, setUffPassword] = React.useState('');
+    const [showUffPassword, setShowUffPassword] = React.useState(false);
+    const [uffWindowMin, setUffWindowMin] = React.useState(60);
+    const [uffFuzzyOcr, setUffFuzzyOcr] = React.useState(true);
+    const [uffTesting, setUffTesting] = React.useState(false);
+    const [uffSaving, setUffSaving] = React.useState(false);
+    const [uffTestResult, setUffTestResult] = React.useState<CargoUffConnectionTestResult | null>(null);
+
     const tabRefs = React.useRef<Record<ExtensionDomain, HTMLButtonElement | null>>({
         ocr: null,
         maps: null,
@@ -262,6 +291,7 @@ export default function RuntimeExtensionsManager() {
         'trusted-certs': null,
         'policy-packs': null,
         eml: null,
+        uff: null,
     });
     const panelRefs = React.useRef<Record<ExtensionDomain, HTMLDivElement | null>>({
         ocr: null,
@@ -270,6 +300,7 @@ export default function RuntimeExtensionsManager() {
         'trusted-certs': null,
         'policy-packs': null,
         eml: null,
+        uff: null,
     });
     const fileInputRefs = React.useRef<Record<ExtensionDomain, HTMLInputElement | null>>({
         ocr: null,
@@ -278,6 +309,7 @@ export default function RuntimeExtensionsManager() {
         'trusted-certs': null,
         'policy-packs': null,
         eml: null,
+        uff: null,
     });
 
     const dialogRef = React.useRef<HTMLDialogElement | null>(null);
@@ -300,6 +332,18 @@ export default function RuntimeExtensionsManager() {
                 setSpecMode('override');
             } else {
                 setSpecMode('fallback');
+            }
+            if (full.uff) {
+                setUffEnabled(Boolean(full.uff.enabled));
+                setUffSourceType(full.uff.sourceType === 'local' ? 'local' : 'smb');
+                setUffShareUrl(full.uff.shareUrl || '');
+                setUffSubPath(full.uff.subPath || '');
+                setUffLocalPath(full.uff.localPath || '');
+                setUffDomain(full.uff.domain || '');
+                setUffUsername(full.uff.username || '');
+                setUffPassword('');
+                setUffWindowMin(full.uff.correlationWindowMinutes || 60);
+                setUffFuzzyOcr(full.uff.allowFuzzyOcrMatch !== false);
             }
         } catch (err: any) {
             setErrorMsg(err?.message || 'Unable to load runtime extensions status');
@@ -521,6 +565,8 @@ export default function RuntimeExtensionsManager() {
                 return <FactCheckRoundedIcon fontSize="small" aria-hidden="true" />;
             case 'eml':
                 return <MemoryRoundedIcon fontSize="small" aria-hidden="true" />;
+            case 'uff':
+                return <FolderSharedRoundedIcon fontSize="small" aria-hidden="true" />;
         }
     };
 
@@ -1399,6 +1445,397 @@ export default function RuntimeExtensionsManager() {
                                                 '.jar,.zip,.tar.gz,.tgz,.tar',
                                                 'Drop an LLNL ERNIE VM-250 bundle or standalone EmlAlarmAssessmentAlgorithm SPI .jar.'
                                             )}
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            </Grid>
+                        </div>
+                    </div>
+
+                    {/* 7. Cargo NII (WCO UFF 2.0 / 3.0) SMB & Drop-Folder Integration */}
+                    <div
+                        ref={(el) => {
+                            panelRefs.current.uff = el;
+                        }}
+                        id={`${baseId}-panel-uff`}
+                        role="tabpanel"
+                        aria-labelledby={`${baseId}-tab-uff`}
+                        className="oscar-ext-tabpanel"
+                        {...(activeTab !== 'uff' ? ({ hidden: 'until-found' } as any) : {})}
+                    >
+                        <div className="oscar-ext-panel-inner">
+                            <Grid container spacing={3}>
+                                <Grid item xs={12} md={5}>
+                                    <Card variant="outlined">
+                                        <CardContent>
+                                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                                                <Typography variant="h6" component="h2">
+                                                    Cargo NII Share Status
+                                                </Typography>
+                                                {renderSourceChip(Boolean(status.uff?.enabled), !status.uff?.enabled)}
+                                            </Stack>
+                                            <Divider sx={{ mb: 1.5 }} />
+                                            {status.uff?.enabled ? (
+                                                <Stack spacing={1} data-testid="uff-ext-active-summary">
+                                                    <Typography variant="body2">
+                                                        <strong>Source:</strong>{' '}
+                                                        {status.uff.sourceType === 'local'
+                                                            ? status.uff.localPath
+                                                            : `${status.uff.shareUrl}${status.uff.subPath ? `\\${status.uff.subPath}` : ''}`}
+                                                    </Typography>
+                                                    <Typography variant="body2">
+                                                        <strong>Indexed Archives:</strong>{' '}
+                                                        <span data-testid="uff-ext-indexed-count">{status.uff.indexedCount}</span>{' '}
+                                                        (UFF 2.0: {status.uff.uff2Count} · UFF 3.0: {status.uff.uff3Count})
+                                                    </Typography>
+                                                    {status.uff.scanners && status.uff.scanners.length > 0 && (
+                                                        <Box>
+                                                            <Typography variant="caption" color="text.secondary" display="block">
+                                                                Discovered Scanners
+                                                            </Typography>
+                                                            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                                                                {status.uff.scanners.map((sc) => (
+                                                                    <Chip key={sc} size="small" variant="outlined" label={sc} />
+                                                                ))}
+                                                            </Stack>
+                                                        </Box>
+                                                    )}
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Last incremental refresh: {status.uff.lastRefreshAt || '—'} ({status.uff.lastRefreshDurationMs} ms)
+                                                    </Typography>
+                                                    {status.uff.lastError && (
+                                                        <Alert severity="warning" sx={{ mt: 1 }}>
+                                                            {status.uff.lastError}
+                                                        </Alert>
+                                                    )}
+                                                    <Stack direction="row" spacing={1} sx={{ pt: 1 }} flexWrap="wrap" useFlexGap>
+                                                        <Button
+                                                            type="button"
+                                                            size="small"
+                                                            variant="outlined"
+                                                            startIcon={<RefreshRoundedIcon />}
+                                                            onClick={async () => {
+                                                                try {
+                                                                    setErrorMsg(null);
+                                                                    const next = await submitRuntimeExtensionAction('uff', { action: 'refresh' });
+                                                                    invalidateCargoUffActiveCache();
+                                                                    setStatus(next);
+                                                                    setSuccessMsg('Refreshed Cargo UFF index.');
+                                                                } catch (err: any) {
+                                                                    setErrorMsg(err?.message || 'Failed refreshing UFF share');
+                                                                }
+                                                            }}
+                                                            data-testid="uff-ext-refresh-index-btn"
+                                                        >
+                                                            Refresh Index
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="small"
+                                                            variant="outlined"
+                                                            color="warning"
+                                                            startIcon={<RestartAltRoundedIcon />}
+                                                            onClick={async () => {
+                                                                try {
+                                                                    setErrorMsg(null);
+                                                                    const next = await submitRuntimeExtensionAction('uff', { action: 'reset' });
+                                                                    invalidateCargoUffActiveCache();
+                                                                    setStatus(next);
+                                                                    setUffEnabled(false);
+                                                                    setUffTestResult(null);
+                                                                    setSuccessMsg('Disabled Cargo UFF share integration.');
+                                                                } catch (err: any) {
+                                                                    setErrorMsg(err?.message || 'Failed resetting UFF integration');
+                                                                }
+                                                            }}
+                                                            data-testid="uff-ext-disable-btn"
+                                                        >
+                                                            Disable &amp; Clear Index
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            ) : (
+                                                <Typography variant="body2" color="text.secondary" data-testid="uff-ext-disabled-note">
+                                                    Cargo UFF share integration is disabled by default so non-NII sites see zero extra controls, zero background threads, and zero network polling. Individual .uff files can still be inspected at any time via Upload Files in Secondary Inspection.
+                                                </Typography>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+
+                                <Grid item xs={12} md={7}>
+                                    <Card variant="outlined">
+                                        <CardContent>
+                                            <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>
+                                                Read-Only SMBv2/SMBv3 Share &amp; Correlation Settings
+                                            </Typography>
+                                            <Box
+                                                component="form"
+                                                onSubmit={async (e) => {
+                                                    e.preventDefault();
+                                                    setUffSaving(true);
+                                                    setErrorMsg(null);
+                                                    setSuccessMsg(null);
+                                                    try {
+                                                        const next = await submitRuntimeExtensionAction('uff', {
+                                                            action: 'save-config',
+                                                            enabled: uffEnabled,
+                                                            sourceType: uffSourceType,
+                                                            shareUrl: uffShareUrl,
+                                                            subPath: uffSubPath,
+                                                            localPath: uffLocalPath,
+                                                            domain: uffDomain,
+                                                            username: uffUsername,
+                                                            ...(uffPassword ? { password: uffPassword } : {}),
+                                                            correlationWindowMinutes: uffWindowMin,
+                                                            allowFuzzyOcrMatch: uffFuzzyOcr,
+                                                        });
+                                                        invalidateCargoUffActiveCache();
+                                                        setStatus(next);
+                                                        setUffPassword('');
+                                                        setSuccessMsg(
+                                                            next.uff?.enabled
+                                                                ? `Cargo UFF share enabled (${next.uff.indexedCount} packages indexed).`
+                                                                : 'Cargo UFF configuration saved (disabled).',
+                                                        );
+                                                    } catch (err: any) {
+                                                        setErrorMsg(err?.message || 'Failed saving Cargo UFF settings');
+                                                    } finally {
+                                                        setUffSaving(false);
+                                                    }
+                                                }}
+                                            >
+                                                <Stack spacing={2}>
+                                                    <FormControlLabel
+                                                        control={
+                                                            <Checkbox
+                                                                checked={uffEnabled}
+                                                                onChange={(e) => setUffEnabled(e.target.checked)}
+                                                                data-testid="uff-ext-enabled-checkbox"
+                                                            />
+                                                        }
+                                                        label="Enable Cargo UFF Share / Drop-Folder Integration"
+                                                    />
+
+                                                    <Stack direction="row" spacing={2}>
+                                                        <FormControlLabel
+                                                            control={
+                                                                <input
+                                                                    type="radio"
+                                                                    name="uffSourceType"
+                                                                    checked={uffSourceType === 'smb'}
+                                                                    onChange={() => setUffSourceType('smb')}
+                                                                    data-testid="uff-ext-source-smb"
+                                                                />
+                                                            }
+                                                            label="SMB Network Share (SMBv2/SMBv3)"
+                                                        />
+                                                        <FormControlLabel
+                                                            control={
+                                                                <input
+                                                                    type="radio"
+                                                                    name="uffSourceType"
+                                                                    checked={uffSourceType === 'local'}
+                                                                    onChange={() => setUffSourceType('local')}
+                                                                    data-testid="uff-ext-source-local"
+                                                                />
+                                                            }
+                                                            label="Mounted / Local Host Directory"
+                                                        />
+                                                    </Stack>
+
+                                                    {uffSourceType === 'smb' ? (
+                                                        <>
+                                                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                                                                <TextField
+                                                                    size="small"
+                                                                    fullWidth
+                                                                    label="SMB Share UNC or URL"
+                                                                    placeholder="\\nas.port.local\oscar-uff"
+                                                                    value={uffShareUrl}
+                                                                    onChange={(e) => setUffShareUrl(e.target.value)}
+                                                                    inputProps={{
+                                                                        autoCorrect: 'off',
+                                                                        autoCapitalize: 'none',
+                                                                        spellCheck: false,
+                                                                        'data-testid': 'uff-ext-share-url',
+                                                                    }}
+                                                                />
+                                                                <TextField
+                                                                    size="small"
+                                                                    sx={{ minWidth: { sm: 210 } }}
+                                                                    label="Optional Subfolder"
+                                                                    placeholder="smb-date-archive"
+                                                                    value={uffSubPath}
+                                                                    onChange={(e) => setUffSubPath(e.target.value)}
+                                                                    inputProps={{
+                                                                        autoCorrect: 'off',
+                                                                        autoCapitalize: 'none',
+                                                                        spellCheck: false,
+                                                                        'data-testid': 'uff-ext-subpath',
+                                                                    }}
+                                                                />
+                                                            </Stack>
+
+                                                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+                                                                <TextField
+                                                                    size="small"
+                                                                    label="Domain / Workgroup"
+                                                                    placeholder="WORKGROUP"
+                                                                    value={uffDomain}
+                                                                    onChange={(e) => setUffDomain(e.target.value)}
+                                                                    inputProps={{
+                                                                        autoCorrect: 'off',
+                                                                        autoCapitalize: 'none',
+                                                                        spellCheck: false,
+                                                                        'data-testid': 'uff-ext-domain',
+                                                                    }}
+                                                                />
+                                                                <TextField
+                                                                    size="small"
+                                                                    label="Read-Only Username"
+                                                                    value={uffUsername}
+                                                                    onChange={(e) => setUffUsername(e.target.value)}
+                                                                    inputProps={{
+                                                                        autoComplete: 'username',
+                                                                        autoCorrect: 'off',
+                                                                        autoCapitalize: 'none',
+                                                                        spellCheck: false,
+                                                                        'data-testid': 'uff-ext-username',
+                                                                    }}
+                                                                />
+                                                                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flex: 1 }}>
+                                                                    <TextField
+                                                                        size="small"
+                                                                        fullWidth
+                                                                        type={showUffPassword ? 'text' : 'password'}
+                                                                        label={
+                                                                            status.uff?.passwordConfigured
+                                                                                ? 'Password (encrypted — leave blank to keep)'
+                                                                                : 'Read-Only Password'
+                                                                        }
+                                                                        value={uffPassword}
+                                                                        onChange={(e) => setUffPassword(e.target.value)}
+                                                                        inputProps={{
+                                                                            autoComplete: 'new-password',
+                                                                            'data-testid': 'uff-ext-password',
+                                                                        }}
+                                                                    />
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="small"
+                                                                        variant="outlined"
+                                                                        aria-pressed={showUffPassword}
+                                                                        aria-label={showUffPassword ? 'Hide SMB password' : 'Show SMB password'}
+                                                                        onClick={() => setShowUffPassword((p) => !p)}
+                                                                        sx={{ minWidth: 40, px: 1 }}
+                                                                    >
+                                                                        {showUffPassword ? (
+                                                                            <VisibilityOffRoundedIcon fontSize="small" />
+                                                                        ) : (
+                                                                            <VisibilityRoundedIcon fontSize="small" />
+                                                                        )}
+                                                                    </Button>
+                                                                </Stack>
+                                                            </Stack>
+                                                        </>
+                                                    ) : (
+                                                        <TextField
+                                                            size="small"
+                                                            fullWidth
+                                                            label="Local / Mounted UFF Directory Path"
+                                                            placeholder="/mnt/nii-uff"
+                                                            value={uffLocalPath}
+                                                            onChange={(e) => setUffLocalPath(e.target.value)}
+                                                            inputProps={{
+                                                                autoCorrect: 'off',
+                                                                autoCapitalize: 'none',
+                                                                spellCheck: false,
+                                                                'data-testid': 'uff-ext-local-path',
+                                                            }}
+                                                        />
+                                                    )}
+
+                                                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+                                                        <TextField
+                                                            size="small"
+                                                            label="Correlation Window (minutes)"
+                                                            value={uffWindowMin}
+                                                            onChange={(e) => {
+                                                                const n = parseInt(e.target.value, 10);
+                                                                if (Number.isFinite(n)) setUffWindowMin(n);
+                                                            }}
+                                                            inputProps={{
+                                                                inputMode: 'numeric',
+                                                                'data-testid': 'uff-ext-window-min',
+                                                            }}
+                                                            sx={{ maxWidth: 220 }}
+                                                        />
+                                                        <FormControlLabel
+                                                            control={
+                                                                <Checkbox
+                                                                    checked={uffFuzzyOcr}
+                                                                    onChange={(e) => setUffFuzzyOcr(e.target.checked)}
+                                                                    data-testid="uff-ext-fuzzy-checkbox"
+                                                                />
+                                                            }
+                                                            label="Allow 1-Character Scanner OCR Fuzzy Match (0↔O, 8↔B, 6↔G)"
+                                                        />
+                                                    </Stack>
+
+                                                    {uffTestResult && (
+                                                        <Alert severity="success" role="status" data-testid="uff-ext-test-result">
+                                                            Connected to <strong>{uffTestResult.target}</strong> in{' '}
+                                                            {uffTestResult.latencyMs} ms — discovered{' '}
+                                                            <strong>{uffTestResult.discoveredUffCount}</strong> .uff packages
+                                                            {uffTestResult.sampleScannerId
+                                                                ? ` (sample: ${uffTestResult.sampleScannerId}, UFF ${uffTestResult.sampleUffVersion})`
+                                                                : ''}
+                                                            .
+                                                        </Alert>
+                                                    )}
+
+                                                    <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outlined"
+                                                            disabled={uffTesting || uffSaving}
+                                                            onClick={async () => {
+                                                                setUffTesting(true);
+                                                                setErrorMsg(null);
+                                                                setUffTestResult(null);
+                                                                try {
+                                                                    const res = await testCargoUffConnection({
+                                                                        sourceType: uffSourceType,
+                                                                        shareUrl: uffShareUrl,
+                                                                        subPath: uffSubPath,
+                                                                        localPath: uffLocalPath,
+                                                                        domain: uffDomain,
+                                                                        username: uffUsername,
+                                                                        ...(uffPassword ? { password: uffPassword } : {}),
+                                                                    });
+                                                                    setUffTestResult(res);
+                                                                } catch (err: any) {
+                                                                    setErrorMsg(err?.message || 'Connection test failed');
+                                                                } finally {
+                                                                    setUffTesting(false);
+                                                                }
+                                                            }}
+                                                            data-testid="uff-ext-test-btn"
+                                                        >
+                                                            {uffTesting ? 'Testing...' : 'Test Connection'}
+                                                        </Button>
+                                                        <Button
+                                                            type="submit"
+                                                            variant="contained"
+                                                            disabled={uffSaving}
+                                                            data-testid="uff-ext-save-btn"
+                                                        >
+                                                            {uffSaving ? 'Saving...' : 'Save & Apply'}
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Box>
                                         </CardContent>
                                     </Card>
                                 </Grid>

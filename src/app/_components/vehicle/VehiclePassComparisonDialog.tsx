@@ -27,6 +27,8 @@ import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import ShowChartRoundedIcon from "@mui/icons-material/ShowChartRounded";
 import FactCheckRoundedIcon from "@mui/icons-material/FactCheckRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import LayersRoundedIcon from "@mui/icons-material/LayersRounded";
+import dynamic from "next/dynamic";
 import ControlStream from "osh-js/source/core/consysapi/controlstream/ControlStream";
 import {useRouter} from "next/navigation";
 
@@ -76,6 +78,16 @@ import {
     fetchRetainedMediaAsset,
 } from "@/lib/media/RetainedMedia";
 import {INode} from "@/lib/data/osh/Node";
+import {
+    fetchActiveCargoUffInfo,
+    searchCargoUff,
+    UffSearchMatch,
+} from "@/lib/data/oscar/CargoUffApi";
+
+const CargoUffViewerDialog = dynamic(
+    () => import("@/app/_components/uff/CargoUffViewerDialog"),
+    {ssr: false},
+);
 
 export interface VehiclePassComparisonDialogProps {
     open: boolean;
@@ -209,6 +221,49 @@ export default function VehiclePassComparisonDialog({
     } | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
     const [selectedUpSetFilter, setSelectedUpSetFilter] = useState<UpSetFilterSelection | null>(null);
+    const [correlatedUffMatch, setCorrelatedUffMatch] = useState<UffSearchMatch | null>(null);
+    const [openUffViewer, setOpenUffViewer] = useState<boolean>(false);
+    const primaryComparisonNode = useMemo(
+        () => nodes?.[0] ?? Array.from(laneMap.values())[0]?.parentNode ?? null,
+        [laneMap, nodes],
+    );
+
+    useEffect(() => {
+        if (!open) {
+            setCorrelatedUffMatch(null);
+            setOpenUffViewer(false);
+            return;
+        }
+        if (initialResult && laneMap.size === 0 && (!nodes || nodes.length === 0)) {
+            return;
+        }
+        const normalized = normalizeVehicleId(vehicleId);
+        if (normalized.length < 3) {
+            setCorrelatedUffMatch(null);
+            return;
+        }
+        const ctrl = new AbortController();
+        void fetchActiveCargoUffInfo(primaryComparisonNode, fetchImpl)
+            .then(async info => {
+                if (!info.enabled || ctrl.signal.aborted) {
+                    setCorrelatedUffMatch(null);
+                    return;
+                }
+                const uffRes = await searchCargoUff(
+                    {vehicleId, windowMinutes: 0, fuzzy: true, limit: 3},
+                    primaryComparisonNode,
+                    ctrl.signal,
+                    fetchImpl,
+                );
+                if (!ctrl.signal.aborted) {
+                    setCorrelatedUffMatch(uffRes.matches?.[0] ?? null);
+                }
+            })
+            .catch(() => {
+                if (!ctrl.signal.aborted) setCorrelatedUffMatch(null);
+            });
+        return () => ctrl.abort();
+    }, [fetchImpl, initialResult, laneMap.size, nodes, open, primaryComparisonNode, vehicleId]);
 
     const runSearch = useCallback(
         async (includeProfiles: boolean, signal?: AbortSignal) => {
@@ -662,6 +717,19 @@ export default function VehiclePassComparisonDialog({
                     </Box>
                 </Stack>
                 <Stack direction="row" spacing={0.5} alignItems="center">
+                    {correlatedUffMatch && (
+                        <Button
+                            type="button"
+                            size="small"
+                            variant="contained"
+                            color="primary"
+                            startIcon={<LayersRoundedIcon />}
+                            onClick={() => setOpenUffViewer(true)}
+                            data-testid="vehicle-comparison-open-uff-btn"
+                        >
+                            {t("openCargoXray")}
+                        </Button>
+                    )}
                     <Button
                         type="button"
                         size="small"
@@ -1605,6 +1673,16 @@ export default function VehiclePassComparisonDialog({
                     {t("close")}
                 </Button>
             </DialogActions>
+            {openUffViewer && correlatedUffMatch && (
+                <CargoUffViewerDialog
+                    open={openUffViewer}
+                    onClose={() => setOpenUffViewer(false)}
+                    uffUuid={correlatedUffMatch.uffUuid}
+                    node={primaryComparisonNode}
+                    occupancyObsId={result?.passes?.[0]?.occupancyObsId ?? null}
+                    initialRadiationProfile={result?.passes?.[0]?.radiationProfile ?? null}
+                />
+            )}
         </Dialog>
     );
 }

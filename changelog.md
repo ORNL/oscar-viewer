@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.2
+
+### Added
+
+- Added optional **Cargo Non-Intrusive Inspection (WCO `UFF 2.0` & `UFF 3.0.0`)** integration (`CargoUffApi.ts`, `Tiff16Decoder.ts`, `UffClientArchive.ts`, `CargoUffViewerDialog.tsx`, `CargoUffSmbPickerDialog.tsx`, `RuntimeExtensionsManager.tsx`, `AdjudicationDetail.tsx`, `AdjudicationLog.tsx`, `EventTable.tsx`, `VehiclePassComparisonDialog.tsx`, `HelpDialog.tsx`, `VideoGuidesCatalog.ts` across `745` locale keys in `en`, `es`, `fr`, `el`): ships disabled by default (`0` extra UI controls, `0` background threads, and `0` network requests when disabled), supports direct browser `.uff` file uploads (`up to 200 MB`) with automatic embedded `.n42` WebID extraction, provides a read-only SMBv2/SMBv3 share connector tab in **Runtime Extensions (`/extensions`)**, enables scanner/time-window browsing, 1-character fuzzy OCR container/plate correlation (`OCR ±1`), Tier-1 UFF UUID / `.uff` filename / UNC share-path lookup in **Events (`/event-log`)**, zero-dependency 16-bit `uint16` grayscale TIFF (`WebGL2` `R16UI` + `Uint32Array[65536]` LUT fallback) and palettized **HEMD** atomic-number (`Z_eff`) inspection aligned with the RPM gamma/neutron count profile, zero-download NAS adjudication linking (`.uffref.json`), and bundled how-to video guide `#27` (`27-cargo-uff-smb-and-xray-inspection`).
+
+### Changed
+
+- Updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.2` (`oscar-3.11.2.zip`).
+
 ## 3.11.1
 
 ### Changed

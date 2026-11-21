@@ -3,13 +3,16 @@
  * All Rights Reserved
  */
 
+import { CargoUffAdminStatus } from '@/lib/data/oscar/CargoUffApi';
+
 export type ExtensionDomain =
     | 'ocr'
     | 'maps'
     | 'spectroscopy'
     | 'trusted-certs'
     | 'policy-packs'
-    | 'eml';
+    | 'eml'
+    | 'uff';
 
 export interface OcrExtensionStatus {
     activeSource: 'builtin' | 'custom' | string;
@@ -168,6 +171,7 @@ export interface RuntimeExtensionsFullStatus {
     trustedCerts: TrustedCertsExtensionStatus;
     policyPacks: PolicyPacksExtensionStatus;
     eml: EmlExtensionStatus;
+    uff?: CargoUffAdminStatus;
 }
 
 const EXTENSIONS_BASES = ['/sensorhub/oscar/extensions', '/oscar/extensions'];
