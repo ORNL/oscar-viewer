@@ -34,6 +34,8 @@ import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
 import ClearRoundedIcon from "@mui/icons-material/ClearRounded";
+import LayersRoundedIcon from "@mui/icons-material/LayersRounded";
+import dynamic from "next/dynamic";
 import DataStream from "osh-js/source/core/sweapi/datastream/DataStream.js";
 import ObservationFilter from "osh-js/source/core/sweapi/observation/ObservationFilter";
 import Observations from "osh-js/source/core/consysapi/observation/Observations";
@@ -115,6 +117,17 @@ import {
     hasVehicleIdFilterRule,
 } from "@/lib/data/oscar/EventFilter";
 import VehiclePassComparisonDialog from "@/app/_components/vehicle/VehiclePassComparisonDialog";
+import {
+    extractUffUuidFromOmniboxInput,
+    fetchActiveCargoUffInfo,
+    searchCargoUff,
+    UffSearchMatch,
+} from "@/lib/data/oscar/CargoUffApi";
+
+const CargoUffViewerDialog = dynamic(
+    () => import("@/app/_components/uff/CargoUffViewerDialog"),
+    {ssr: false},
+);
 import {
     DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE,
     FederatedVehicleSearchResult,
@@ -319,6 +332,12 @@ export default function EventTable({
         highlightObsId?: string | null;
         initialResult?: FederatedVehicleSearchResult | null;
     } | null>(null);
+    const [uffOmniboxMatches, setUffOmniboxMatches] = useState<UffSearchMatch[]>([]);
+    const [eventLogUffViewerUuid, setEventLogUffViewerUuid] = useState<string | null>(null);
+    const primaryEventLogNode = useMemo(
+        () => Array.from(stableLaneMap.values())[0]?.parentNode ?? null,
+        [stableLaneMap],
+    );
 
     const filterVehicleRule = useMemo(() => extractPrimaryVehicleIdRule(filter), [filter]);
     const hasFilterVehicleRule = useMemo(() => hasVehicleIdFilterRule(filter), [filter]);
@@ -1113,9 +1132,45 @@ export default function EventTable({
             setVehicleSearchResult(null);
             setVehicleSearchLoading(false);
             setVehicleSearchError(null);
+            setUffOmniboxMatches([]);
             return;
         }
-        if (stableLaneMap.size === 0) return;
+
+        const controller = new AbortController();
+        const omniboxUffUuid = isEventLog ? extractUffUuidFromOmniboxInput(activeVehicleQuery.vehicleId) : "";
+
+        // When in Event Log and a search is explicitly active, query Cargo UFF if enabled on the node.
+        // Zero requests are issued when no search is submitted or when Cargo UFF is disabled.
+        const uffLookupPromise: Promise<UffSearchMatch[]> = isEventLog
+            ? fetchActiveCargoUffInfo(primaryEventLogNode)
+                .then(async info => {
+                    if (!info.enabled || controller.signal.aborted) return [];
+                    const uffRes = await searchCargoUff(
+                        omniboxUffUuid
+                            ? {uffId: activeVehicleQuery.vehicleId, limit: 5}
+                            : {
+                                vehicleId: activeVehicleQuery.vehicleId,
+                                windowMinutes: 0,
+                                fuzzy: true,
+                                limit: 5,
+                            },
+                        primaryEventLogNode,
+                        controller.signal,
+                    );
+                    return uffRes.matches ?? [];
+                })
+                .catch((): UffSearchMatch[] => [])
+            : Promise.resolve([]);
+
+        void uffLookupPromise.then(matches => {
+            if (!controller.signal.aborted) {
+                setUffOmniboxMatches(matches);
+            }
+        });
+
+        if (stableLaneMap.size === 0) {
+            return () => controller.abort();
+        }
 
         const snapVehicle = isEventLog ? restoredSnapshotRef.current?.vehicleSearchResult : null;
         if (snapVehicle) {
@@ -1125,10 +1180,9 @@ export default function EventTable({
             setVehicleSearchResult(snapVehicle);
             setVehicleSearchLoading(false);
             setVehicleSearchError(null);
-            return;
+            return () => controller.abort();
         }
 
-        const controller = new AbortController();
         setVehicleSearchLoading(true);
         setVehicleSearchError(null);
 
@@ -1137,33 +1191,69 @@ export default function EventTable({
                 ? null
                 : new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS[activeVehicleQuery.window]).toISOString();
 
-        void searchVehiclePassesAcrossNodes({
-            vehicleId: activeVehicleQuery.vehicleId,
-            matchMode: activeVehicleQuery.matchMode,
-            laneMap: stableLaneMap,
-            activeViewKey,
-            startTimeIso,
-            signal: controller.signal,
-        })
-            .then((res) => {
+        void (async () => {
+            try {
+                let effectiveVehicleId = activeVehicleQuery.vehicleId;
+                let effectiveMatchMode = activeVehicleQuery.matchMode;
+                if (omniboxUffUuid) {
+                    const uffMatches = await uffLookupPromise;
+                    if (controller.signal.aborted) return;
+                    if (uffMatches.length > 0) {
+                        const correlatedId = uffMatches[0]?.displayVehicleIds?.[0];
+                        if (correlatedId) {
+                            effectiveVehicleId = correlatedId;
+                            effectiveMatchMode = "equals";
+                        } else {
+                            setVehicleSearchResult({
+                                rawVehicleId: activeVehicleQuery.vehicleId,
+                                normalizedVehicleId: normalizeVehicleId(activeVehicleQuery.vehicleId),
+                                formattedVehicleId: uffMatches[0]!.archiveFileName || omniboxUffUuid,
+                                matchMode: activeVehicleQuery.matchMode,
+                                passes: [],
+                                summary: {
+                                    totalPasses: 0,
+                                    alarmingPasses: 0,
+                                    openAlarmPasses: 0,
+                                    emlAutoReleasePasses: 0,
+                                    spectroscopicPasses: 0,
+                                    distinctLanes: 0,
+                                    distinctNodes: 0,
+                                    confirmedIsotopes: [],
+                                    latestDisposition: "",
+                                },
+                                truncated: false,
+                                unreachableNodes: [],
+                            });
+                            return;
+                        }
+                    }
+                }
+
+                const res = await searchVehiclePassesAcrossNodes({
+                    vehicleId: effectiveVehicleId,
+                    matchMode: effectiveMatchMode,
+                    laneMap: stableLaneMap,
+                    activeViewKey,
+                    startTimeIso,
+                    signal: controller.signal,
+                });
                 if (controller.signal.aborted) return;
                 for (const pass of res.passes) {
                     cacheEventBounded(eventSelectionKey(pass.eventRow), pass.eventRow);
                 }
                 setVehicleSearchResult(res);
-            })
-            .catch((err) => {
+            } catch (err) {
                 if (controller.signal.aborted || (err instanceof Error && err.name === "AbortError")) return;
                 setVehicleSearchError(err instanceof Error ? err.message : String(err));
-            })
-            .finally(() => {
+            } finally {
                 if (!controller.signal.aborted) {
                     setVehicleSearchLoading(false);
                 }
-            });
+            }
+        })();
 
         return () => controller.abort();
-    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, stableLaneMap]);
+    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, isEventLog, primaryEventLogNode, stableLaneMap]);
 
     const vehicleFilteredRows = useMemo<EventTableData[]>(() => {
         if (!isVehicleSearchMode || !vehicleSearchResult) return [];
@@ -1231,6 +1321,7 @@ export default function EventTable({
         setSubmittedVehicleQuery(null);
         setVehicleSearchResult(null);
         setVehicleSearchError(null);
+        setUffOmniboxMatches([]);
         setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
         clearSelection();
     }, [activeViewKey, clearSelection, filter, isEventLog]);
@@ -2022,6 +2113,7 @@ export default function EventTable({
                 setSubmittedVehicleQuery(null);
                 setVehicleSearchResult(null);
                 setVehicleSearchError(null);
+                setUffOmniboxMatches([]);
             }
             setUpSetExpanded(false);
             setSelectedUpSetFilter(null);
@@ -2703,7 +2795,7 @@ export default function EventTable({
                                 autoCorrect: "off",
                                 autoCapitalize: "none",
                                 spellCheck: false,
-                                maxLength: 64,
+                                maxLength: 260,
                                 "data-testid": "vehicle-id-search-input",
                             }}
                             sx={{
@@ -2772,7 +2864,7 @@ export default function EventTable({
                                 {t("clear")}
                             </Button>
                         )}
-                        {isVehicleSearchMode && vehicleSearchResult && (
+                        {(isVehicleSearchMode && (vehicleSearchResult || uffOmniboxMatches.length > 0)) && (
                             <Stack
                                 direction="row"
                                 spacing={1}
@@ -2781,18 +2873,53 @@ export default function EventTable({
                                 flexWrap="wrap"
                                 sx={{ml: {md: "auto"}}}
                             >
-                                <Chip
-                                    size="small"
-                                    color={vehicleFilteredRows.length > 0 ? "primary" : "default"}
-                                    variant="outlined"
-                                    label={t("vehicleSearchSummaryChip", {
-                                        passes: vehicleFilteredRows.length,
-                                        lanes: vehicleSearchResult.summary.distinctLanes,
-                                        nodes: vehicleSearchResult.summary.distinctNodes,
-                                    })}
-                                    data-testid="vehicle-search-summary-chip"
-                                />
-                                {vehicleSearchResult.passes.length > 0 && (
+                                {uffOmniboxMatches.length > 0 && (
+                                    <Stack
+                                        direction="row"
+                                        spacing={0.75}
+                                        alignItems="center"
+                                        useFlexGap
+                                        flexWrap="wrap"
+                                        data-testid="event-log-uff-match-strip"
+                                    >
+                                        <Chip
+                                            size="small"
+                                            color="secondary"
+                                            variant="outlined"
+                                            label={t("uffOmniboxMatchedChip", {
+                                                version: uffOmniboxMatches[0]!.uffVersion,
+                                                scanner: uffOmniboxMatches[0]!.scannerId || "NII",
+                                                count: uffOmniboxMatches.length,
+                                            })}
+                                            data-testid="event-log-uff-match-chip"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="contained"
+                                            color="primary"
+                                            size="small"
+                                            startIcon={<LayersRoundedIcon />}
+                                            onClick={() => setEventLogUffViewerUuid(uffOmniboxMatches[0]!.uffUuid)}
+                                            data-testid="event-log-open-uff-btn"
+                                        >
+                                            {t("openCargoXray")}
+                                        </Button>
+                                    </Stack>
+                                )}
+                                {vehicleSearchResult && (
+                                    <Chip
+                                        size="small"
+                                        color={vehicleFilteredRows.length > 0 ? "primary" : "default"}
+                                        variant="outlined"
+                                        label={t("vehicleSearchSummaryChip", {
+                                            passes: vehicleFilteredRows.length,
+                                            lanes: vehicleSearchResult.summary.distinctLanes,
+                                            nodes: vehicleSearchResult.summary.distinctNodes,
+                                        })}
+                                        data-testid="vehicle-search-summary-chip"
+                                    />
+                                )}
+                                {vehicleSearchResult && vehicleSearchResult.passes.length > 0 && (
                                     <Button
                                         type="button"
                                         variant="contained"
@@ -3204,6 +3331,15 @@ export default function EventTable({
                     initialResult={comparisonDialogState.initialResult ?? null}
                     highlightOccupancyObsId={comparisonDialogState.highlightObsId ?? null}
                     onAdjudicationComplete={retryEventQueries}
+                />
+            )}
+            {eventLogUffViewerUuid && (
+                <CargoUffViewerDialog
+                    open={Boolean(eventLogUffViewerUuid)}
+                    onClose={() => setEventLogUffViewerUuid(null)}
+                    uffUuid={eventLogUffViewerUuid}
+                    node={primaryEventLogNode}
+                    occupancyObsId={vehicleFilteredRows[0]?.occupancyObsId ?? null}
                 />
             )}
             <NestedEventFilterDialog

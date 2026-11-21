@@ -735,5 +735,13 @@
   "dashboardSortedByTimeAnnouncement": "Συναγερμοί ταξινομημένοι χρονικά, νεότεροι πρώτα",
   "dashboardSortedByPriorityAnnouncement": "Συναγερμοί ταξινομημένοι κατά κατηγορία προτεραιότητας",
   "eventsSortedByTimeAnnouncement": "Συμβάντα ταξινομημένα χρονικά, νεότερα πρώτα",
-  "eventsSortedByPriorityAnnouncement": "Συμβάντα ταξινομημένα κατά κατηγορία προτεραιότητας"
+  "eventsSortedByPriorityAnnouncement": "Συμβάντα ταξινομημένα κατά κατηγορία προτεραιότητας",
+  "inspectCargoRadiograph": "Επιθεώρηση ακτινογραφίας 16-bit",
+  "browseCargoUff": "Αναζήτηση UFF φορτίου",
+  "cargoUffCorrelatedTitle": "Συσχετισμένη σάρωση φορτίου NII ({count})",
+  "openCargoXray": "Άνοιγμα ακτινογραφίας φορτίου",
+  "linkCargoUffShort": "Σύνδεση με αξιολόγηση",
+  "cargoUffLinkedToast": "Συνδέθηκε η σάρωση UFF φορτίου {id}...",
+  "cargoUffLinkFailedToast": "Αποτυχία σύνδεσης σάρωσης UFF φορτίου",
+  "uffOmniboxMatchedChip": "UFF {version} · {scanner} ({count})"
 }

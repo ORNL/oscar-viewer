@@ -94,7 +94,7 @@ interface LocalizedHelpContent {
 
 const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
     en: {
-        dialogTitle: 'OSCAR 3.11.1 Operator Quick Guide & Glossary',
+        dialogTitle: 'OSCAR 3.11.2 Operator Quick Guide & Glossary',
         dialogSubtitle: 'Plain-language reference for console workflows, multi-format reports, and radiation portal terminology.',
         tabs: {
             pages: 'Console Pages',
@@ -110,7 +110,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Events (`/event-log`)',
-                summary: 'Searchable historical log of all occupancies, alarms, and faults. Search by normalized Vehicle / ISO 6346 Container ID across local and federated nodes to open the Multi-Pass Vehicle Comparison & Linked Adjudication dialog, filter by Event UUID, lane, time window, Adjudication Code (`Code 9998: Extended Occupancy Gamma Alarm`, `Code 9999: EML Non-Threat`, built-in `1–11`, and custom codes), or nested AND/OR rules, or select multiple alarms for bulk adjudication.',
+                summary: 'Searchable historical log of all occupancies, alarms, and faults. Search by normalized Vehicle / ISO 6346 Container ID (or paste a WCO UFF scan UUID / `.uff` filename / share path when Cargo NII is enabled) across local and federated nodes to open Multi-Pass Vehicle Comparison or 16-bit Cargo X-Ray inspection, filter by Event UUID, lane, time window, Adjudication Code (`Code 9998: Extended Occupancy Gamma Alarm`, `Code 9999: EML Non-Threat`, built-in `1–11`, and custom codes), or nested AND/OR rules, or select multiple alarms for bulk adjudication.',
             },
             {
                 title: 'Status of Health (`/health`)',
@@ -146,7 +146,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Runtime Extensions (`/extensions`)',
-                summary: 'Upgrade-safe administrator hub for hot-swapping regional OCR model & Unicode plate-rule packs, air-gapped `.pmtiles` v3 regional basemaps, secondary-inspection spectroscopy isotope libraries, trusted enterprise X.509 CA certificates, disposition policy packs, and EML plugins while preserving OSCAR’s shipped built-in defaults.',
+                summary: 'Upgrade-safe administrator hub for hot-swapping regional OCR model & Unicode plate-rule packs, air-gapped `.pmtiles` v3 regional basemaps, secondary-inspection spectroscopy isotope libraries, trusted enterprise X.509 CA certificates, disposition policy packs, EML plugins, and optional read-only SMBv2/SMBv3 Cargo NII (WCO UFF 2.0 / 3.0) shares while preserving OSCAR’s shipped built-in defaults.',
             },
         ],
         reportsIntro: 'Every report request generates a fresh file and overwrites any earlier file with the same parameters:',
@@ -267,12 +267,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Continual & Occasional USB NVMe Backups (`/usb-backups`)',
                 meaning: 'Zero-downtime (`0.0 s` portal outage) content-addressed incremental backup to an external USB 3.x NVMe SSD (`NTFS` default, readable on Windows, macOS, and Linux laptops). Supports Continual Background Sync (with automatic catch-up on USB reconnect), Occasional Visit Sync, 1-click Safely Eject (`SAFE_TO_UNPLUG`), laptop delta copy (`COPY-TO-ANOTHER-DRIVE.bat` / `./copy-to-another-drive.sh`), and cold-iron recovery (`oscar usb-backup restore`).',
             },
+            {
+                term: 'WCO UFF 2.0 / 3.0 & HEMD Cargo Radiographs (`/extensions` -> Cargo NII)',
+                meaning: 'World Customs Organization Unified File Format (`.uff`) packages produced by non-intrusive cargo X-ray scanners (disabled by default for zero screen clutter). Operators can always inspect local `.uff` files via Upload Files in Secondary Inspection, or an administrator can connect a read-only SMBv2/SMBv3 share in `/extensions` for scanner/time-window browsing, UFF UUID lookup, 1-character fuzzy container OCR correlation, 16-bit `uint16` TIFF window/level & HEMD atomic-number (`Z_eff`) inspection aligned with the RPM gamma/neutron count strip, and zero-download adjudication linking.',
+            },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
         adminLinkLabel: 'Open SensorHub Admin & In-UI Operator Manual (`/sensorhub/admin`)',
         adminLinkDesc: 'Requires administrator sign-in. Select OSCAR Service or any sensor module and open its README tab for the localized manual.',
         videoGuidesLinkLabel: 'Open OSCAR How-To Video Guides (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '26 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, USB NVMe backups, pluggable extensions & offline .pmtiles maps, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
+        videoGuidesLinkDesc: '27 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, USB NVMe backups, pluggable extensions, offline .pmtiles maps, WCO Cargo UFF 16-bit X-ray inspection, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
         supportBundleTitle: 'Troubleshooting & Support Bundle (`.zip`)',
         supportBundleDesc: 'Downloads a single diagnostic `.zip` combining recent browser console/network diagnostics with OSCAR server logs, module states, and JVM/storage health. If the server cannot be reached or fails to start, run `./oscar.sh support-bundle` (Linux) or `oscar.bat support-bundle` (Windows) on the host.',
         supportBundlePrivacyNote: 'Privacy & security: collected only to diagnose technical issues; passwords, tokens, session cookies, RTSP credentials, and private keys are automatically scrubbed.',
@@ -283,7 +287,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Close',
     },
     es: {
-        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.1',
+        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.2',
         dialogSubtitle: 'Referencia en lenguaje claro para flujos de consola, informes multiformato y terminología de pórticos de radiación.',
         tabs: {
             pages: 'Páginas de consola',
@@ -299,7 +303,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Eventos (`/event-log`)',
-                summary: 'Registro histórico de ocupaciones, alarmas y fallos con búsqueda normalizada por ID de vehículo / contenedor ISO 6346 (comparación multipasada y adjudicación vinculada en nodos locales y federados), búsqueda por UUID, filtros por Código de adjudicación (`Código 9998`, `Código 9999`, `1–11` y personalizados) y adjudicación masiva.',
+                summary: 'Registro histórico de ocupaciones, alarmas y fallos con búsqueda normalizada por ID de vehículo / contenedor ISO 6346 (o pegado de UUID / archivo `.uff` cuando Carga NII está activa), comparación multipasada, filtros por Código de adjudicación (`Código 9998`, `Código 9999`, `1–11` y personalizados) y adjudicación masiva.',
             },
             {
                 title: 'Estado de salud (`/health`)',
@@ -335,7 +339,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Extensiones de ejecución (`/extensions`)',
-                summary: 'Centro administrativo persistente ante actualizaciones para cambiar en caliente modelos y reglas regionales OCR, mapas regionales sin conexión `.pmtiles` v3, bibliotecas de espectroscopia secundaria, certificados CA X.509, paquetes de códigos de adjudicación y complementos EML conservando los valores predeterminados integrados.',
+                summary: 'Centro administrativo persistente ante actualizaciones para cambiar en caliente modelos y reglas regionales OCR, mapas regionales sin conexión `.pmtiles` v3, bibliotecas de espectroscopia secundaria, certificados CA X.509, paquetes de códigos de adjudicación, complementos EML y recursos SMBv2/SMBv3 opcionales de solo lectura para Carga NII (WCO UFF 2.0 / 3.0) conservando los valores predeterminados integrados.',
             },
         ],
         reportsIntro: 'Cada solicitud genera un archivo nuevo y sobrescribe cualquier archivo previo con los mismos parámetros:',
@@ -456,12 +460,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Copias de seguridad USB NVMe continuas y ocasionales (`/usb-backups`)',
                 meaning: 'Copia incremental sin tiempo de inactividad (`0.0 s`) en un SSD externo USB 3.x NVMe (`NTFS` predeterminado, compatible con Windows, macOS y Linux), con sincronización continua o bajo demanda, expulsión segura en 1 clic (`SAFE_TO_UNPLUG`), copia diferencial en portátil y restauración completa (`oscar usb-backup restore`).',
             },
+            {
+                term: 'WCO UFF 2.0 / 3.0 y radiografías de carga HEMD (`/extensions` -> Carga NII)',
+                meaning: 'Paquetes Unified File Format (`.uff`) de la Organización Mundial de Aduanas generados por escáneres de rayos X de carga no intrusivos (desactivado de forma predeterminada para no añadir controles innecesarios). Permite inspeccionar archivos `.uff` locales desde Subir archivos o conectar un recurso SMBv2/SMBv3 de solo lectura en `/extensions` para exploración por escáner/ventana temporal, búsqueda por UUID, correlación OCR difusa de 1 carácter, radiografía TIFF de 16 bits con bandas atómicas HEMD (`Z_eff`) alineada al perfil RPM y vinculación sin descarga completa.',
+            },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
         adminLinkLabel: 'Abrir administración de SensorHub y manual integrado (`/sensorhub/admin`)',
         adminLinkDesc: 'Requiere cuenta de administrador. Seleccione el Servicio OSCAR o cualquier módulo y abra la pestaña README.',
         videoGuidesLinkLabel: 'Abrir videoguías prácticas de OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '26 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, copias USB NVMe, extensiones y mapas .pmtiles sin conexión, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
+        videoGuidesLinkDesc: '27 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, copias USB NVMe, extensiones, mapas .pmtiles sin conexión, radiografías WCO Cargo UFF de 16 bits, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
         supportBundleTitle: 'Diagnóstico y paquete de soporte (`.zip`)',
         supportBundleDesc: 'Descarga un archivo `.zip` de diagnóstico que combina eventos recientes del navegador con registros del servidor OSCAR, estado de módulos y salud de JVM/almacenamiento. Si el servidor no responde o no arranca, ejecute `./oscar.sh support-bundle` (Linux) u `oscar.bat support-bundle` (Windows) en el servidor.',
         supportBundlePrivacyNote: 'Privacidad y seguridad: se recopila únicamente para diagnosticar incidencias técnicas; contraseñas, tokens, cookies de sesión, credenciales RTSP y claves privadas se redactan automáticamente.',
@@ -472,7 +480,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Cerrar',
     },
     fr: {
-        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.1',
+        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.2',
         dialogSubtitle: 'Référence en langage clair pour les flux de console, les rapports multiformats et la terminologie des portiques.',
         tabs: {
             pages: 'Pages de la console',
@@ -488,7 +496,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Événements (`/event-log`)',
-                summary: 'Journal historique consultable des occupations, alarmes et défauts avec recherche normalisée par ID de véhicule / conteneur ISO 6346 (comparaison multipassage et adjudication liée sur nœuds locaux et fédérés), recherche par UUID, filtres par Code d’adjudication (`Code 9998`, `Code 9999`, `1–11` et personnalisés) et adjudication groupée.',
+                summary: 'Journal historique consultable des occupations, alarmes et défauts avec recherche normalisée par ID de véhicule / conteneur ISO 6346 (ou collage d’UUID / fichier `.uff` lorsque Fret NII est activé), comparaison multipassage, filtres par Code d’adjudication (`Code 9998`, `Code 9999`, `1–11` et personnalisés) et adjudication groupée.',
             },
             {
                 title: 'État de santé (`/health`)',
@@ -524,7 +532,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Extensions d’exécution (`/extensions`)',
-                summary: 'Espace administrateur persistant lors des mises à niveau pour remplacer à chaud les modèles et règles OCR régionaux, les fonds de carte `.pmtiles` v3 hors ligne, les bibliothèques spectroscopiques, les certificats CA X.509, les packs de codes d’adjudication et les modules EML tout en conservant les solutions par défaut intégrées.',
+                summary: 'Espace administrateur persistant lors des mises à niveau pour remplacer à chaud les modèles et règles OCR régionaux, les fonds de carte `.pmtiles` v3 hors ligne, les bibliothèques spectroscopiques, les certificats CA X.509, les packs de codes d’adjudication, les modules EML et les partages SMBv2/SMBv3 optionnels en lecture seule pour le Fret NII (OMD UFF 2.0 / 3.0) tout en conservant les solutions par défaut intégrées.',
             },
         ],
         reportsIntro: 'Chaque demande génère un nouveau fichier et remplace tout rapport antérieur portant les mêmes paramètres :',
@@ -645,12 +653,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Sauvegardes USB NVMe continues et occasionnelles (`/usb-backups`)',
                 meaning: 'Sauvegarde incrémentielle sans coupure (`0,0 s`) sur SSD externe USB 3.x NVMe (`NTFS` par défaut, lisible sous Windows, macOS et Linux), avec synchronisation continue ou à la demande, éjection sécurisée en 1 clic (`SAFE_TO_UNPLUG`), copie delta sur portable et restauration complète (`oscar usb-backup restore`).',
             },
+            {
+                term: 'OMD UFF 2.0 / 3.0 et radiographies fret HEMD (`/extensions` -> Fret NII)',
+                meaning: 'Archives Unified File Format (`.uff`) de l’Organisation mondiale des douanes produites par les scanners à rayons X de fret (désactivé par défaut pour ne pas surcharger l’écran). Permet d’inspecter un fichier `.uff` local via Téléverser des fichiers ou de connecter un partage SMBv2/SMBv3 en lecture seule dans `/extensions` pour parcourir par scanner/plage horaire, rechercher par UUID, corréler par OCR tolérant à 1 caractère, inspecter les radiographies TIFF 16 bits et bandes atomiques HEMD (`Z_eff`) alignées au profil RPM et lier sans téléchargement complet.',
+            },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
         adminLinkLabel: 'Ouvrir l’administration SensorHub et le manuel intégré (`/sensorhub/admin`)',
         adminLinkDesc: 'Connexion administrateur requise. Sélectionnez le Service OSCAR ou un module et ouvrez l’onglet README.',
         videoGuidesLinkLabel: 'Ouvrir les guides vidéo pratiques OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '26 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, sauvegardes USB NVMe, extensions et cartes .pmtiles hors ligne, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
+        videoGuidesLinkDesc: '27 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, sauvegardes USB NVMe, extensions, cartes .pmtiles hors ligne, radiographies OMD UFF 16 bits, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
         supportBundleTitle: 'Dépannage et archive d’assistance (`.zip`)',
         supportBundleDesc: 'Télécharge une archive `.zip` réunissant les diagnostics récents du navigateur et les journaux du serveur OSCAR, l’état des modules et la santé JVM/stockage. Si le serveur est injoignable ou ne démarre pas, exécutez `./oscar.sh support-bundle` (Linux) ou `oscar.bat support-bundle` (Windows) sur l’hôte.',
         supportBundlePrivacyNote: 'Confidentialité et sécurité : collecté uniquement pour le diagnostic technique ; mots de passe, jetons, cookies de session, identifiants RTSP et clés privées sont automatiquement masqués.',
@@ -661,7 +673,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Fermer',
     },
     el: {
-        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.1',
+        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.2',
         dialogSubtitle: 'Αναφορά σε απλή γλώσσα για τις ροές εργασίας κονσόλας, τις αναφορές πολλαπλών μορφών και την ορολογία πυλών ακτινοβολίας.',
         tabs: {
             pages: 'Σελίδες κονσόλας',
@@ -677,7 +689,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Συμβάντα (`/event-log`)',
-                summary: 'Ιστορικό διελεύσεων, συναγερμών και βλαβών με κανονικοποιημένη αναζήτηση ID οχήματος / εμπορευματοκιβωτίου ISO 6346 (σύγκριση πολλαπλών διελεύσεων και συνδεδεμένη αξιολόγηση σε τοπικούς και ομόσπονδους κόμβους), αναζήτηση UUID, φίλτρα Κωδικού αξιολόγησης (`Κωδικός 9998`, `Κωδικός 9999`, `1–11` και προσαρμοσμένοι) και μαζική αξιολόγηση.',
+                summary: 'Ιστορικό διελεύσεων, συναγερμών και βλαβών με κανονικοποιημένη αναζήτηση ID οχήματος / εμπορευματοκιβωτίου ISO 6346 (ή επικόλληση UUID / αρχείου `.uff` όταν το Φορτίο NII είναι ενεργό), σύγκριση πολλαπλών διελεύσεων, φίλτρα Κωδικού αξιολόγησης (`Κωδικός 9998`, `Κωδικός 9999`, `1–11` και προσαρμοσμένοι) και μαζική αξιολόγηση.',
             },
             {
                 title: 'Κατάσταση υγείας (`/health`)',
@@ -713,7 +725,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 title: 'Επεκτάσεις εκτέλεσης (`/extensions`)',
-                summary: 'Μόνιμο κέντρο διαχειριστή (προστατευμένο σε αναβαθμίσεις) για άμεση αντικατάσταση μοντέλων/κανόνων OCR, τοπικών χαρτών `.pmtiles` v3 εκτός δικτύου, βιβλιοθηκών φασματοσκοπίας ισοτόπων, πιστοποιητικών CA X.509, πακέτων κωδίκων κρίσης και προσθέτων EML διατηρώντας τις ενσωματωμένες προεπιλογές.',
+                summary: 'Μόνιμο κέντρο διαχειριστή (προστατευμένο σε αναβαθμίσεις) για άμεση αντικατάσταση μοντέλων/κανόνων OCR, τοπικών χαρτών `.pmtiles` v3 εκτός δικτύου, βιβλιοθηκών φασματοσκοπίας ισοτόπων, πιστοποιητικών CA X.509, πακέτων κωδίκων κρίσης, προσθέτων EML και προαιρετικών κοινόχρηστων πόρων SMBv2/SMBv3 μόνο ανάγνωσης για Φορτίο NII (WCO UFF 2.0 / 3.0) διατηρώντας τις ενσωματωμένες προεπιλογές.',
             },
         ],
         reportsIntro: 'Κάθε αίτημα δημιουργεί νέο αρχείο και αντικαθιστά τυχόν προηγούμενο αρχείο με τις ίδιες παραμέτρους:',
@@ -834,12 +846,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Συνεχή & περιστασιακά αντίγραφα ασφαλείας USB NVMe (`/usb-backups`)',
                 meaning: 'Αυξητικά αντίγραφα ασφαλείας μηδενικής διακοπής (`0,0 s`) σε εξωτερικό SSD USB 3.x NVMe (`NTFS` προεπιλογή, συμβατό με Windows, macOS και Linux), με συνεχή ή κατ’ απαίτηση συγχρονισμό, ασφαλή εξαγωγή 1 κλικ (`SAFE_TO_UNPLUG`), μεταφορά σε φορητό υπολογιστή και πλήρη επαναφορά (`oscar usb-backup restore`).',
             },
+            {
+                term: 'WCO UFF 2.0 / 3.0 & ακτινογραφίες φορτίου HEMD (`/extensions` -> Φορτίο NII)',
+                meaning: 'Πακέτα Unified File Format (`.uff`) του Παγκόσμιου Οργανισμού Τελωνείων από συστήματα ακτίνων X φορτίου (απενεργοποιημένα από προεπιλογή για μηδενική οπτική επιβάρυνση). Υποστηρίζουν τοπική επιθεώρηση αρχείων `.uff` στη Δευτερεύουσα Επιθεώρηση ή σύνδεση κοινόχρηστου πόρου SMBv2/SMBv3 μόνο ανάγνωσης στις `/extensions` για περιήγηση ανά σαρωτή/χρονικό παράθυρο, αναζήτηση UUID, ασαφή συσχέτιση OCR 1 χαρακτήρα, προβολή TIFF 16-bit με ατομικές ζώνες HEMD (`Z_eff`) ευθυγραμμισμένες στο προφίλ RPM και σύνδεση χωρίς πλήρη μεταφόρτωση.',
+            },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',
         adminLinkLabel: 'Άνοιγμα διαχείρισης SensorHub & ενσωματωμένου εγχειριδίου (`/sensorhub/admin`)',
         adminLinkDesc: 'Απαιτείται σύνδεση διαχειριστή. Επιλέξτε την Υπηρεσία OSCAR ή οποιαδήποτε μονάδα και ανοίξτε την καρτέλα README.',
         videoGuidesLinkLabel: 'Άνοιγμα βιντεοοδηγών εργασιών OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '26 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, αντίγραφα USB NVMe, επεκτάσεις & χάρτες .pmtiles εκτός σύνδεσης, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
+        videoGuidesLinkDesc: '27 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, αντίγραφα USB NVMe, επεκτάσεις, χάρτες .pmtiles εκτός σύνδεσης, ακτινογραφίες φορτίου WCO UFF 16-bit, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
         supportBundleTitle: 'Αντιμετώπιση προβλημάτων & πακέτο υποστήριξης (`.zip`)',
         supportBundleDesc: 'Λήψη ενιαίου διαγνωστικού αρχείου `.zip` που συνδυάζει συμβάντα του περιηγητή με αρχεία καταγραφής διακομιστή OSCAR, κατάσταση μονάδων και υγεία JVM/αποθήκευσης. Εάν ο διακομιστής δεν αποκρίνεται ή δεν εκκινεί, εκτελέστε `./oscar.sh support-bundle` (Linux) ή `oscar.bat support-bundle` (Windows) στον κεντρικό υπολογιστή.',
         supportBundlePrivacyNote: 'Απόρρητο & ασφάλεια: συλλέγονται αποκλειστικά για τεχνική διάγνωση· κωδικοί, διακριτικά, cookies συνεδρίας, διαπιστευτήρια RTSP και ιδιωτικά κλειδιά αφαιρούνται αυτόματα.',

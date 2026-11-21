@@ -735,5 +735,13 @@
   "dashboardSortedByTimeAnnouncement": "Alarmes triées par heure, des plus récentes aux plus anciennes",
   "dashboardSortedByPriorityAnnouncement": "Alarmes triées par catégorie de priorité",
   "eventsSortedByTimeAnnouncement": "Événements triés par heure, des plus récents aux plus anciens",
-  "eventsSortedByPriorityAnnouncement": "Événements triés par catégorie de priorité"
+  "eventsSortedByPriorityAnnouncement": "Événements triés par catégorie de priorité",
+  "inspectCargoRadiograph": "Inspecter la radiographie 16 bits",
+  "browseCargoUff": "Parcourir UFF fret",
+  "cargoUffCorrelatedTitle": "Scan NII fret corrélé ({count})",
+  "openCargoXray": "Ouvrir rayons X fret",
+  "linkCargoUffShort": "Lier à l’adjudication",
+  "cargoUffLinkedToast": "Scan UFF fret {id}... lié",
+  "cargoUffLinkFailedToast": "Échec de liaison du scan UFF fret",
+  "uffOmniboxMatchedChip": "UFF {version} · {scanner} ({count})"
 }

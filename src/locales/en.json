@@ -735,5 +735,13 @@
   "dashboardSortedByTimeAnnouncement": "Alarms sorted newest first by time",
   "dashboardSortedByPriorityAnnouncement": "Alarms sorted by priority category",
   "eventsSortedByTimeAnnouncement": "Events sorted newest first by time",
-  "eventsSortedByPriorityAnnouncement": "Events sorted by priority category"
+  "eventsSortedByPriorityAnnouncement": "Events sorted by priority category",
+  "inspectCargoRadiograph": "Inspect 16-Bit Radiograph",
+  "browseCargoUff": "Browse Cargo UFF",
+  "cargoUffCorrelatedTitle": "Correlated Cargo NII Scan ({count})",
+  "openCargoXray": "Open Cargo X-Ray",
+  "linkCargoUffShort": "Link to Adjudication",
+  "cargoUffLinkedToast": "Linked Cargo UFF scan {id}...",
+  "cargoUffLinkFailedToast": "Failed linking Cargo UFF scan",
+  "uffOmniboxMatchedChip": "UFF {version} · {scanner} ({count})"
 }
