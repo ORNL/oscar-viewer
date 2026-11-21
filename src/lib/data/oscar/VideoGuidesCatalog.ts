@@ -565,6 +565,25 @@ export const VIDEO_GUIDES_CATALOG: readonly VideoGuideEntry[] = [
             el: 'Συνδέστε κοινόχρηστο πόρο SMBv2/SMBv3 μόνο ανάγνωσης στις Επεκτάσεις (/extensions), αναζητήστε πακέτα WCO UFF 2.0/3.0 μέσω UUID ή ασαφούς OCR, επιθεωρήστε ακτινογραφίες TIFF 16-bit με ζώνες Z HEMD και συνδέστε τα στην αξιολόγηση.',
         },
     ),
+    makeGuide(
+        '28',
+        '28-hands-on-training-sandbox',
+        'C',
+        '21.6s',
+        '966 KiB',
+        {
+            en: 'Practice Safely in the Ephemeral Hands-On Training Sandbox & Guided Academy',
+            es: 'Practicar de forma segura en el entorno efímero de formación y academia guiada',
+            fr: 'S’entraîner sans risque dans le bac à sable éphémère de formation et l’académie guidée',
+            el: 'Ασφαλής πρακτική εξάσκηση στο προσωρινό περιβάλλον εκπαίδευσης & καθοδηγούμενη ακαδημία',
+        },
+        {
+            en: 'Launch the isolated oscar-sandbox (:8444) with zero production DB or Parquet impact, walk through Operator, Supervisor, and Split-Pane Administrator labs with live loopback Rapiscan + RTSP + OCR + Cargo UFF, and export a 1-page PDF Completion Record.',
+            es: 'Inicie el entorno aislado oscar-sandbox (:8444) sin afectar PostgreSQL ni Parquet reales, complete ejercicios de Operador, Supervisor y Administrador con Rapiscan + RTSP + OCR + UFF locales y descargue el PDF de finalización.',
+            fr: 'Lancez le bac à sable isolé oscar-sandbox (:8444) sans impact sur PostgreSQL ou Parquet réels, suivez les ateliers Opérateur, Superviseur et Administrateur avec Rapiscan + RTSP + OCR + UFF locaux et téléchargez le PDF de réussite.',
+            el: 'Εκκινήστε το απομονωμένο oscar-sandbox (:8444) χωρίς επίδραση στην παραγωγική ΒΔ ή στα αρχεία Parquet, ολοκληρώστε ασκήσεις Χειριστή, Επόπτη και Διαχειριστή και λάβετε το PDF ολοκλήρωσης.',
+        },
+    ),
 ];
 
 const GUIDE_BY_SLUG = new Map<string, VideoGuideEntry>(
@@ -650,6 +669,7 @@ export const GLOSSARY_INDEX_GUIDE_SLUGS: Readonly<Record<number, readonly string
     15: ['25-pluggable-runtime-extensions-and-pmtiles', '27-cargo-uff-smb-and-xray-inspection', '07-admin-eml-plugin-setup'],
     16: ['24-continual-and-occasional-usb-backups', '03-archive-and-snapshot-backup'],
     17: ['27-cargo-uff-smb-and-xray-inspection'],
+    18: ['28-hands-on-training-sandbox'],
 };
 
 export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
@@ -661,15 +681,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Close video',
         captionsNote: '1080p H.264 · synchronized English closed captions (.vtt) included; zero data loaded until played.',
         localCatalogCardTitle: 'Built-In How-To Video Guides (`/video-guides/index.html`)',
-        localCatalogCardDesc: '27 compressed 1080p workflow screen recordings (< 2 min each, ~34 MiB total) bundled directly inside OSCAR for offline and air-gapped workstations, with synchronized closed captions.',
+        localCatalogCardDesc: '28 compressed 1080p workflow screen recordings (< 2 min each, ~36 MiB total) bundled directly inside OSCAR for offline and air-gapped workstations, with synchronized closed captions.',
         openLocalCatalogButtonLabel: 'Open Local Video Guide Page',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Browse & Play All 27 Workflow Video Guides Inline',
+        inAppCatalogHeading: 'Browse & Play All 28 Workflow Video Guides Inline',
         inAppCatalogHint: 'Expand a track below and select any workflow to play it directly inside this dialog.',
         tracks: {
             A: 'Track A — CLI Deployment, Field Staging, Storage, Scaling & Regression (01–03, 22–23, 26)',
             B: 'Track B — SensorHub Admin Configuration (04–07)',
-            C: 'Track C — OSCAR Viewer Console, USB Backups, Extensions, Cargo UFF & Federation (08–21, 24–25, 27)',
+            C: 'Track C — OSCAR Viewer Console, USB Backups, Extensions, Cargo UFF, Sandbox & Federation (08–21, 24–25, 27–28)',
         },
     },
     es: {
@@ -680,15 +700,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Cerrar vídeo',
         captionsNote: '1080p H.264 · incluye subtítulos sincronizados (.vtt en inglés); no descarga datos hasta reproducir.',
         localCatalogCardTitle: 'Videoguías prácticas integradas (`/video-guides/index.html`)',
-        localCatalogCardDesc: '27 grabaciones cortas en 1080p (< 2 min cada una, ~34 MiB en total) integradas localmente en OSCAR para estaciones sin conexión o aisladas, con subtítulos sincronizados.',
+        localCatalogCardDesc: '28 grabaciones cortas en 1080p (< 2 min cada una, ~36 MiB en total) integradas localmente en OSCAR para estaciones sin conexión o aisladas, con subtítulos sincronizados.',
         openLocalCatalogButtonLabel: 'Abrir catálogo local de videoguías',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Explorar y reproducir las 27 videoguías aquí mismo',
+        inAppCatalogHeading: 'Explorar y reproducir las 28 videoguías aquí mismo',
         inAppCatalogHint: 'Despliegue una sección y pulse cualquier guía para reproducirla directamente en este cuadro de diálogo.',
         tracks: {
             A: 'Bloque A — Despliegue CLI, preparación de campo, almacenamiento y regresión (01–03, 22–23, 26)',
             B: 'Bloque B — Configuración en SensorHub Admin (04–07)',
-            C: 'Bloque C — Operaciones de consola, copias USB, extensiones, UFF de carga y federación (08–21, 24–25, 27)',
+            C: 'Bloque C — Operaciones de consola, copias USB, extensiones, UFF, práctica y federación (08–21, 24–25, 27–28)',
         },
     },
     fr: {
@@ -699,15 +719,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Fermer la vidéo',
         captionsNote: '1080p H.264 · sous-titres synchronisés (.vtt en anglais) inclus ; aucune donnée chargée avant lecture.',
         localCatalogCardTitle: 'Guides vidéo pratiques intégrés (`/video-guides/index.html`)',
-        localCatalogCardDesc: '27 courtes captures 1080p (< 2 min chacune, ~34 Mio au total) embarquées localement dans OSCAR pour les postes hors ligne ou isolés, avec sous-titres synchronisés.',
+        localCatalogCardDesc: '28 courtes captures 1080p (< 2 min chacune, ~36 Mio au total) embarquées localement dans OSCAR pour les postes hors ligne ou isolés, avec sous-titres synchronisés.',
         openLocalCatalogButtonLabel: 'Ouvrir la page locale des guides vidéo',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Parcourir et lire les 27 guides vidéo intégrés',
+        inAppCatalogHeading: 'Parcourir et lire les 28 guides vidéo intégrés',
         inAppCatalogHint: 'Dépliez une catégorie ci-dessous et sélectionnez un guide pour le lire directement dans cette fenêtre.',
         tracks: {
             A: 'Volet A — Déploiement CLI, préparation terrain, stockage et régression (01–03, 22–23, 26)',
             B: 'Volet B — Configuration dans SensorHub Admin (04–07)',
-            C: 'Volet C — Opérations de console, sauvegardes USB, extensions, UFF fret et fédération (08–21, 24–25, 27)',
+            C: 'Volet C — Opérations de console, sauvegardes USB, extensions, UFF, bac à sable et fédération (08–21, 24–25, 27–28)',
         },
     },
     el: {
@@ -718,15 +738,15 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         closeVideoLabel: 'Κλείσιμο βίντεο',
         captionsNote: '1080p H.264 · περιλαμβάνει συγχρονισμένους υπότιτλους (.vtt στα αγγλικά)· μηδενική φόρτωση δεδομένων πριν την αναπαραγωγή.',
         localCatalogCardTitle: 'Ενσωματωμένοι βιντεοοδηγοί εργασιών (`/video-guides/index.html`)',
-        localCatalogCardDesc: '27 συμπιεσμένα βίντεο 1080p (< 2 λεπ. έκαστο, ~34 MiB συνολικά) ενσωματωμένα τοπικά στο OSCAR για σταθμούς εκτός δικτύου, με συγχρονισμένους υπότιτλους.',
+        localCatalogCardDesc: '28 συμπιεσμένα βίντεο 1080p (< 2 λεπ. έκαστο, ~36 MiB συνολικά) ενσωματωμένα τοπικά στο OSCAR για σταθμούς εκτός δικτύου, με συγχρονισμένους υπότιτλους.',
         openLocalCatalogButtonLabel: 'Άνοιγμα τοπικής σελίδας βιντεοοδηγών',
         openGithubCatalogButtonLabel: 'ORNL/oscar-video-guides (GitHub)',
-        inAppCatalogHeading: 'Περιήγηση & αναπαραγωγή και των 27 βιντεοοδηγών εντός παραθύρου',
+        inAppCatalogHeading: 'Περιήγηση & αναπαραγωγή και των 28 βιντεοοδηγών εντός παραθύρου',
         inAppCatalogHint: 'Αναπτύξτε μια ενότητα παρακάτω και επιλέξτε οποιονδήποτε οδηγό για άμεση αναπαραγωγή.',
         tracks: {
             A: 'Ενότητα A — Εγκατάσταση CLI, προετοιμασία πεδίου, αποθήκευση & παλινδρόμηση (01–03, 22–23, 26)',
             B: 'Ενότητα B — Διαμόρφωση στο SensorHub Admin (04–07)',
-            C: 'Ενότητα C — Λειτουργίες κονσόλας, αντίγραφα USB, επεκτάσεις, UFF φορτίου & ομοσπονδία (08–21, 24–25, 27)',
+            C: 'Ενότητα C — Λειτουργίες κονσόλας, αντίγραφα USB, επεκτάσεις, UFF, εκπαίδευση & ομοσπονδία (08–21, 24–25, 27–28)',
         },
     },
 };

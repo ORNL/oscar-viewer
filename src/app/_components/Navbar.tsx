@@ -76,6 +76,11 @@ import {
     resolveScopedViewDropdownState,
 } from "@/lib/data/oscar/OperationalView";
 import HelpDialog from "@/app/_components/HelpDialog";
+import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
+import SplitscreenRoundedIcon from "@mui/icons-material/SplitscreenRounded";
+import TrainingCoachDock from "@/app/_components/sandbox/TrainingCoachDock";
+import {TRAINING_COACH_UI} from "@/lib/data/oscar/TrainingCurriculum";
+import {fetchSandboxActiveStatus, SandboxActiveStatus} from "@/lib/data/oscar/TrainingSandboxApi";
 import {RootState} from "@/lib/state/Store";
 
 const drawerWidth = 276;
@@ -170,7 +175,11 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const [helpDialogOpen, setHelpDialogOpen] = useState(false);
 
     const [drawerOpen, setDrawerOpen] = useState(false);  // Open state for navigation drawer
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    const coachUi = TRAINING_COACH_UI[language] ?? TRAINING_COACH_UI.en;
+    const [sandboxStatus, setSandboxStatus] = useState<SandboxActiveStatus>({ sandboxMode: false });
+    const [coachOpen, setCoachOpen] = useState<boolean>(true);
+    const [splitAdminOpen, setSplitAdminOpen] = useState<boolean>(false);
 
     const dispatch = useDispatch();
     const router = useRouter();
@@ -241,6 +250,43 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             });
         return () => controller.abort();
     }, [currentSession?.username]);
+
+    const refreshSandboxStatus = React.useCallback(() => {
+        fetchSandboxActiveStatus()
+            .then((next) => setSandboxStatus(next))
+            .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        let pollTimer: ReturnType<typeof setInterval> | null = null;
+        const controller = new AbortController();
+
+        fetchSandboxActiveStatus(controller.signal)
+            .then((initial) => {
+                if (cancelled) return;
+                setSandboxStatus(initial);
+                if (initial.sandboxMode) {
+                    pollTimer = setInterval(() => {
+                        if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+                            return;
+                        }
+                        fetchSandboxActiveStatus()
+                            .then((next) => {
+                                if (!cancelled) setSandboxStatus(next);
+                            })
+                            .catch(() => {});
+                    }, 4_000);
+                }
+            })
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+            if (pollTimer) clearInterval(pollTimer);
+        };
+    }, []);
 
     const handleLogout = async () => {
         try {
@@ -492,8 +538,8 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                 sx={{
                     backgroundColor: "background.default",
                     color: "text.primary",
-                    borderBottom: "solid",
-                    borderColor: "action.selected",
+                    borderBottom: sandboxStatus.sandboxMode ? "2px solid #f59e0b" : "solid",
+                    borderColor: sandboxStatus.sandboxMode ? "#f59e0b" : "action.selected",
                     displayPrint: "none",
                 }}
                 isDesktop={isDesktop}
@@ -512,9 +558,39 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                         <MenuIcon/>
                     </IconButton>
                     <Stack direction="row" sx={{flex: '1 1 0%', minInlineSize: 0, gap: 1}} alignItems="center" justifyContent="space-between">
-                        <Typography variant="h6" noWrap component="div" sx={{minInlineSize: 0, flexShrink: 1}}>
-                            {t('appTitle')}
-                        </Typography>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{minInlineSize: 0, flexShrink: 1}}>
+                            <Typography variant="h6" noWrap component="div" sx={{minInlineSize: 0, flexShrink: 1}}>
+                                {t('appTitle')}
+                            </Typography>
+                            {sandboxStatus.sandboxMode && (
+                                <Tooltip title={coachUi.sandboxBannerNote} arrow>
+                                    <Chip
+                                        size="small"
+                                        color="warning"
+                                        label={
+                                            typeof sandboxStatus.remainingSeconds === "number"
+                                                ? `${coachUi.sandboxBadge} · ${coachUi.ttlRemainingLabel(Math.max(1, Math.ceil(sandboxStatus.remainingSeconds / 60)))}`
+                                                : coachUi.sandboxBadge
+                                        }
+                                        data-testid="navbar-sandbox-indicator"
+                                        sx={{fontWeight: 800, flexShrink: 0}}
+                                    />
+                                </Tooltip>
+                            )}
+                            {sandboxStatus.sandboxMode && (
+                                <Button
+                                    size="small"
+                                    variant={coachOpen ? "contained" : "outlined"}
+                                    color="warning"
+                                    startIcon={<SchoolRoundedIcon fontSize="small" />}
+                                    onClick={() => setCoachOpen((prev) => !prev)}
+                                    data-testid="navbar-training-coach-toggle"
+                                    sx={{textTransform: 'none', fontWeight: 700, flexShrink: 0}}
+                                >
+                                    {coachUi.coachButtonLabel}
+                                </Button>
+                            )}
+                        </Stack>
                         {scopedViewDropdown.mode === "badge" && activeViewKey && (
                             <Chip
                                 label={t('operationalViewValue', {view: activeViewKey})}
@@ -806,9 +882,61 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                     : t('operationalViewEmpty', {view: activeViewKey ?? ''})}
                         </Alert>
                     )}
-                    {children}
+                    {sandboxStatus.sandboxMode && splitAdminOpen ? (
+                        <div className="oscar-sandbox-admin-split-shell" data-testid="sandbox-split-admin-shell">
+                            <Box
+                                sx={{
+                                    px: 2,
+                                    py: 1,
+                                    bgcolor: "#0f172a",
+                                    color: "#f8fafc",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 1,
+                                    minInlineSize: 0,
+                                }}
+                            >
+                                <Stack direction="row" spacing={1} alignItems="center" sx={{minInlineSize: 0}}>
+                                    <SplitscreenRoundedIcon fontSize="small" sx={{color: "#fbbf24"}} />
+                                    <Typography variant="body2" fontWeight={700} noWrap>
+                                        SensorHub Admin (<code>/sensorhub/admin</code>) — {coachUi.sandboxBadge}
+                                    </Typography>
+                                </Stack>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="inherit"
+                                    onClick={() => setSplitAdminOpen(false)}
+                                    data-testid="sandbox-close-split-admin-btn"
+                                    sx={{textTransform: 'none', flexShrink: 0}}
+                                >
+                                    {coachUi.closeSplitAdminLabel}
+                                </Button>
+                            </Box>
+                            <iframe
+                                title="OSCAR SensorHub Admin — Hands-On Training Sandbox"
+                                src="/sensorhub/admin"
+                                className="oscar-sandbox-admin-iframe"
+                                data-testid="sandbox-admin-iframe"
+                            />
+                        </div>
+                    ) : (
+                        children
+                    )}
                 </Box>
             </Box>
+            {sandboxStatus.sandboxMode && coachOpen && (
+                <TrainingCoachDock
+                    status={sandboxStatus}
+                    onStatusUpdated={setSandboxStatus}
+                    onRefreshRequested={refreshSandboxStatus}
+                    onNavigateRoute={(route) => router.push(scopedHref(route))}
+                    splitAdminOpen={splitAdminOpen}
+                    onToggleSplitAdmin={setSplitAdminOpen}
+                    onMinimize={() => setCoachOpen(false)}
+                />
+            )}
         </Box>
     );
 }
