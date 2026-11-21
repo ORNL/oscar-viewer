@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.3
+
+### Added
+
+- Added the **Hands-On Training Sandbox & Guided Academy (`oscar-sandbox`)** console experience (`TrainingSandboxApi.ts`, `TrainingCurriculum.ts`, `TrainingCoachDock.tsx`, `TrainingCoachDock.css`, `TrainingSandboxLauncherCard.tsx`, `Navbar.tsx`, `HelpDialog.tsx`, `AlarmQrTransfer.ts`, `VideoGuidesCatalog.ts` across `en`, `es`, `fr`, `el`): remains 100% inert on operational deployments (`0` extra banners, `0` background polling, and `0` screen clutter when `sandboxMode === false`), exposes cross-platform CLI commands and an optional Administrator 1-click host launcher inside **Help (`?`)**, renders a single-row high-contrast **`TRAINING SANDBOX`** top indicator and collapsible multi-modal **Training Coach** inside the isolated `:8444` sandbox (`Watch · Read · Do · Auto-Verify` across 12 Operator, Supervisor, and Split-Pane SensorHub Admin labs with offline 1080p `.mp4`/`.vtt` videos, `1920×1080` manual screenshots, 1-click practice fault/alarm/NORM/Extended Occupancy injection, downloadable `.csv`/`.n42`/`.uff`/`.pmtiles`/`.json` practice files, `[data-testid]` spotlight highlighting, live API outcome auto-verification, `TRAINING SANDBOX — NON-OPERATIONAL` QR/report watermarks, and 1-page vector PDF Completion Records), and bundles how-to video guide `#28` (`28-hands-on-training-sandbox`).
+
+### Changed
+
+- Updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.3` (`oscar-3.11.3.zip`).
+
 ## 3.11.2
 
 ### Added

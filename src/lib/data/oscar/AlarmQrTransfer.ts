@@ -8,6 +8,7 @@ import {
     isThresholdDataStream,
 } from "@/lib/data/oscar/Utilities";
 import {getGammaGrossCount, getNeutronGrossCount} from "@/app/utils/ChartUtils";
+import {isTrainingSandboxRuntimeActive, SANDBOX_WATERMARK_TEXT} from "@/lib/data/oscar/TrainingSandboxApi";
 
 export const ALARM_TRANSFER_SCHEMA = "org.oscar.alarm-transfer";
 export const ALARM_TRANSFER_VERSION = 1;
@@ -73,6 +74,8 @@ export interface AlarmTransferPayload {
         signed: false;
         notice: "integrity-only";
     };
+    sandboxMode?: true;
+    sandboxWatermark?: string;
 }
 
 export interface AlarmTransferDocument {
@@ -504,11 +507,16 @@ function buildPayload(
     const adjudication = event.adjudicatedData;
     const node = lane.parentNode as any;
 
+    const sandboxActive = isTrainingSandboxRuntimeActive();
     return {
         schema: ALARM_TRANSFER_SCHEMA,
         version: ALARM_TRANSFER_VERSION,
         exportedAt: new Date().toISOString(),
         exportProfile: "qr-downsampled",
+        ...(sandboxActive ? {
+            sandboxMode: true as const,
+            sandboxWatermark: SANDBOX_WATERMARK_TEXT,
+        } : {}),
         source: {
             nodeId: String(node?.id ?? event.parentNode ?? "unknown"),
             nodeName: compactText(node?.name, 80),
