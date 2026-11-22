@@ -80,6 +80,7 @@ export interface SandboxActiveStatus {
 export interface SandboxHostStatus {
     agentActive: boolean;
     sandboxRunning: boolean;
+    canStopOrReset?: boolean;
     httpsPort: number;
     ttlMinutes: number;
     expiresAt?: string;
@@ -96,6 +97,62 @@ export interface SandboxHostStatus {
         state: string;
         startedAt?: string;
         message?: string;
+    };
+}
+
+export interface SandboxShutdownSummary {
+    remainingMinutes: number | null;
+    durationText: string;
+    expiresTimeText: string | null;
+}
+
+export function computeSandboxShutdownSummary(params: {
+    remainingSeconds?: number;
+    expiresEpochSeconds?: number;
+    expiresAt?: string;
+    ttlMinutes?: number;
+    nowMs?: number;
+}): SandboxShutdownSummary {
+    const now = params.nowMs ?? Date.now();
+    let targetMs: number | null = null;
+    if (typeof params.expiresEpochSeconds === "number" && params.expiresEpochSeconds > 0) {
+        targetMs = params.expiresEpochSeconds * 1000;
+    } else if (params.expiresAt) {
+        const parsed = Date.parse(params.expiresAt);
+        if (!Number.isNaN(parsed)) {
+            targetMs = parsed;
+        }
+    }
+
+    let remainingMin: number | null = null;
+    if (typeof params.remainingSeconds === "number") {
+        remainingMin = Math.max(1, Math.ceil(params.remainingSeconds / 60));
+    } else if (targetMs !== null) {
+        remainingMin = Math.max(1, Math.ceil((targetMs - now) / 60_000));
+    }
+
+    const fallbackMin = params.ttlMinutes ?? 120;
+    const mins = remainingMin ?? fallbackMin;
+    const hours = Math.floor(mins / 60);
+    const rem = mins % 60;
+    const durationText = hours > 0 ? (rem > 0 ? `${hours}h ${rem}m` : `${hours}h`) : `${mins}m`;
+
+    let expiresTimeText: string | null = null;
+    if (targetMs !== null) {
+        try {
+            expiresTimeText = new Date(targetMs).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+            });
+        } catch {
+            expiresTimeText = params.expiresAt ?? null;
+        }
+    }
+
+    return {
+        remainingMinutes: remainingMin,
+        durationText,
+        expiresTimeText,
     };
 }
 

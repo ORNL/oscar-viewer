@@ -20,22 +20,29 @@ import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import GpsFixedRoundedIcon from "@mui/icons-material/GpsFixedRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
+import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import SplitscreenRoundedIcon from "@mui/icons-material/SplitscreenRounded";
+import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { getVideoGuideBySlug } from "@/lib/data/oscar/VideoGuidesCatalog";
 import {
     buildSandboxSampleDownloadUrl,
     CompletedLabSubmission,
+    computeSandboxShutdownSummary,
     downloadTrainingCertificatePdf,
+    fetchSandboxHostStatus,
     injectSandboxScenario,
     SandboxActiveStatus,
+    SandboxHostStatus,
     SandboxScenarioId,
     SandboxTrackId,
     SandboxVerificationSnapshot,
     stageSandboxTrack,
+    submitSandboxHostAction,
 } from "@/lib/data/oscar/TrainingSandboxApi";
 import {
     TRAINING_COACH_UI,
@@ -106,6 +113,7 @@ export default function TrainingCoachDock({
 }: TrainingCoachDockProps) {
     const { language: locale } = useLanguage();
     const ui = TRAINING_COACH_UI[locale] ?? TRAINING_COACH_UI.en;
+    const refresherMode = !status.sandboxMode;
     const verification = status.verification ?? EMPTY_VERIFICATION;
 
     const [selectedTrack, setSelectedTrack] = React.useState<SandboxTrackId>(
@@ -118,6 +126,8 @@ export default function TrainingCoachDock({
     const [selectedLabId, setSelectedLabId] = React.useState<string>("op-1");
     const [manualCompletedIds, setManualCompletedIds] = React.useState<string[]>([]);
     const [busyAction, setBusyAction] = React.useState<boolean>(false);
+    const [hostStatus, setHostStatus] = React.useState<SandboxHostStatus | null>(null);
+    const [hostBusy, setHostBusy] = React.useState<boolean>(false);
     const [feedbackBanner, setFeedbackBanner] = React.useState<{
         severity: "success" | "info" | "error";
         text: string;
@@ -142,6 +152,33 @@ export default function TrainingCoachDock({
     }, []);
 
     React.useEffect(() => {
+        if (!refresherMode) return;
+        const controller = new AbortController();
+        fetchSandboxHostStatus(controller.signal)
+            .then((st) => {
+                if (st) setHostStatus(st);
+            })
+            .catch(() => {});
+        return () => controller.abort();
+    }, [refresherMode]);
+
+    const hostStarting =
+        !hostStatus?.sandboxRunning &&
+        (hostStatus?.activeJob?.state === "QUEUED" || hostStatus?.activeJob?.state === "RUNNING");
+
+    React.useEffect(() => {
+        if (!refresherMode || !hostStarting) return;
+        const timer = setInterval(() => {
+            fetchSandboxHostStatus()
+                .then((st) => {
+                    if (st) setHostStatus(st);
+                })
+                .catch(() => {});
+        }, 3_000);
+        return () => clearInterval(timer);
+    }, [refresherMode, hostStarting]);
+
+    React.useEffect(() => {
         if (status.activeTrack && status.activeTrack !== selectedTrack) {
             setSelectedTrack(status.activeTrack);
         }
@@ -155,6 +192,7 @@ export default function TrainingCoachDock({
 
     // Polite screen-reader announcement when any lab objective transitions to Auto-Verified
     React.useEffect(() => {
+        if (refresherMode) return;
         for (const lab of TRAINING_LABS) {
             const nowVerified = lab.isAutoVerified(verification);
             if (nowVerified && !previouslyVerifiedRef.current.has(lab.id)) {
@@ -162,7 +200,7 @@ export default function TrainingCoachDock({
                 setLiveAnnouncement(`${ui.verifiedBadgeLabel}: ${lab.badge} ${lab.title}`);
             }
         }
-    }, [verification, ui.verifiedBadgeLabel]);
+    }, [refresherMode, verification, ui.verifiedBadgeLabel]);
 
     const activeLab: TrainingLabDefinition =
         trackLabs.find((l) => l.id === selectedLabId) ?? trackLabs[0] ?? TRAINING_LABS[0];
@@ -170,11 +208,58 @@ export default function TrainingCoachDock({
         TRAINING_TRACKS.find((t) => t.id === selectedTrack) ?? TRAINING_TRACKS[0];
     const videoGuide = getVideoGuideBySlug(activeLab.videoGuideSlug);
 
-    const isLabVerified = (lab: TrainingLabDefinition): boolean => lab.isAutoVerified(verification);
+    const isLabVerified = (lab: TrainingLabDefinition): boolean =>
+        !refresherMode && lab.isAutoVerified(verification);
     const isLabDone = (lab: TrainingLabDefinition): boolean =>
         isLabVerified(lab) || manualCompletedIds.includes(lab.id);
 
     const completedInTrackCount = trackLabs.filter(isLabDone).length;
+
+    const sandboxPort = hostStatus?.httpsPort ?? 8444;
+    const sandboxTtl = hostStatus?.ttlMinutes ?? status.ttlMinutes ?? 120;
+    const sandboxUrl = React.useMemo(() => {
+        if (typeof window === "undefined") return `https://localhost:${sandboxPort}`;
+        return `https://${window.location.hostname}:${sandboxPort}`;
+    }, [sandboxPort]);
+
+    const activeShutdownSummary = React.useMemo(
+        () =>
+            computeSandboxShutdownSummary({
+                remainingSeconds: status.remainingSeconds,
+                expiresEpochSeconds: status.expiresEpochSeconds,
+                ttlMinutes: status.ttlMinutes ?? 120,
+            }),
+        [status.expiresEpochSeconds, status.remainingSeconds, status.ttlMinutes],
+    );
+
+    const hostShutdownSummary = React.useMemo(
+        () =>
+            computeSandboxShutdownSummary({
+                expiresAt: hostStatus?.expiresAt,
+                ttlMinutes: sandboxTtl,
+            }),
+        [hostStatus?.expiresAt, sandboxTtl],
+    );
+
+    const handleHostAction = async (action: "start" | "stop" | "reset") => {
+        setHostBusy(true);
+        setFeedbackBanner(null);
+        try {
+            const next = await submitSandboxHostAction(action, sandboxPort, sandboxTtl);
+            setHostStatus(next);
+            setFeedbackBanner({
+                severity: "success",
+                text: next.activeJob?.message ?? `Submitted '${action}' to host sandbox agent.`,
+            });
+        } catch (err: any) {
+            setFeedbackBanner({
+                severity: "error",
+                text: err?.message ?? "Host sandbox request failed.",
+            });
+        } finally {
+            setHostBusy(false);
+        }
+    };
 
     const handleSelectTrack = async (trackId: SandboxTrackId) => {
         setSelectedTrack(trackId);
@@ -184,6 +269,9 @@ export default function TrainingCoachDock({
             if (!firstLab.splitPaneAdmin && splitAdminOpen) {
                 onToggleSplitAdmin(false);
             }
+        }
+        if (refresherMode) {
+            return;
         }
         if (status.activeTrack !== trackId) {
             setBusyAction(true);
@@ -311,7 +399,7 @@ export default function TrainingCoachDock({
     return (
         <aside
             className="oscar-training-coach-aside"
-            aria-label={ui.coachButtonLabel}
+            aria-label={refresherMode ? ui.walkthroughButtonLabel : ui.coachButtonLabel}
             data-testid="training-coach-dock"
         >
             <div className="oscar-sr-only" role="status" aria-live="polite">
@@ -332,11 +420,25 @@ export default function TrainingCoachDock({
                     minInlineSize: 0,
                 }}
             >
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ minInlineSize: 0 }}>
+                <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minInlineSize: 0 }}>
                     <SchoolRoundedIcon sx={{ color: "#fbbf24", flexShrink: 0 }} fontSize="small" />
                     <Typography variant="subtitle2" fontWeight={700} noWrap>
-                        {ui.coachButtonLabel}
+                        {refresherMode ? ui.walkthroughButtonLabel : ui.coachButtonLabel}
                     </Typography>
+                    {refresherMode && (
+                        <Chip
+                            size="small"
+                            label={ui.refresherBadge}
+                            data-testid="coach-refresher-badge"
+                            sx={{
+                                height: 20,
+                                fontSize: "0.66rem",
+                                fontWeight: 700,
+                                bgcolor: "rgba(56, 189, 248, 0.22)",
+                                color: "#bae6fd",
+                            }}
+                        />
+                    )}
                     <Chip
                         size="small"
                         label={`${completedInTrackCount}/${trackLabs.length}`}
@@ -350,20 +452,22 @@ export default function TrainingCoachDock({
                     />
                 </Stack>
                 <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
-                    <Tooltip title={ui.resetTrackLabel}>
-                        <span>
-                            <IconButton
-                                size="small"
-                                sx={{ color: "#e2e8f0" }}
-                                aria-label={ui.resetTrackLabel}
-                                disabled={busyAction}
-                                onClick={handleRestageCurrentTrack}
-                                data-testid="training-coach-restage-track"
-                            >
-                                <RefreshRoundedIcon fontSize="small" />
-                            </IconButton>
-                        </span>
-                    </Tooltip>
+                    {!refresherMode && (
+                        <Tooltip title={ui.resetTrackLabel}>
+                            <span>
+                                <IconButton
+                                    size="small"
+                                    sx={{ color: "#e2e8f0" }}
+                                    aria-label={ui.resetTrackLabel}
+                                    disabled={busyAction}
+                                    onClick={handleRestageCurrentTrack}
+                                    data-testid="training-coach-restage-track"
+                                >
+                                    <RefreshRoundedIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    )}
                     <Tooltip title={ui.hideCoachLabel}>
                         <IconButton
                             size="small"
@@ -378,10 +482,173 @@ export default function TrainingCoachDock({
                 </Stack>
             </Box>
 
-            {(busyAction || status.stagingInProgress) && <LinearProgress color="warning" />}
+            {(busyAction || hostBusy || hostStarting || status.stagingInProgress) && (
+                <LinearProgress color="warning" />
+            )}
 
             {/* Scrollable Body (overscroll-behavior: contain; scrollbar-gutter: stable) */}
             <div className="oscar-training-coach-scroll">
+                {refresherMode ? (
+                    <details
+                        className="oscar-coach-orientation"
+                        open
+                        data-testid="coach-refresher-orientation"
+                    >
+                        <summary className="oscar-coach-summary">
+                            <span>{ui.refresherOrientationSummary}</span>
+                        </summary>
+                        <div className="oscar-coach-accordion-body">
+                            <Typography
+                                variant="body2"
+                                sx={{ fontSize: "0.79rem", lineHeight: 1.4, mb: 1, color: "#1e293b" }}
+                            >
+                                {ui.refresherSafeNote}
+                            </Typography>
+                            <Box
+                                sx={{
+                                    p: 1.1,
+                                    borderRadius: 1.5,
+                                    bgcolor: "#ffffff",
+                                    border: "1px solid #fcd34d",
+                                }}
+                                data-testid="coach-sandbox-launcher"
+                            >
+                                <Typography
+                                    variant="caption"
+                                    fontWeight={700}
+                                    sx={{ display: "block", color: "#92400e", mb: 0.5 }}
+                                >
+                                    {ui.practiceCardTitle}
+                                </Typography>
+                                <Box component="ul" sx={{ m: 0, pl: 2, mb: 1 }}>
+                                    <Typography
+                                        component="li"
+                                        variant="caption"
+                                        sx={{ display: "list-item", lineHeight: 1.38, mb: 0.4, color: "#334155" }}
+                                    >
+                                        {ui.practiceIsolationBullet}
+                                    </Typography>
+                                    <Typography
+                                        component="li"
+                                        variant="caption"
+                                        sx={{ display: "list-item", lineHeight: 1.38, mb: 0.4, color: "#334155" }}
+                                    >
+                                        {ui.practiceShutdownBullet(sandboxTtl)}
+                                    </Typography>
+                                    <Typography
+                                        component="li"
+                                        variant="caption"
+                                        sx={{ display: "list-item", lineHeight: 1.38, color: "#334155" }}
+                                    >
+                                        {ui.practiceSignInBullet}
+                                    </Typography>
+                                </Box>
+
+                                <Typography
+                                    variant="caption"
+                                    fontWeight={700}
+                                    sx={{
+                                        display: "block",
+                                        mb: 0.75,
+                                        color: hostStatus?.sandboxRunning ? "#15803d" : "#475569",
+                                    }}
+                                    data-testid="coach-sandbox-host-status"
+                                >
+                                    {hostStatus?.sandboxRunning
+                                        ? ui.practiceRunningStatus(
+                                              hostShutdownSummary.durationText,
+                                              hostShutdownSummary.expiresTimeText,
+                                          )
+                                        : ui.practiceStoppedStatus(sandboxTtl)}
+                                </Typography>
+
+                                {hostStatus?.sandboxRunning ? (
+                                    <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+                                        <Button
+                                            component="a"
+                                            href={sandboxUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            size="small"
+                                            variant="contained"
+                                            color="success"
+                                            endIcon={<OpenInNewRoundedIcon fontSize="small" />}
+                                            data-testid="coach-sandbox-open-btn"
+                                            sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.76rem" }}
+                                        >
+                                            {ui.openPracticeBtn(sandboxPort)}
+                                        </Button>
+                                        {hostStatus.canStopOrReset && (
+                                            <>
+                                                <Button
+                                                    size="small"
+                                                    variant="outlined"
+                                                    disabled={hostBusy}
+                                                    startIcon={<RestartAltRoundedIcon fontSize="small" />}
+                                                    onClick={() => handleHostAction("reset")}
+                                                    data-testid="coach-sandbox-reset-btn"
+                                                    sx={{ textTransform: "none", fontSize: "0.74rem" }}
+                                                >
+                                                    Reset
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    variant="outlined"
+                                                    color="error"
+                                                    disabled={hostBusy}
+                                                    startIcon={<StopCircleOutlinedIcon fontSize="small" />}
+                                                    onClick={() => handleHostAction("stop")}
+                                                    data-testid="coach-sandbox-stop-btn"
+                                                    sx={{ textTransform: "none", fontSize: "0.74rem" }}
+                                                >
+                                                    Stop
+                                                </Button>
+                                            </>
+                                        )}
+                                    </Stack>
+                                ) : hostStatus?.agentActive ? (
+                                    <Button
+                                        size="small"
+                                        variant="contained"
+                                        color="warning"
+                                        disabled={hostBusy || hostStarting}
+                                        startIcon={<PlayArrowRoundedIcon fontSize="small" />}
+                                        onClick={() => handleHostAction("start")}
+                                        data-testid="coach-sandbox-launch-btn"
+                                        sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.76rem" }}
+                                    >
+                                        {hostStarting ? ui.startingPracticeBtn : ui.launchPracticeBtn(sandboxPort)}
+                                    </Button>
+                                ) : (
+                                    <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{ display: "block", lineHeight: 1.35 }}
+                                        data-testid="coach-sandbox-bridge-hint"
+                                    >
+                                        {renderInlineCode(ui.practiceBridgeHint)}
+                                    </Typography>
+                                )}
+                            </Box>
+                        </div>
+                    </details>
+                ) : (
+                    <Alert
+                        severity="warning"
+                        data-testid="coach-sandbox-session-banner"
+                        sx={{
+                            mb: 1.25,
+                            py: 0.4,
+                            "& .MuiAlert-message": { fontSize: "0.76rem", lineHeight: 1.38 },
+                        }}
+                    >
+                        {ui.activeSandboxShutdownBanner(
+                            activeShutdownSummary.durationText,
+                            activeShutdownSummary.expiresTimeText,
+                        )}
+                    </Alert>
+                )}
+
                 {/* Role Track Switcher */}
                 <Stack direction="row" spacing={0.75} sx={{ mb: 1.25, minInlineSize: 0 }}>
                     {TRAINING_TRACKS.map((track) => {
@@ -495,17 +762,36 @@ export default function TrainingCoachDock({
 
                     <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
                         {activeLab.splitPaneAdmin ? (
-                            <Button
-                                size="small"
-                                variant={splitAdminOpen ? "outlined" : "contained"}
-                                color="secondary"
-                                startIcon={<SplitscreenRoundedIcon fontSize="small" />}
-                                onClick={() => onToggleSplitAdmin(!splitAdminOpen)}
-                                data-testid="training-toggle-split-admin"
-                                sx={{ textTransform: "none" }}
-                            >
-                                {splitAdminOpen ? ui.closeSplitAdminLabel : ui.openSplitAdminLabel}
-                            </Button>
+                            refresherMode ? (
+                                hostStatus?.canStopOrReset && (
+                                    <Button
+                                        component="a"
+                                        href="/sensorhub/admin"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        size="small"
+                                        variant="outlined"
+                                        color="secondary"
+                                        endIcon={<OpenInNewRoundedIcon fontSize="small" />}
+                                        data-testid="training-refresher-admin-link"
+                                        sx={{ textTransform: "none" }}
+                                    >
+                                        {ui.refresherAdminTabLabel}
+                                    </Button>
+                                )
+                            ) : (
+                                <Button
+                                    size="small"
+                                    variant={splitAdminOpen ? "outlined" : "contained"}
+                                    color="secondary"
+                                    startIcon={<SplitscreenRoundedIcon fontSize="small" />}
+                                    onClick={() => onToggleSplitAdmin(!splitAdminOpen)}
+                                    data-testid="training-toggle-split-admin"
+                                    sx={{ textTransform: "none" }}
+                                >
+                                    {splitAdminOpen ? ui.closeSplitAdminLabel : ui.openSplitAdminLabel}
+                                </Button>
+                            )
                         ) : (
                             <Button
                                 size="small"
@@ -555,7 +841,7 @@ export default function TrainingCoachDock({
                             ))}
                         </Box>
 
-                        {activeLab.injectActions && activeLab.injectActions.length > 0 && (
+                        {!refresherMode && activeLab.injectActions && activeLab.injectActions.length > 0 && (
                             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
                                 {activeLab.injectActions.map((act) => (
                                     <Button
@@ -575,7 +861,7 @@ export default function TrainingCoachDock({
                             </Stack>
                         )}
 
-                        {activeLab.sampleFiles && activeLab.sampleFiles.length > 0 && (
+                        {!refresherMode && activeLab.sampleFiles && activeLab.sampleFiles.length > 0 && (
                             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
                                 {activeLab.sampleFiles.map((sample) => (
                                     <Button
@@ -594,6 +880,19 @@ export default function TrainingCoachDock({
                                 ))}
                             </Stack>
                         )}
+
+                        {refresherMode &&
+                            ((activeLab.injectActions && activeLab.injectActions.length > 0) ||
+                                (activeLab.sampleFiles && activeLab.sampleFiles.length > 0)) && (
+                                <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ display: "block", mb: 1, fontStyle: "italic" }}
+                                    data-testid="training-refresher-simulation-note"
+                                >
+                                    {ui.refresherSimulationNote}
+                                </Typography>
+                            )}
 
                         {activeLab.copySnippets && activeLab.copySnippets.length > 0 && (
                             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
@@ -703,32 +1002,36 @@ export default function TrainingCoachDock({
                     </div>
                 </details>
 
-                <Divider sx={{ my: 1.5 }} />
+                {!refresherMode && (
+                    <>
+                        <Divider sx={{ my: 1.5 }} />
 
-                {/* 1-Page PDF Training Completion Record */}
-                <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: "#ffffff", border: "1px solid #cbd5e1" }}>
-                    <TextField
-                        size="small"
-                        fullWidth
-                        label={ui.traineeNamePlaceholder}
-                        value={traineeName}
-                        onChange={(e) => setTraineeName(e.target.value)}
-                        inputProps={{ maxLength: 80, "data-testid": "training-trainee-name-input" }}
-                        sx={{ mb: 1 }}
-                    />
-                    <Button
-                        fullWidth
-                        size="small"
-                        variant="outlined"
-                        startIcon={<DownloadRoundedIcon fontSize="small" />}
-                        disabled={busyAction}
-                        onClick={handleDownloadCertificate}
-                        data-testid="training-download-certificate-btn"
-                        sx={{ textTransform: "none", fontWeight: 600 }}
-                    >
-                        {ui.certificateButtonLabel}
-                    </Button>
-                </Box>
+                        {/* 1-Page PDF Training Completion Record */}
+                        <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: "#ffffff", border: "1px solid #cbd5e1" }}>
+                            <TextField
+                                size="small"
+                                fullWidth
+                                label={ui.traineeNamePlaceholder}
+                                value={traineeName}
+                                onChange={(e) => setTraineeName(e.target.value)}
+                                inputProps={{ maxLength: 80, "data-testid": "training-trainee-name-input" }}
+                                sx={{ mb: 1 }}
+                            />
+                            <Button
+                                fullWidth
+                                size="small"
+                                variant="outlined"
+                                startIcon={<DownloadRoundedIcon fontSize="small" />}
+                                disabled={busyAction}
+                                onClick={handleDownloadCertificate}
+                                data-testid="training-download-certificate-btn"
+                                sx={{ textTransform: "none", fontWeight: 600 }}
+                            >
+                                {ui.certificateButtonLabel}
+                            </Button>
+                        </Box>
+                    </>
+                )}
             </div>
         </aside>
     );

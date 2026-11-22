@@ -49,6 +49,24 @@ export interface TrainingCoachUiStrings {
     sandboxBadge: string;
     sandboxBannerNote: string;
     coachButtonLabel: string;
+    walkthroughButtonLabel: string;
+    walkthroughButtonHint: string;
+    refresherBadge: string;
+    refresherOrientationSummary: string;
+    refresherSafeNote: string;
+    practiceCardTitle: string;
+    practiceIsolationBullet: string;
+    practiceShutdownBullet: (ttlMinutes: number) => string;
+    practiceSignInBullet: string;
+    practiceRunningStatus: (durationText: string, timeText: string | null) => string;
+    practiceStoppedStatus: (ttlMinutes: number) => string;
+    launchPracticeBtn: (port: number) => string;
+    startingPracticeBtn: string;
+    openPracticeBtn: (port: number) => string;
+    practiceBridgeHint: string;
+    refresherSimulationNote: string;
+    refresherAdminTabLabel: string;
+    activeSandboxShutdownBanner: (durationText: string, timeText: string | null) => string;
     hideCoachLabel: string;
     quickInjectLabel: string;
     resetTrackLabel: string;
@@ -74,8 +92,26 @@ export interface TrainingCoachUiStrings {
 export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
     en: {
         sandboxBadge: "TRAINING SANDBOX",
-        sandboxBannerNote: "Practice Data Only · Zero Production DB / Parquet Impact · Flushed on Exit",
+        sandboxBannerNote: "Practice Data Only · Zero Production DB / Parquet Impact · Auto-Wipes on Shutdown",
         coachButtonLabel: "Training Coach",
+        walkthroughButtonLabel: "Guided Walkthrough",
+        walkthroughButtonHint: "Open step-by-step interactive walkthroughs, 1080p videos, and 1-click :8444 Practice Sandbox launch (100% read-only on live console)",
+        refresherBadge: "READ-ONLY REFRESHER",
+        refresherOrientationSummary: "How This Walkthrough Works & Practice Sandbox Auto-Shutdown",
+        refresherSafeNote: "You are on the live operational console (:443). Browsing steps, watching videos, viewing screenshots, and highlighting controls here is 100% read-only and never injects fake alarms or modifies live records. (Clicking actual operational controls on the main page acts on the live site.)",
+        practiceCardTitle: "Need Safe Hands-On Practice? Launch Isolated Sandbox (:8444)",
+        practiceIsolationBullet: "Zero Live Impact: Runs disposable practice lanes (DemoLane01 / DemoLane02) with simulated RPM & camera streams (archive.enabled = false). Nothing on :8444 ever touches live PostgreSQL, Parquet archives, config.json, or physical RPM relays.",
+        practiceShutdownBullet: (m) => `Automatic Shutdown & Wipe (${m} min / ${Math.round((m / 60) * 10) / 10}h): Automatically shuts down after ${m} minutes and permanently erases all practice alarms, uploads, and edits (< 2s) so server RAM is never tied up overnight.`,
+        practiceSignInBullet: "Sign-In, HTTPS & Exports: Opens https://<host>:8444 in a new tab (accept the local HTTPS prompt once if shown) and sign in with your existing OSCAR username/password or Passkey. All exports carry a TRAINING SANDBOX — NON-OPERATIONAL watermark; download your PDF Completion Record before shutdown.",
+        practiceRunningStatus: (dur, at) => `Practice Sandbox RUNNING · Auto-shuts down & wipes in ${dur}${at ? ` (at ${at})` : ""}`,
+        practiceStoppedStatus: (m) => `Practice Sandbox STOPPED · Auto-shuts down ${m} min after launch (requires ≥ 3.5 GiB free RAM)`,
+        launchPracticeBtn: (p) => `Launch Practice Sandbox (:${p})`,
+        startingPracticeBtn: "Starting Practice Sandbox (~20–40s)...",
+        openPracticeBtn: (p) => `Open Practice Sandbox (:${p})`,
+        practiceBridgeHint: "1-click browser launch can be enabled once on Ubuntu with `sudo bash oscar.sh sandbox enable-ui-bridge`, or started via CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
+        refresherSimulationNote: "Simulated alarm injection & practice sample files activate automatically inside the :8444 Practice Sandbox.",
+        refresherAdminTabLabel: "Open SensorHub Admin (New Tab — Live Console)",
+        activeSandboxShutdownBanner: (dur, at) => `Auto-shutdown in ${dur}${at ? ` (at ${at})` : ""}: all practice alarms, uploads, and lane edits wipe automatically when the timer expires. Export your PDF Completion Record below before shutdown.`,
         hideCoachLabel: "Minimize Coach",
         quickInjectLabel: "Inject Event",
         resetTrackLabel: "Re-Stage Track",
@@ -99,8 +135,26 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
     },
     es: {
         sandboxBadge: "ENTORNO DE PRÁCTICA",
-        sandboxBannerNote: "Solo datos de entrenamiento · Cero impacto en BD / Parquet real · Se borra al salir",
+        sandboxBannerNote: "Solo datos de entrenamiento · Cero impacto en BD / Parquet real · Se borra al apagarse",
         coachButtonLabel: "Guía de Práctica",
+        walkthroughButtonLabel: "Recorrido guiado",
+        walkthroughButtonHint: "Abrir pasos guiados, videoguías 1080p y lanzamiento en 1 clic del entorno de práctica :8444 (solo lectura en consola real)",
+        refresherBadge: "REPASO SOLO LECTURA",
+        refresherOrientationSummary: "Cómo funciona este recorrido y apagado automático del entorno (:8444)",
+        refresherSafeNote: "Está en la consola operativa real (:443). Consultar pasos, vídeos, capturas y resaltar controles aquí es 100 % de solo lectura y nunca inyecta alarmas falsas ni altera datos reales. (Pulsar botones operativos reales en la página principal sí actúa sobre el sitio en vivo).",
+        practiceCardTitle: "¿Desea práctica interactiva segura? Entorno aislado (:8444)",
+        practiceIsolationBullet: "Cero impacto real: Ejecuta carriles desechables (DemoLane01 / DemoLane02) con flujos simulados (archive.enabled = false). Nada en :8444 toca PostgreSQL real, Parquet, config.json ni relés físicos.",
+        practiceShutdownBullet: (m) => `Apagado y borrado automático (${m} min): Se apaga automáticamente tras ${m} minutos y purga todos los datos de práctica (< 2 s) para no consumir RAM durante la noche.`,
+        practiceSignInBullet: "Acceso, HTTPS y exportaciones: Abre https://<host>:8444 en una pestaña nueva (acepte el aviso HTTPS local si aparece) e inicie sesión con su usuario/contraseña o Passkey actual. Toda exportación lleva marca TRAINING SANDBOX — NON-OPERATIONAL; descargue su PDF de finalización antes del apagado.",
+        practiceRunningStatus: (dur, at) => `Entorno ACTIVO · Se apaga y purga en ${dur}${at ? ` (a las ${at})` : ""}`,
+        practiceStoppedStatus: (m) => `Entorno DETENIDO · Se apaga automáticamente ${m} min después de iniciar (requiere ≥ 3.5 GiB de RAM libre)`,
+        launchPracticeBtn: (p) => `Iniciar entorno de práctica (:${p})`,
+        startingPracticeBtn: "Iniciando entorno de práctica (~20–40 s)...",
+        openPracticeBtn: (p) => `Abrir entorno de práctica (:${p})`,
+        practiceBridgeHint: "El inicio en 1 clic en Ubuntu se habilita una vez con `sudo bash oscar.sh sandbox enable-ui-bridge`, o por CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
+        refresherSimulationNote: "La inyección de alarmas simuladas y los archivos de muestra se activan automáticamente dentro del entorno :8444.",
+        refresherAdminTabLabel: "Abrir SensorHub Admin (nueva pestaña — consola real)",
+        activeSandboxShutdownBanner: (dur, at) => `Apagado automático en ${dur}${at ? ` (a las ${at})` : ""}: todos los datos y ajustes de práctica se borran al expirar el temporizador. Descargue abajo su PDF de finalización antes del apagado.`,
         hideCoachLabel: "Minimizar guía",
         quickInjectLabel: "Inyectar evento",
         resetTrackLabel: "Reiniciar bloque",
@@ -124,8 +178,26 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
     },
     fr: {
         sandboxBadge: "BAC À SABLE DE FORMATION",
-        sandboxBannerNote: "Données d’exercice uniquement · Zéro impact BD / Parquet réel · Purgé à la fermeture",
+        sandboxBannerNote: "Données d’exercice uniquement · Zéro impact BD / Parquet réel · Purgé à l’extinction",
         coachButtonLabel: "Coach Formation",
+        walkthroughButtonLabel: "Parcours guidé",
+        walkthroughButtonHint: "Ouvrir les ateliers guidés, vidéos 1080p et lancement en 1 clic du bac à sable :8444 (lecture seule sur la console réelle)",
+        refresherBadge: "RÉVISION LECTURE SEULE",
+        refresherOrientationSummary: "Fonctionnement du parcours et arrêt automatique du bac à sable (:8444)",
+        refresherSafeNote: "Vous êtes sur la console opérationnelle (:443). Parcourir les étapes, vidéos, captures et mettre en évidence les contrôles ici est 100 % en lecture seule et n’injecte jamais de fausses alarmes. (Cliquer sur les vrais boutons de la page principale agit sur le site réel.)",
+        practiceCardTitle: "Pratique interactive sans risque : Bac à sable isolé (:8444)",
+        practiceIsolationBullet: "Zéro impact réel : Exécute des voies jetables (DemoLane01 / DemoLane02) avec flux simulés (archive.enabled = false). Rien sur :8444 ne touche PostgreSQL réel, Parquet, config.json ni les relais physiques.",
+        practiceShutdownBullet: (m) => `Extinction et purge automatiques (${m} min) : S’arrête automatiquement après ${m} minutes et efface toutes les données d’exercice (< 2 s) afin de préserver la RAM du serveur.`,
+        practiceSignInBullet: "Connexion, HTTPS et exports : Ouvre https://<hôte>:8444 dans un nouvel onglet (acceptez l’invite HTTPS locale si affichée) et connectez-vous avec vos identifiants ou Passkey habituels. Tous les exports portent le filigrane TRAINING SANDBOX — NON-OPERATIONAL ; téléchargez votre PDF de réussite avant l’extinction.",
+        practiceRunningStatus: (dur, at) => `Bac à sable ACTIF · Arrêt et purge dans ${dur}${at ? ` (à ${at})` : ""}`,
+        practiceStoppedStatus: (m) => `Bac à sable ARRÊTÉ · Extinction automatique ${m} min après lancement (≥ 3,5 Gio de RAM libre requis)`,
+        launchPracticeBtn: (p) => `Lancer le bac à sable (:${p})`,
+        startingPracticeBtn: "Démarrage du bac à sable (~20–40 s)...",
+        openPracticeBtn: (p) => `Ouvrir le bac à sable (:${p})`,
+        practiceBridgeHint: "Le lancement en 1 clic sous Ubuntu s’active une fois via `sudo bash oscar.sh sandbox enable-ui-bridge`, ou par CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
+        refresherSimulationNote: "L’injection d’alarmes simulées et les fichiers d’exemple s’activent automatiquement dans le bac à sable :8444.",
+        refresherAdminTabLabel: "Ouvrir SensorHub Admin (nouvel onglet — console réelle)",
+        activeSandboxShutdownBanner: (dur, at) => `Extinction automatique dans ${dur}${at ? ` (à ${at})` : ""} : toutes les données d’exercice seront effacées à l’expiration. Téléchargez votre attestation PDF ci-dessous avant l’arrêt.`,
         hideCoachLabel: "Réduire le coach",
         quickInjectLabel: "Injecter un événement",
         resetTrackLabel: "Réinitialiser le parcours",
@@ -149,8 +221,26 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
     },
     el: {
         sandboxBadge: "ΠΕΡΙΒΑΛΛΟΝ ΕΚΠΑΙΔΕΥΣΗΣ",
-        sandboxBannerNote: "Μόνο δεδομένα εξάσκησης · Μηδενική επίδραση σε ΒΔ / Parquet · Διαγράφεται στην έξοδο",
+        sandboxBannerNote: "Μόνο δεδομένα εξάσκησης · Μηδενική επίδραση σε ΒΔ / Parquet · Διαγράφεται στον τερματισμό",
         coachButtonLabel: "Οδηγός Εκπαίδευσης",
+        walkthroughButtonLabel: "Καθοδηγούμενη περιήγηση",
+        walkthroughButtonHint: "Άνοιγμα καθοδηγούμενων βημάτων, βιντεοοδηγών 1080p και εκκίνησης με 1 κλικ του περιβάλλοντος εξάσκησης :8444 (μόνο ανάγνωση στη ζωντανή κονσόλα)",
+        refresherBadge: "ΕΠΑΝΑΛΗΨΗ ΜΟΝΟ ΑΝΑΓΝΩΣΗΣ",
+        refresherOrientationSummary: "Πώς λειτουργεί η περιήγηση & αυτόματος τερματισμός περιβάλλοντος (:8444)",
+        refresherSafeNote: "Βρίσκεστε στη ζωντανή επιχειρησιακή κονσόλα (:443). Η προβολή βημάτων, βίντεο, εικόνων και η επισήμανση στοιχείων εδώ είναι 100% μόνο για ανάγνωση και δεν εγχέει ποτέ εικονικούς συναγερμούς. (Τα πραγματικά κουμπιά της κύριας σελίδας επιδρούν στο ζωντανό σύστημα.)",
+        practiceCardTitle: "Θέλετε ασφαλή πρακτική εξάσκηση; Απομονωμένο περιβάλλον (:8444)",
+        practiceIsolationBullet: "Μηδενική επίδραση στην παραγωγή: Εκτελεί αναλώσιμες λωρίδες (DemoLane01 / DemoLane02) με εικονικές ροές (archive.enabled = false). Τίποτα στο :8444 δεν αγγίζει την PostgreSQL παραγωγής, τα Parquet, το config.json ή τα φυσικά ρελέ RPM.",
+        practiceShutdownBullet: (m) => `Αυτόματος τερματισμός & διαγραφή (${m} λεπτά): Τερματίζεται αυτόματα μετά από ${m} λεπτά και διαγράφει μόνιμα όλα τα δεδομένα εξάσκησης (< 2 δευτ.) ώστε να μην δεσμεύεται μνήμη RAM.`,
+        practiceSignInBullet: "Σύνδεση, HTTPS & εξαγωγές: Ανοίγει το https://<host>:8444 σε νέα καρτέλα (αποδεχθείτε την τοπική προειδοποίηση HTTPS αν εμφανιστεί) και συνδεθείτε με τα υπάρχοντα στοιχεία ή Passkey σας. Κάθε εξαγωγή φέρει υδατογράφημα TRAINING SANDBOX — NON-OPERATIONAL· κατεβάστε το PDF ολοκλήρωσης πριν από τον τερματισμό.",
+        practiceRunningStatus: (dur, at) => `Περιβάλλον ΕΝΕΡΓΟ · Αυτόματος τερματισμός & εκκαθάριση σε ${dur}${at ? ` (στις ${at})` : ""}`,
+        practiceStoppedStatus: (m) => `Περιβάλλον ΑΝΕΝΕΡΓΟ · Αυτόματος τερματισμός ${m} λεπτά μετά την εκκίνηση (απαιτεί ≥ 3,5 GiB ελεύθερη RAM)`,
+        launchPracticeBtn: (p) => `Εκκίνηση περιβάλλοντος εξάσκησης (:${p})`,
+        startingPracticeBtn: "Εκκίνηση περιβάλλοντος εξάσκησης (~20–40 δευτ.)...",
+        openPracticeBtn: (p) => `Άνοιγμα περιβάλλοντος εξάσκησης (:${p})`,
+        practiceBridgeHint: "Η εκκίνηση με 1 κλικ σε Ubuntu ενεργοποιείται μία φορά με `sudo bash oscar.sh sandbox enable-ui-bridge`, ή μέσω CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
+        refresherSimulationNote: "Η έγχυση εικονικών συναγερμών και τα δείγματα αρχείων ενεργοποιούνται αυτόματα μέσα στο περιβάλλον :8444.",
+        refresherAdminTabLabel: "Άνοιγμα SensorHub Admin (νέα καρτέλα — ζωντανή κονσόλα)",
+        activeSandboxShutdownBanner: (dur, at) => `Αυτόματος τερματισμός σε ${dur}${at ? ` (στις ${at})` : ""}: όλα τα δεδομένα εξάσκησης διαγράφονται αυτόματα στη λήξη. Εξαγάγετε το PDF ολοκλήρωσης παρακάτω πριν από τον τερματισμό.`,
         hideCoachLabel: "Ελαχιστοποίηση οδηγού",
         quickInjectLabel: "Έγχυση συμβάντος",
         resetTrackLabel: "Επαναφορά ενότητας",
@@ -540,5 +630,30 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         ],
         objectiveSummary: "Activate an offline `.pmtiles` basemap, Policy Pack, or Cargo NII share in `/extensions`.",
         isAutoVerified: (v) => v.offlineMapActive || v.policyPackActive || v.cargoUffEnabled,
+    },
+    {
+        id: "adm-5",
+        trackId: "administrator",
+        badge: "3.5",
+        route: "/health",
+        videoGuideSlug: "29-lane-webrelay-lights-and-sound",
+        screenshotFile: "53-lane-webrelay-lights-and-sound.png",
+        screenshotCaption: "Per-lane RPM Lights & Sound (WebRelay-Quad) control modal showing Automatic EML gatekeeping, relay coil telemetry (R1–R4), and timed alarm test pulses.",
+        title: "Per-Lane Physical RPM Lights & Sound (`WebRelay-Quad`)",
+        durationEstimate: "4 min",
+        whyItMatters:
+            "Administrators can suppress nuisance physical siren/beacon activations on benign NORM (`Code 9999`) and stalled gamma holds (`Code 9998`) while pulsing Gamma Red + Siren (`R3`) and Neutron Blue (`R4`) on actionable threats, with fail-safe `0,0,0,0` pass-through if OSCAR stops.",
+        steps: [
+            "Open Status of Health (/health) or a lane's Lane View (/lane-view) as an Administrator and click the per-lane 'Lights & Sound' button (or configure under SensorHub Admin -> Lane System -> WebRelay).",
+            "Review Operating Modes: `AUTO` (arms `R1=1, R2=1` intercept coils, suppresses `Code 9999` and optional `Code 9998`, pulses `R3`/`R4` on real alarms), `PASS_THROUGH` (`0,0,0,0` direct hardware wiring), `MUTED` (`1,1,0,0` silence), and `MANUAL`.",
+            "Click 'Test Connection' to verify ControlByWeb HTTP/XML (`stateFull.xml` / `state.xml`) reachability, or use timed pulse controls during authorized lane commissioning.",
+        ],
+        copySnippets: [
+            { label: "Copy Example Relay Host", value: "198.51.100.21" },
+        ],
+        spotlightSelector: '[data-testid^="webrelay-open-lane-"]',
+        spotlightLabel: "Highlight Lane Lights & Sound Button",
+        objectiveSummary: "Review per-lane WebRelay-Quad operating modes (`AUTO` / `PASS_THROUGH` / `MUTED`), EML suppression, and fail-safe `0,0,0,0` behavior.",
+        isAutoVerified: () => false,
     },
 ];

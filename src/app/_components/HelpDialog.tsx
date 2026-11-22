@@ -945,6 +945,7 @@ export default function HelpDialog({
     fetchImpl,
     skipBrowserDownload,
     onBundleExported,
+    onOpenGuidedWalkthrough,
 }: {
     open: boolean;
     onClose: () => void;
@@ -954,6 +955,7 @@ export default function HelpDialog({
     fetchImpl?: typeof fetch;
     skipBrowserDownload?: boolean;
     onBundleExported?: (result: SupportBundleExportResult) => void;
+    onOpenGuidedWalkthrough?: () => void;
 }) {
     const { language } = useLanguage();
     const activeLocale: Locale = HELP_CONTENT[language] ? language : 'en';
@@ -1553,7 +1555,10 @@ export default function HelpDialog({
                                 </Box>
                             </Stack>
                         </Paper>
-                        <TrainingSandboxLauncherCard locale={activeLocale} />
+                        <TrainingSandboxLauncherCard
+                            locale={activeLocale}
+                            onOpenGuidedWalkthrough={onOpenGuidedWalkthrough}
+                        />
                         <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-support-bundle-card">
                             <Stack spacing={1} alignItems="flex-start">
                                 <Typography variant="subtitle2" fontWeight={700}>
