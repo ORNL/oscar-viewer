@@ -429,7 +429,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
             { fileName: "sample-cs137-co60.n42", buttonLabel: "Download Practice Spectrum (.n42)" },
         ],
         copySnippets: [
-            { label: "Copy Container ID", value: "MSCU5285725" },
+            { label: "Copy Container ID", value: "SCFU8572724" },
         ],
         objectiveSummary: "Record an adjudication with isotope/spectrum evidence or a normalized Vehicle/Container ID.",
         isAutoVerified: (v) => v.adjudicatedWithEvidenceCount >= 1 || v.adjudicatedWithVehicleIdCount >= 1,
@@ -447,15 +447,15 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         whyItMatters:
             "Correlating dual-energy cargo X-ray High-Z shielding anomalies (`Z_eff > 72`) with the RPM gamma/neutron count profile pinpoints shielded sources inside dense cargo pallets.",
         steps: [
-            "In Events (/event-log), paste the sandbox UFF UUID (`31130001-5285-4725-8001-000000000001`) or container `MSCU5285725` into the search bar, OR open an Event Details page and click Browse Cargo NII Share / Upload `.uff`.",
-            "Open the 16-bit X-Ray Inspector, adjust Window/Level contrast, toggle the HEMD High-Z material overlay (`Organic`, `Inorganic`, `Metallic`, `High-Z Shielding`), and inspect the forward pallet anomaly.",
+            "In Events (/event-log), paste the sandbox UFF UUID (`dfb985c4-eb26-41ab-938b-ad2a1f5966d4`) or container `SCFU8572724` into the search bar, OR open an Event Details page and click Browse Cargo NII Share / Upload `.uff`.",
+            "Open the 16-bit X-Ray Inspector, adjust Window/Level contrast, toggle the HEMD High-Z material overlay (`Organic`, `Intermediate`, `Inorganic`, `High-Z Shielding`), and inspect the localized High-Z metallic attenuation anomaly.",
             "You can also download `sample-cargo-uff3.uff` below to test direct client-side `.uff` file upload.",
         ],
         sampleFiles: [
             { fileName: "sample-cargo-uff3.uff", buttonLabel: "Download Practice Cargo Scan (.uff)" },
         ],
         copySnippets: [
-            { label: "Copy UFF Scan UUID", value: "31130001-5285-4725-8001-000000000001" },
+            { label: "Copy UFF Scan UUID", value: "dfb985c4-eb26-41ab-938b-ad2a1f5966d4" },
         ],
         objectiveSummary: "Sandbox Cargo NII index active with practice `.uff` packages (`cargoUffEnabled && cargoUffIndexedCount >= 1`).",
         isAutoVerified: (v) => v.cargoUffEnabled && v.cargoUffIndexedCount >= 1,
@@ -476,11 +476,11 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
             "Shift supervisors scope gatehouse screens to specific portals (`?view=north-gate`) while correlating repeat or re-scan passes of the same container across all lanes.",
         steps: [
             "Use the top-bar Scoped View dropdown to switch between All Lanes, `north-gate` (DemoLane01), and `south-gate` (DemoLane02).",
-            "Open Events (/event-log), search for container `MSCU5285725`, and open Multi-Pass Vehicle Comparison to compare the primary and confirmation passes side by side.",
+            "Open Events (/event-log), search for container `SCFU8572724`, and open Multi-Pass Vehicle Comparison to compare the primary and confirmation passes side by side.",
             "Save a reusable filter in Saved Queries (for example, Alarms Only or Code 1 Real Alarms) for one-click shift handoff.",
         ],
         copySnippets: [
-            { label: "Copy Multi-Pass Container", value: "MSCU5285725" },
+            { label: "Copy Multi-Pass Container", value: "SCFU8572724" },
         ],
         spotlightSelector: '[data-testid="navbar-scoped-view-select"]',
         spotlightLabel: "Highlight Scoped View Selector",
@@ -502,10 +502,10 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         steps: [
             "Open Report Generator (/report) and select Adjudication Report (`ADJUDICATION`) or RDS Site Report (`RDS_SITE`).",
             "Generate a PDF report and inspect the inline preview: verify the `TRAINING SANDBOX — NON-OPERATIONAL` header/footer watermark and the UpSet Alarm & Source-Category Co-Occurrence chart.",
-            "Switch format to Excel (`.xlsx`), CSV, or JSON (or run a `VEHICLE_INCIDENT` report for `MSCU5285725`) to verify structured exports.",
+            "Switch format to Excel (`.xlsx`), CSV, or JSON (or run a `VEHICLE_INCIDENT` report for `SCFU8572724`) to verify structured exports.",
         ],
         copySnippets: [
-            { label: "Copy Incident Vehicle ID", value: "MSCU5285725" },
+            { label: "Copy Incident Vehicle ID", value: "SCFU8572724" },
         ],
         objectiveSummary: "Generate at least 1 report in `/report` (`generatedReportCount >= 1`).",
         isAutoVerified: (v) => v.generatedReportCount >= 1,

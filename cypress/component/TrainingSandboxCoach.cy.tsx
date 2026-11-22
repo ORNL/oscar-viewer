@@ -216,7 +216,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             </LanguageProvider>,
         );
 
-        cy.contains("OSCAR 3.11.5 Operator Quick Guide & Glossary").should("be.visible");
+        cy.contains("OSCAR 3.11.6 Operator Quick Guide & Glossary").should("be.visible");
         cy.contains('[role="tab"]', "Manual & Video Guides").click();
         cy.get('[data-testid="help-training-sandbox-card"]').should("be.visible");
         cy.get('[data-testid="help-sandbox-launch-btn"]').should("be.visible");

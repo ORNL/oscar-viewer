@@ -80,7 +80,12 @@ import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import SplitscreenRoundedIcon from "@mui/icons-material/SplitscreenRounded";
 import TrainingCoachDock from "@/app/_components/sandbox/TrainingCoachDock";
 import {TRAINING_COACH_UI} from "@/lib/data/oscar/TrainingCurriculum";
-import {fetchSandboxActiveStatus, SandboxActiveStatus} from "@/lib/data/oscar/TrainingSandboxApi";
+import {
+    dispatchSandboxRefreshEvents,
+    fetchSandboxActiveStatus,
+    SandboxActiveStatus,
+    SandboxVerificationSnapshot,
+} from "@/lib/data/oscar/TrainingSandboxApi";
 import {RootState} from "@/lib/state/Store";
 
 const drawerWidth = 276;
@@ -251,11 +256,43 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         return () => controller.abort();
     }, [currentSession?.username]);
 
+    const prevSandboxVerificationRef = React.useRef<SandboxVerificationSnapshot | undefined>(
+        undefined,
+    );
+
+    const applyNextSandboxStatus = React.useCallback((next: SandboxActiveStatus) => {
+        const prevVer = prevSandboxVerificationRef.current;
+        const nextVer = next.verification;
+        if (next.sandboxMode && prevVer && nextVer) {
+            const lanesChanged =
+                prevVer.configuredLaneCount !== nextVer.configuredLaneCount ||
+                prevVer.onlineLaneCount !== nextVer.onlineLaneCount ||
+                prevVer.operationalViewCount !== nextVer.operationalViewCount;
+            const telemetryChanged =
+                lanesChanged || prevVer.activeFaultOrTamper !== nextVer.activeFaultOrTamper;
+            const eventsChanged =
+                lanesChanged ||
+                prevVer.totalOccupancies !== nextVer.totalOccupancies ||
+                prevVer.operatorAdjudicatedCount !== nextVer.operatorAdjudicatedCount ||
+                prevVer.emlCode9999Count !== nextVer.emlCode9999Count ||
+                prevVer.extendedCode9998Count !== nextVer.extendedCode9998Count;
+            if (lanesChanged || telemetryChanged || eventsChanged) {
+                dispatchSandboxRefreshEvents({
+                    lanes: lanesChanged,
+                    telemetry: telemetryChanged,
+                    events: eventsChanged,
+                });
+            }
+        }
+        prevSandboxVerificationRef.current = nextVer;
+        setSandboxStatus(next);
+    }, []);
+
     const refreshSandboxStatus = React.useCallback(() => {
         fetchSandboxActiveStatus()
-            .then((next) => setSandboxStatus(next))
+            .then((next) => applyNextSandboxStatus(next))
             .catch(() => {});
-    }, []);
+    }, [applyNextSandboxStatus]);
 
     useEffect(() => {
         let cancelled = false;
@@ -265,6 +302,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         fetchSandboxActiveStatus(controller.signal)
             .then((initial) => {
                 if (cancelled) return;
+                prevSandboxVerificationRef.current = initial.verification;
                 setSandboxStatus(initial);
                 if (initial.sandboxMode) {
                     setCoachOpen(true);
@@ -274,7 +312,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                         }
                         fetchSandboxActiveStatus()
                             .then((next) => {
-                                if (!cancelled) setSandboxStatus(next);
+                                if (!cancelled) applyNextSandboxStatus(next);
                             })
                             .catch(() => {});
                     }, 4_000);
@@ -287,7 +325,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             controller.abort();
             if (pollTimer) clearInterval(pollTimer);
         };
-    }, []);
+    }, [applyNextSandboxStatus]);
 
     const handleLogout = async () => {
         try {
@@ -942,7 +980,15 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                     size="small"
                                     variant="outlined"
                                     color="inherit"
-                                    onClick={() => setSplitAdminOpen(false)}
+                                    onClick={() => {
+                                        setSplitAdminOpen(false);
+                                        dispatchSandboxRefreshEvents({
+                                            lanes: true,
+                                            telemetry: true,
+                                            events: true,
+                                        });
+                                        refreshSandboxStatus();
+                                    }}
                                     data-testid="sandbox-close-split-admin-btn"
                                     sx={{textTransform: 'none', flexShrink: 0}}
                                 >

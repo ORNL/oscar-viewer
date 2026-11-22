@@ -147,6 +147,11 @@ export default function TrainingSandboxLauncherCard({
     const [insideSandbox, setInsideSandbox] = React.useState(false);
     const [hostStatus, setHostStatus] = React.useState<SandboxHostStatus | null>(null);
     const [busy, setBusy] = React.useState(false);
+    const [pendingAction, setPendingAction] = React.useState<{
+        action: "start" | "stop" | "reset";
+        requestId?: string;
+        deadlineMs: number;
+    } | null>(null);
     const [notice, setNotice] = React.useState<{ severity: "success" | "info" | "error"; text: string } | null>(null);
 
     React.useEffect(() => {
@@ -162,21 +167,61 @@ export default function TrainingSandboxLauncherCard({
         return () => controller.abort();
     }, []);
 
+    const jobInFlight =
+        hostStatus?.activeJob?.state === "QUEUED" || hostStatus?.activeJob?.state === "RUNNING";
     const hostStarting =
-        !hostStatus?.sandboxRunning &&
-        (hostStatus?.activeJob?.state === "QUEUED" || hostStatus?.activeJob?.state === "RUNNING");
+        (!hostStatus?.sandboxRunning && jobInFlight) ||
+        pendingAction?.action === "start" ||
+        pendingAction?.action === "reset";
+    const shouldPollHost = !insideSandbox && (jobInFlight || pendingAction !== null);
 
     React.useEffect(() => {
-        if (insideSandbox || !hostStarting) return;
+        if (!shouldPollHost) return;
         const timer = setInterval(() => {
             fetchSandboxHostStatus()
                 .then((st) => {
-                    if (st) setHostStatus(st);
+                    if (!st) return;
+                    setHostStatus(st);
+                    const jobState = st.activeJob?.state;
+                    if (jobState === "FAILED") {
+                        setPendingAction(null);
+                        setNotice({
+                            severity: "error",
+                            text: st.activeJob?.message ?? "Training Sandbox operation failed.",
+                        });
+                        return;
+                    }
+                    if (pendingAction) {
+                        const matchedDone =
+                            jobState === "COMPLETED" &&
+                            (!pendingAction.requestId || st.activeJob?.requestId === pendingAction.requestId);
+                        const startReady =
+                            pendingAction.action === "start" && st.sandboxRunning && jobState !== "RUNNING" && jobState !== "QUEUED";
+                        const stopDone =
+                            pendingAction.action === "stop" && !st.sandboxRunning && jobState !== "RUNNING" && jobState !== "QUEUED";
+                        const resetDone =
+                            pendingAction.action === "reset" && matchedDone && st.sandboxRunning;
+                        if (matchedDone || startReady || stopDone || resetDone) {
+                            setPendingAction(null);
+                            setNotice({
+                                severity: "success",
+                                text:
+                                    st.activeJob?.message ??
+                                    (st.sandboxRunning
+                                        ? `Training Sandbox ready on port ${st.httpsPort ?? 8444}.`
+                                        : "Training Sandbox stopped and flushed."),
+                            });
+                            return;
+                        }
+                        if (Date.now() > pendingAction.deadlineMs) {
+                            setPendingAction(null);
+                        }
+                    }
                 })
                 .catch(() => {});
-        }, 3_000);
+        }, 2_500);
         return () => clearInterval(timer);
-    }, [insideSandbox, hostStarting]);
+    }, [insideSandbox, shouldPollHost, pendingAction]);
 
     const linuxStart = hostStatus?.linuxStartCommand ?? "sudo bash oscar.sh sandbox start --port 8444";
     const winStart = hostStatus?.windowsStartCommand ?? ".\\oscar.bat sandbox start --port 8444";
@@ -218,11 +263,31 @@ export default function TrainingSandboxLauncherCard({
         try {
             const next = await submitSandboxHostAction(action, sandboxPort, hostStatus?.ttlMinutes ?? 120);
             setHostStatus(next);
-            setNotice({
-                severity: "success",
-                text: next.activeJob?.message ?? `Submitted '${action}' to host sandbox agent.`,
-            });
+            const jobState = next.activeJob?.state;
+            const stillInProgress =
+                jobState === "QUEUED" ||
+                jobState === "RUNNING" ||
+                (action === "start" && !next.sandboxRunning && jobState !== "FAILED") ||
+                (action === "stop" && next.sandboxRunning && jobState !== "FAILED");
+            if (stillInProgress) {
+                setPendingAction({
+                    action,
+                    requestId: next.activeJob?.requestId,
+                    deadlineMs: Date.now() + 120_000,
+                });
+                setNotice({
+                    severity: "info",
+                    text: next.activeJob?.message ?? `Executing sandbox '${action}'...`,
+                });
+            } else {
+                setPendingAction(null);
+                setNotice({
+                    severity: jobState === "FAILED" ? "error" : "success",
+                    text: next.activeJob?.message ?? `Completed '${action}' on host sandbox agent.`,
+                });
+            }
         } catch (err: any) {
+            setPendingAction(null);
             setNotice({
                 severity: "error",
                 text: err?.message ?? "Host sandbox request failed.",
