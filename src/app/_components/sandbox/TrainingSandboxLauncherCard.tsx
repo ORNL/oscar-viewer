@@ -19,6 +19,7 @@ import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import { Locale } from "@/app/contexts/LanguageContext";
 import {
+    computeSandboxShutdownSummary,
     fetchSandboxActiveStatus,
     fetchSandboxHostStatus,
     SandboxHostStatus,
@@ -30,8 +31,14 @@ interface LauncherCopy {
     badge: string;
     desc: string;
     safetyNote: string;
+    whatToKnowTitle: string;
+    shutdownStopped: (ttl: number) => string;
+    shutdownRunning: (dur: string, at: string | null) => string;
+    credentialsNote: string;
     insideSandboxAlert: string;
+    walkthroughBtn: string;
     launchBtn: string;
+    startingBtn: string;
     openSandboxBtn: string;
     resetBtn: string;
     stopBtn: string;
@@ -43,68 +50,98 @@ interface LauncherCopy {
 
 const LAUNCHER_COPY: Record<Locale, LauncherCopy> = {
     en: {
-        title: "Hands-On Training Sandbox & Guided Academy (`oscar-sandbox`)",
+        title: "Guided Walkthrough (:443) & Hands-On Training Sandbox (`oscar-sandbox` :8444)",
         badge: "Zero Production Impact",
-        desc: "Practice setting up lanes in SensorHub Admin, importing CSVs, triaging detector faults, inspecting 16-bit WCO UFF cargo radiographs, uploading .n42 spectra, and adjudicating alarms against a built-in loopback Rapiscan + RTSP micro-emulator — with 100% zero writes to production PostgreSQL, Parquet cold archives, or config.json.",
-        safetyNote: "Isolation guarantee: runs in an ephemeral `:8444` Compose stack (`archive.enabled = false`) and is completely wiped (`down -v`) on stop or TTL expiry.",
-        insideSandboxAlert: "Active session: You are currently inside the ephemeral Hands-On Training Sandbox. Click 'Training Coach' in the top bar to switch tracks, inject practice events, or download your 1-page PDF Completion Record.",
+        desc: "Open the side-by-side Read-Only Guided Walkthrough anytime on this console, or launch the isolated :8444 Practice Sandbox to practice SensorHub Admin lane setup, CSV import, detector faults, 16-bit WCO UFF cargo radiographs, .n42 spectra, and alarm adjudication against a built-in loopback Rapiscan + RTSP micro-emulator — with 100% zero writes to live PostgreSQL, Parquet archives, or config.json.",
+        safetyNote: "Isolation guarantee: :8444 runs in disposable containers (`archive.enabled = false`) and permanently wipes all practice data (`down -v` in < 2s) when stopped or when its auto-shutdown timer expires.",
+        whatToKnowTitle: "What to Expect & When It Shuts Down:",
+        shutdownStopped: (ttl) => `• Auto-Shutdown Timer: STOPPED right now — once launched, :8444 automatically shuts down and wipes all practice data after ${ttl} minutes (requires ≥ 3.5 GiB free server RAM).`,
+        shutdownRunning: (dur, at) => `• Active Session Countdown: RUNNING on :8444 — automatically shuts down and erases all practice data in ${dur}${at ? ` (at ${at})` : ""}. Export your 1-page PDF Completion Record before shutdown.`,
+        credentialsNote: "• Sign-In, HTTPS & Watermarks: Opens https://<host>:8444 in a new tab (accept the local HTTPS prompt once if shown) and sign in with your existing OSCAR username/password or Passkey (one-way read-only copy). Every :8444 export is stamped TRAINING SANDBOX — NON-OPERATIONAL.",
+        insideSandboxAlert: "Active session: You are currently inside the ephemeral Hands-On Training Sandbox. Click 'Training Coach' in the top bar to switch tracks, inject practice events, or download your 1-page PDF Completion Record before auto-shutdown.",
+        walkthroughBtn: "Open Guided Walkthrough (Read-Only Refresher)",
         launchBtn: "Launch Sandbox (:8444)",
+        startingBtn: "Starting Sandbox (~20–40s)...",
         openSandboxBtn: "Open Training Sandbox (:8444)",
         resetBtn: "Reset Sandbox",
         stopBtn: "Stop & Flush",
         copyLinuxBtn: "Copy Linux Start Command",
         copyWindowsBtn: "Copy Windows Start Command",
-        bridgeNote: "Optional 1-click browser launch for Administrators: enable the host watcher once with",
+        bridgeNote: "Optional 1-click browser launch on Ubuntu: an Administrator can enable the host watcher once with",
         copiedMsg: "Copied command:",
     },
     es: {
-        title: "Entorno práctico de formación y academia guiada (`oscar-sandbox`)",
+        title: "Recorrido guiado (:443) y entorno práctico de formación (`oscar-sandbox` :8444)",
         badge: "Cero impacto en producción",
-        desc: "Practique la configuración de carriles en SensorHub Admin, importación CSV, triaje de fallos, radiografías WCO UFF de 16 bits, espectros .n42 y adjudicación de alarmas con un microemulador local Rapiscan + RTSP — sin escribir jamás en PostgreSQL de producción, archivos Parquet ni config.json.",
-        safetyNote: "Aislamiento garantizado: se ejecuta en una pila efímera `:8444` (`archive.enabled = false`) y se purga por completo (`down -v`) al detenerlo o expirar el TTL.",
-        insideSandboxAlert: "Sesión activa: está dentro del entorno efímero de práctica. Pulse 'Guía de Práctica' en la barra superior para cambiar de bloque o inyectar eventos.",
+        desc: "Abra en cualquier momento el Recorrido guiado de solo lectura en esta consola, o inicie el entorno aislado :8444 para practicar configuración de carriles, CSV, fallos, radiografías WCO UFF de 16 bits, espectros .n42 y adjudicación con microemulador local — sin escribir jamás en PostgreSQL real, Parquet ni config.json.",
+        safetyNote: "Aislamiento garantizado: :8444 se ejecuta en contenedores desechables (`archive.enabled = false`) y se purga por completo (`down -v` en < 2 s) al detenerse o expirar el temporizador.",
+        whatToKnowTitle: "Qué esperar y cuándo se apaga:",
+        shutdownStopped: (ttl) => `• Apagado automático: DETENIDO ahora — tras iniciar, :8444 se apaga automáticamente y borra todos los datos de práctica a los ${ttl} minutos (requiere ≥ 3.5 GiB de RAM libre).`,
+        shutdownRunning: (dur, at) => `• Cuenta atrás activa: EN EJECUCIÓN en :8444 — se apaga y purga automáticamente en ${dur}${at ? ` (a las ${at})` : ""}. Descargue su PDF de finalización antes del apagado.`,
+        credentialsNote: "• Acceso, HTTPS y marcas: Abre https://<host>:8444 en otra pestaña (acepte el aviso HTTPS local si aparece) con su usuario/contraseña o Passkey actual. Toda exportación lleva TRAINING SANDBOX — NON-OPERATIONAL.",
+        insideSandboxAlert: "Sesión activa: está dentro del entorno efímero de práctica. Pulse 'Guía de Práctica' en la barra superior para cambiar de bloque o descargar su PDF antes del apagado.",
+        walkthroughBtn: "Abrir recorrido guiado (repaso solo lectura)",
         launchBtn: "Iniciar entorno (:8444)",
+        startingBtn: "Iniciando entorno (~20–40 s)...",
         openSandboxBtn: "Abrir entorno (:8444)",
         resetBtn: "Reiniciar entorno",
         stopBtn: "Detener y purgar",
         copyLinuxBtn: "Copiar comando Linux",
         copyWindowsBtn: "Copiar comando Windows",
-        bridgeNote: "Inicio opcional en 1 clic desde el navegador para administradores:",
+        bridgeNote: "Inicio opcional en 1 clic desde el navegador en Ubuntu:",
         copiedMsg: "Comando copiado:",
     },
     fr: {
-        title: "Bac à sable de formation pratique et académie guidée (`oscar-sandbox`)",
+        title: "Parcours guidé (:443) et bac à sable de formation pratique (`oscar-sandbox` :8444)",
         badge: "Zéro impact en production",
-        desc: "Entraînez-vous à configurer des voies dans SensorHub Admin, importer un CSV, trier les défauts, inspecter des radiographies UFF 16 bits, charger des spectres .n42 et adjudiquer des alarmes sur un micro-émulateur local Rapiscan + RTSP — sans aucune écriture dans PostgreSQL de production, les archives Parquet ou config.json.",
-        safetyNote: "Isolation garantie : tourne sur une pile éphémère `:8444` (`archive.enabled = false`) et est intégralement purgé (`down -v`) à l’arrêt ou à l’expiration du TTL.",
-        insideSandboxAlert: "Session active : vous êtes dans le bac à sable éphémère de formation. Cliquez sur « Coach Formation » en haut pour choisir un parcours ou injecter des événements.",
+        desc: "Ouvrez à tout moment le Parcours guidé en lecture seule sur cette console, ou lancez le bac à sable isolé :8444 pour pratiquer la configuration Admin, l’import CSV, les défauts, les radiographies UFF 16 bits, les spectres .n42 et l’adjudication — sans aucune écriture dans PostgreSQL réel, Parquet ou config.json.",
+        safetyNote: "Isolation garantie : :8444 tourne sur des conteneurs jetables (`archive.enabled = false`) et est intégralement purgé (`down -v` en < 2 s) à l’arrêt ou à l’expiration du minuteur.",
+        whatToKnowTitle: "Fonctionnement et extinction automatique :",
+        shutdownStopped: (ttl) => `• Extinction automatique : ARRÊTÉ actuellement — une fois lancé, :8444 s’éteint et efface toutes les données d’exercice après ${ttl} minutes (≥ 3,5 Gio de RAM libre requis).`,
+        shutdownRunning: (dur, at) => `• Compte à rebours actif : EN COURS sur :8444 — arrêt et purge automatiques dans ${dur}${at ? ` (à ${at})` : ""}. Téléchargez votre PDF de réussite avant l’arrêt.`,
+        credentialsNote: "• Connexion, HTTPS et filigranes : Ouvre https://<hôte>:8444 dans un nouvel onglet (acceptez l’invite HTTPS locale si affichée) avec vos identifiants ou Passkey habituels. Chaque export porte TRAINING SANDBOX — NON-OPERATIONAL.",
+        insideSandboxAlert: "Session active : vous êtes dans le bac à sable éphémère de formation. Cliquez sur « Coach Formation » en haut pour choisir un parcours ou exporter votre PDF avant l’extinction.",
+        walkthroughBtn: "Ouvrir le parcours guidé (lecture seule)",
         launchBtn: "Lancer le bac à sable (:8444)",
+        startingBtn: "Démarrage en cours (~20–40 s)...",
         openSandboxBtn: "Ouvrir le bac à sable (:8444)",
         resetBtn: "Réinitialiser",
         stopBtn: "Arrêter et purger",
         copyLinuxBtn: "Copier la commande Linux",
         copyWindowsBtn: "Copier la commande Windows",
-        bridgeNote: "Lancement optionnel en 1 clic depuis le navigateur pour les administrateurs :",
+        bridgeNote: "Lancement optionnel en 1 clic sous Ubuntu :",
         copiedMsg: "Commande copiée :",
     },
     el: {
-        title: "Πρακτικό περιβάλλον εκπαίδευσης & καθοδηγούμενη ακαδημία (`oscar-sandbox`)",
+        title: "Καθοδηγούμενη περιήγηση (:443) & πρακτικό περιβάλλον εκπαίδευσης (`oscar-sandbox` :8444)",
         badge: "Μηδενική επίδραση στην παραγωγή",
-        desc: "Εξασκηθείτε στη ρύθμιση λωρίδων στο SensorHub Admin, εισαγωγή CSV, διαλογή σφαλμάτων, επιθεώρηση ακτινογραφιών WCO UFF 16-bit, φάσματα .n42 και αξιολόγηση συναγερμών με τοπικό μικρο-εξομοιωτή Rapiscan + RTSP — χωρίς καμία εγγραφή στην παραγωγική PostgreSQL, στα αρχεία Parquet ή στο config.json.",
-        safetyNote: "Εγγύηση απομόνωσης: εκτελείται σε προσωρινή στοίβα `:8444` (`archive.enabled = false`) και διαγράφεται πλήρως (`down -v`) κατά τον τερματισμό.",
+        desc: "Ανοίξτε ανά πάσα στιγμή την Καθοδηγούμενη περιήγηση μόνο για ανάγνωση σε αυτή την κονσόλα ή εκκινήστε το απομονωμένο περιβάλλον :8444 για πρακτική εξάσκηση σε λωρίδες, CSV, σφάλματα, ακτινογραφίες WCO UFF 16-bit, φάσματα .n42 και αξιολόγηση συναγερμών — χωρίς καμία εγγραφή στην PostgreSQL παραγωγής, στα Parquet ή στο config.json.",
+        safetyNote: "Εγγύηση απομόνωσης: το :8444 εκτελείται σε αναλώσιμα κοντέινερ (`archive.enabled = false`) και διαγράφεται πλήρως (`down -v` σε < 2 δευτ.) στον τερματισμό ή στη λήξη του χρονομέτρου.",
+        whatToKnowTitle: "Τι να γνωρίζετε & πότε τερματίζεται:",
+        shutdownStopped: (ttl) => `• Αυτόματος τερματισμός: ΑΝΕΝΕΡΓΟ τώρα — μετά την εκκίνηση, το :8444 τερματίζεται αυτόματα και διαγράφει όλα τα δεδομένα εξάσκησης σε ${ttl} λεπτά (απαιτεί ≥ 3,5 GiB ελεύθερη RAM).`,
+        shutdownRunning: (dur, at) => `• Αντίστροφη μέτρηση: ΕΝΕΡΓΟ στο :8444 — αυτόματος τερματισμός και εκκαθάριση σε ${dur}${at ? ` (στις ${at})` : ""}. Εξαγάγετε το PDF ολοκλήρωσης πριν από τη λήξη.`,
+        credentialsNote: "• Σύνδεση, HTTPS & υδατογραφήματα: Ανοίγει το https://<host>:8444 σε νέα καρτέλα (αποδεχθείτε την τοπική προειδοποίηση HTTPS αν εμφανιστεί) με τα υπάρχοντα στοιχεία ή Passkey σας. Κάθε εξαγωγή φέρει TRAINING SANDBOX — NON-OPERATIONAL.",
         insideSandboxAlert: "Ενεργή συνεδρία: βρίσκεστε στο προσωρινό περιβάλλον εκπαίδευσης. Πατήστε «Οδηγός Εκπαίδευσης» στην επάνω γραμμή.",
+        walkthroughBtn: "Άνοιγμα καθοδηγούμενης περιήγησης (μόνο ανάγνωση)",
         launchBtn: "Εκκίνηση περιβάλλοντος (:8444)",
+        startingBtn: "Εκκίνηση περιβάλλοντος (~20–40 δευτ.)...",
         openSandboxBtn: "Άνοιγμα περιβάλλοντος (:8444)",
         resetBtn: "Επαναφορά",
         stopBtn: "Τερματισμός & εκκαθάριση",
         copyLinuxBtn: "Αντιγραφή εντολής Linux",
         copyWindowsBtn: "Αντιγραφή εντολής Windows",
-        bridgeNote: "Προαιρετική εκκίνηση με 1 κλικ από τον φυλλομετρητή για διαχειριστές:",
+        bridgeNote: "Προαιρετική εκκίνηση με 1 κλικ σε Ubuntu:",
         copiedMsg: "Αντιγράφηκε:",
     },
 };
 
-export default function TrainingSandboxLauncherCard({ locale }: { locale: Locale }) {
+export default function TrainingSandboxLauncherCard({
+    locale,
+    onOpenGuidedWalkthrough,
+}: {
+    locale: Locale;
+    onOpenGuidedWalkthrough?: () => void;
+}) {
     const copy = LAUNCHER_COPY[locale] ?? LAUNCHER_COPY.en;
     const [insideSandbox, setInsideSandbox] = React.useState(false);
     const [hostStatus, setHostStatus] = React.useState<SandboxHostStatus | null>(null);
@@ -124,9 +161,36 @@ export default function TrainingSandboxLauncherCard({ locale }: { locale: Locale
         return () => controller.abort();
     }, []);
 
+    const hostStarting =
+        !hostStatus?.sandboxRunning &&
+        (hostStatus?.activeJob?.state === "QUEUED" || hostStatus?.activeJob?.state === "RUNNING");
+
+    React.useEffect(() => {
+        if (insideSandbox || !hostStarting) return;
+        const timer = setInterval(() => {
+            fetchSandboxHostStatus()
+                .then((st) => {
+                    if (st) setHostStatus(st);
+                })
+                .catch(() => {});
+        }, 3_000);
+        return () => clearInterval(timer);
+    }, [insideSandbox, hostStarting]);
+
     const linuxStart = hostStatus?.linuxStartCommand ?? "sudo bash oscar.sh sandbox start --port 8444";
     const winStart = hostStatus?.windowsStartCommand ?? ".\\oscar.bat sandbox start --port 8444";
     const sandboxPort = hostStatus?.httpsPort ?? 8444;
+    const sandboxTtl = hostStatus?.ttlMinutes ?? 120;
+    const canStopOrReset = hostStatus?.canStopOrReset !== false;
+
+    const shutdownSummary = React.useMemo(
+        () =>
+            computeSandboxShutdownSummary({
+                expiresAt: hostStatus?.expiresAt,
+                ttlMinutes: sandboxTtl,
+            }),
+        [hostStatus?.expiresAt, sandboxTtl],
+    );
 
     const sandboxUrl = React.useMemo(() => {
         if (typeof window === "undefined") return `https://localhost:${sandboxPort}`;
@@ -184,7 +248,7 @@ export default function TrainingSandboxLauncherCard({ locale }: { locale: Locale
                     {copy.safetyNote}
                 </Typography>
 
-                {busy && <LinearProgress color="warning" />}
+                {(busy || hostStarting) && <LinearProgress color="warning" />}
 
                 {insideSandbox ? (
                     <Alert severity="success" data-testid="help-sandbox-active-alert">
@@ -192,60 +256,115 @@ export default function TrainingSandboxLauncherCard({ locale }: { locale: Locale
                     </Alert>
                 ) : (
                     <>
-                        {hostStatus?.agentActive && (
-                            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                                {!hostStatus.sandboxRunning ? (
+                        <Box
+                            sx={{
+                                p: 1.25,
+                                borderRadius: 1.5,
+                                bgcolor: "rgba(255, 255, 255, 0.88)",
+                                border: "1px solid rgba(245, 158, 11, 0.45)",
+                            }}
+                            data-testid="help-sandbox-what-to-know"
+                        >
+                            <Typography variant="caption" fontWeight={700} sx={{ display: "block", mb: 0.5 }}>
+                                {copy.whatToKnowTitle}
+                            </Typography>
+                            <Typography
+                                variant="caption"
+                                sx={{
+                                    display: "block",
+                                    mb: 0.35,
+                                    fontWeight: hostStatus?.sandboxRunning ? 700 : 500,
+                                    color: hostStatus?.sandboxRunning ? "success.main" : "text.secondary",
+                                }}
+                                data-testid="help-sandbox-shutdown-info"
+                            >
+                                {hostStatus?.sandboxRunning
+                                    ? copy.shutdownRunning(
+                                          shutdownSummary.durationText,
+                                          shutdownSummary.expiresTimeText,
+                                      )
+                                    : copy.shutdownStopped(sandboxTtl)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                {copy.credentialsNote}
+                            </Typography>
+                        </Box>
+
+                        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                            {onOpenGuidedWalkthrough && (
+                                <Button
+                                    size="small"
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<SchoolRoundedIcon fontSize="small" />}
+                                    onClick={onOpenGuidedWalkthrough}
+                                    data-testid="help-open-walkthrough-btn"
+                                    sx={{ textTransform: "none" }}
+                                >
+                                    {copy.walkthroughBtn}
+                                </Button>
+                            )}
+                            {hostStatus?.sandboxRunning ? (
+                                <>
+                                    <Button
+                                        component="a"
+                                        href={sandboxUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        size="small"
+                                        variant="contained"
+                                        color="success"
+                                        endIcon={<OpenInNewRoundedIcon fontSize="small" />}
+                                        data-testid="help-sandbox-open-btn"
+                                        sx={{ textTransform: "none" }}
+                                    >
+                                        {copy.openSandboxBtn}
+                                    </Button>
+                                    {canStopOrReset && (
+                                        <>
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                disabled={busy}
+                                                startIcon={<RestartAltRoundedIcon fontSize="small" />}
+                                                onClick={() => handleHostAction("reset")}
+                                                data-testid="help-sandbox-reset-btn"
+                                                sx={{ textTransform: "none" }}
+                                            >
+                                                {copy.resetBtn}
+                                            </Button>
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                color="error"
+                                                disabled={busy}
+                                                startIcon={<StopCircleOutlinedIcon fontSize="small" />}
+                                                onClick={() => handleHostAction("stop")}
+                                                data-testid="help-sandbox-stop-btn"
+                                                sx={{ textTransform: "none" }}
+                                            >
+                                                {copy.stopBtn}
+                                            </Button>
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                hostStatus?.agentActive && (
                                     <Button
                                         size="small"
                                         variant="contained"
                                         color="warning"
-                                        disabled={busy}
+                                        disabled={busy || hostStarting}
                                         startIcon={<PlayArrowRoundedIcon fontSize="small" />}
                                         onClick={() => handleHostAction("start")}
                                         data-testid="help-sandbox-launch-btn"
+                                        sx={{ textTransform: "none" }}
                                     >
-                                        {copy.launchBtn}
+                                        {hostStarting ? copy.startingBtn : copy.launchBtn}
                                     </Button>
-                                ) : (
-                                    <>
-                                        <Button
-                                            component="a"
-                                            href={sandboxUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            size="small"
-                                            variant="contained"
-                                            color="success"
-                                            endIcon={<OpenInNewRoundedIcon fontSize="small" />}
-                                            data-testid="help-sandbox-open-btn"
-                                        >
-                                            {copy.openSandboxBtn}
-                                        </Button>
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            disabled={busy}
-                                            startIcon={<RestartAltRoundedIcon fontSize="small" />}
-                                            onClick={() => handleHostAction("reset")}
-                                            data-testid="help-sandbox-reset-btn"
-                                        >
-                                            {copy.resetBtn}
-                                        </Button>
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            color="error"
-                                            disabled={busy}
-                                            startIcon={<StopCircleOutlinedIcon fontSize="small" />}
-                                            onClick={() => handleHostAction("stop")}
-                                            data-testid="help-sandbox-stop-btn"
-                                        >
-                                            {copy.stopBtn}
-                                        </Button>
-                                    </>
-                                )}
-                            </Stack>
-                        )}
+                                )
+                            )}
+                        </Stack>
 
                         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                             <Button

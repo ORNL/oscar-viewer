@@ -1,6 +1,17 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.4
+
+### Added
+
+- Added per-lane **ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) Physical RPM Lights & Sound Control** (`WebRelayApi.ts`, `LaneWebRelayDialog.tsx`, `LaneWebRelayDialog.css`, `health/page.tsx`, `lane-view/page.tsx`, `useLaneHealth.ts`, `HelpDialog.tsx`, `VideoGuidesCatalog.ts` across `807` locale keys in `en`, `es`, `fr`, `el`): remains 100% invisible on unconfigured operator views (`0` extra chips when `enabled === false`), displays live `WebRelay` / `WebRelay Aux` online/offline telemetry chips on enabled lanes in **Status of Health (`/health`)** and **Lane View (`/lane-view`)**, and provides an Administrator modal dialog (native `<dialog>` with `showModal()`) to switch lanes, inspect live `R1–R4` coil states and EML (`Code 9999`) / Extended Occupancy (`Code 9998`) suppression counters, trigger hardware-timed pulses or latched walk-around overrides on **Gamma Light + Sound** and **Neutron Blue Light**, silence/arm or release to `0,0,0,0` hardware pass-through, test HTTP/XML connectivity (`stateFull.xml` / `state.xml`), and persist per-lane `AUTO` / `PASS_THROUGH` / `MUTED` settings, alongside bundled how-to video guide `#29` (`29-lane-webrelay-lights-and-sound`).
+- Added an anytime **Guided Walkthrough** button in the live operational console (`Navbar.tsx`, `TrainingCoachDock.tsx`, `TrainingSandboxLauncherCard.tsx`, `TrainingCurriculum.ts`, `TrainingSandboxApi.ts` across `en`, `es`, `fr`, `el`): opens `TrainingCoachDock` on demand in **Read-Only Refresher Mode** (`0` background polling when closed, `0` simulated alarm injections or `/stage-track` mutations on `:443`) across **13 role-based labs** (including Lab `3.5` for per-lane WebRelay-Quad lights & sound), clearly explains live-console read-only boundaries, `120-minute` automatic shutdown & volume wipe timing, one-way credential/Passkey seeding, and `TRAINING SANDBOX — NON-OPERATIONAL` watermarking, and provides 1-click idempotent `:8444` Practice Sandbox launch/open for any signed-in user (while keeping early `Stop` / `Reset` Administrator-only).
+
+### Changed
+
+- Updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.4` (`oscar-3.11.4.zip`).
+
 ## 3.11.3
 
 ### Added

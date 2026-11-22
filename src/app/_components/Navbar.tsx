@@ -178,7 +178,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const { t, language } = useLanguage();
     const coachUi = TRAINING_COACH_UI[language] ?? TRAINING_COACH_UI.en;
     const [sandboxStatus, setSandboxStatus] = useState<SandboxActiveStatus>({ sandboxMode: false });
-    const [coachOpen, setCoachOpen] = useState<boolean>(true);
+    const [coachOpen, setCoachOpen] = useState<boolean>(false);
     const [splitAdminOpen, setSplitAdminOpen] = useState<boolean>(false);
 
     const dispatch = useDispatch();
@@ -267,6 +267,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                 if (cancelled) return;
                 setSandboxStatus(initial);
                 if (initial.sandboxMode) {
+                    setCoachOpen(true);
                     pollTimer = setInterval(() => {
                         if (typeof document !== "undefined" && document.visibilityState === "hidden") {
                             return;
@@ -677,6 +678,36 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 {t('logOut')}
                             </Button>
                             <LanguageSelector />
+                            {!sandboxStatus.sandboxMode && (
+                                <Tooltip title={coachUi.walkthroughButtonHint} arrow placement="top">
+                                    <Button
+                                        color={coachOpen ? "primary" : "inherit"}
+                                        variant={coachOpen ? "contained" : "outlined"}
+                                        size="small"
+                                        startIcon={<SchoolRoundedIcon fontSize="small" aria-hidden="true" />}
+                                        aria-pressed={coachOpen}
+                                        aria-label={coachUi.walkthroughButtonLabel}
+                                        data-testid="navbar-walkthrough-button"
+                                        onClick={() => setCoachOpen((prev) => !prev)}
+                                        sx={{
+                                            textTransform: "none",
+                                            fontWeight: 600,
+                                            flexShrink: 0,
+                                            minBlockSize: "34px",
+                                            "@media (pointer: coarse)": { minBlockSize: "44px" },
+                                            px: { xs: 1, lg: 1.25 },
+                                            "& .MuiButton-startIcon": {
+                                                mr: { xs: 0, lg: 0.75 },
+                                                ml: 0,
+                                            },
+                                        }}
+                                    >
+                                        <Box component="span" sx={{ display: { xs: "none", lg: "inline" } }}>
+                                            {coachUi.walkthroughButtonLabel}
+                                        </Box>
+                                    </Button>
+                                </Tooltip>
+                            )}
                             <Tooltip title={t('operatorHelp')} arrow placement="top">
                                 <IconButton
                                     color="inherit"
@@ -711,6 +742,10 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             <HelpDialog
                 open={helpDialogOpen}
                 onClose={() => setHelpDialogOpen(false)}
+                onOpenGuidedWalkthrough={() => {
+                    setHelpDialogOpen(false);
+                    setCoachOpen(true);
+                }}
                 activePathname={pathname ?? undefined}
                 nodes={configuredNodes}
                 stateSummary={{
@@ -926,7 +961,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     )}
                 </Box>
             </Box>
-            {sandboxStatus.sandboxMode && coachOpen && (
+            {coachOpen && (
                 <TrainingCoachDock
                     status={sandboxStatus}
                     onStatusUpdated={setSandboxStatus}

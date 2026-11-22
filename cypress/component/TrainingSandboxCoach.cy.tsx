@@ -18,18 +18,21 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         setTrainingSandboxRuntimeActiveForTests(false);
     });
 
-    it("maps all 12 curriculum labs across 3 role tracks to valid 28-guide catalog entries", () => {
-        expect(VIDEO_GUIDES_CATALOG.length).to.equal(28);
+    it("maps all 13 curriculum labs across 3 role tracks to valid 29-guide catalog entries", () => {
+        expect(VIDEO_GUIDES_CATALOG.length).to.equal(29);
         const guide28 = getVideoGuideBySlug("28-hands-on-training-sandbox");
         expect(guide28).to.not.equal(undefined);
         expect(guide28?.badge).to.equal("28");
+        const guide29 = getVideoGuideBySlug("29-lane-webrelay-lights-and-sound");
+        expect(guide29).to.not.equal(undefined);
+        expect(guide29?.badge).to.equal("29");
 
         expect(TRAINING_TRACKS.map((t) => t.id)).to.deep.equal([
             "operator",
             "supervisor",
             "administrator",
         ]);
-        expect(TRAINING_LABS.length).to.equal(12);
+        expect(TRAINING_LABS.length).to.equal(13);
         for (const lab of TRAINING_LABS) {
             const matchedGuide = getVideoGuideBySlug(lab.videoGuideSlug);
             expect(matchedGuide, `Video guide for ${lab.id}`).to.not.equal(undefined);
@@ -134,6 +137,9 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
 
         // Verify Lab 1.1 auto-verified because onlineLaneCount >= 1 && totalOccupancies >= 1
         cy.get('[data-testid="training-active-lab-status"]').should("contain.text", "Auto-Verified");
+        cy.get('[data-testid="coach-sandbox-session-banner"]')
+            .should("be.visible")
+            .and("contain.text", "Auto-shutdown in");
 
         // Verify zero headings inside <summary> and non-exclusive <details> (no name attribute)
         cy.get(".oscar-coach-accordion").should("have.length", 3).each(($details) => {
@@ -209,7 +215,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             </LanguageProvider>,
         );
 
-        cy.contains("OSCAR 3.11.3 Operator Quick Guide & Glossary").should("be.visible");
+        cy.contains("OSCAR 3.11.4 Operator Quick Guide & Glossary").should("be.visible");
         cy.contains('[role="tab"]', "Manual & Video Guides").click();
         cy.get('[data-testid="help-training-sandbox-card"]').should("be.visible");
         cy.get('[data-testid="help-sandbox-launch-btn"]').should("be.visible");
@@ -217,5 +223,96 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         cy.get('[data-testid="help-catalog-watch-28"]').should("be.visible").click();
         cy.get('[data-testid="help-video-element"] source')
             .should("have.attr", "src", "/video-guides/videos/28-hands-on-training-sandbox.mp4");
+    });
+
+    it("supports safe Read-Only Refresher Mode on live console (:443) with orientation, auto-shutdown countdown, and 1-click :8444 launch", () => {
+        let stageCalls = 0;
+        cy.intercept("POST", "/sensorhub/oscar/sandbox/stage-track", (req) => {
+            stageCalls += 1;
+            req.reply({ statusCode: 403, body: { error: "Disabled on operational node" } });
+        });
+
+        cy.intercept("GET", "/sensorhub/oscar/sandbox/host", {
+            statusCode: 200,
+            body: {
+                agentActive: true,
+                sandboxRunning: false,
+                canStopOrReset: false,
+                httpsPort: 8444,
+                ttlMinutes: 120,
+                linuxStartCommand: "sudo bash oscar.sh sandbox start --port 8444",
+                linuxStopCommand: "sudo bash oscar.sh sandbox stop",
+                linuxEnableBridgeCommand: "sudo bash oscar.sh sandbox enable-ui-bridge",
+                windowsStartCommand: ".\\oscar.bat sandbox start --port 8444",
+                windowsStopCommand: ".\\oscar.bat sandbox stop",
+                windowsEnableBridgeCommand: ".\\oscar.bat sandbox enable-ui-bridge",
+            },
+        }).as("getHostStopped");
+
+        cy.intercept("POST", "/sensorhub/oscar/sandbox/host", {
+            statusCode: 200,
+            body: {
+                agentActive: true,
+                sandboxRunning: true,
+                canStopOrReset: false,
+                httpsPort: 8444,
+                ttlMinutes: 120,
+                expiresAt: new Date(Date.now() + 118 * 60_000).toISOString(),
+                linuxStartCommand: "sudo bash oscar.sh sandbox start --port 8444",
+                linuxStopCommand: "sudo bash oscar.sh sandbox stop",
+                linuxEnableBridgeCommand: "sudo bash oscar.sh sandbox enable-ui-bridge",
+                windowsStartCommand: ".\\oscar.bat sandbox start --port 8444",
+                windowsStopCommand: ".\\oscar.bat sandbox stop",
+                windowsEnableBridgeCommand: ".\\oscar.bat sandbox enable-ui-bridge",
+                activeJob: {
+                    requestId: "req-1",
+                    action: "start",
+                    state: "COMPLETED",
+                    message: "Training Sandbox ready on port 8444.",
+                },
+            },
+        }).as("startHostSandbox");
+
+        cy.mount(
+            <LanguageProvider>
+                <TrainingCoachDock
+                    status={{ sandboxMode: false }}
+                    onStatusUpdated={() => {}}
+                    onRefreshRequested={() => {}}
+                    onNavigateRoute={() => {}}
+                    splitAdminOpen={false}
+                    onToggleSplitAdmin={() => {}}
+                    onMinimize={() => {}}
+                />
+            </LanguageProvider>,
+        );
+
+        cy.wait("@getHostStopped");
+        cy.get('[data-testid="coach-refresher-badge"]').should("contain.text", "READ-ONLY REFRESHER");
+        cy.get('[data-testid="training-coach-restage-track"]').should("not.exist");
+        cy.get('[data-testid="training-inject-fault_gamma_high"]').should("not.exist");
+        cy.get('[data-testid="training-download-certificate-btn"]').should("not.exist");
+        cy.get('[data-testid="coach-refresher-orientation"]')
+            .should("be.visible")
+            .and("contain.text", "120 minutes");
+
+        // Switching tracks in Refresher Mode is 100% local (zero POST /stage-track calls)
+        cy.get('[data-testid="training-track-btn-administrator"]').click();
+        cy.get('[data-testid="training-lab-chip-adm-5"]').should("be.visible").click();
+        cy.contains("Per-Lane Physical RPM Lights & Sound").should("be.visible");
+        cy.then(() => {
+            expect(stageCalls).to.equal(0);
+        });
+
+        // Operator can launch :8444 in 1 click, sees Open button + live countdown, and does NOT see Stop/Reset
+        cy.get('[data-testid="coach-sandbox-launch-btn"]').should("be.visible").click();
+        cy.wait("@startHostSandbox");
+        cy.get('[data-testid="coach-sandbox-open-btn"]')
+            .should("be.visible")
+            .and("have.attr", "href")
+            .and("include", ":8444");
+        cy.get('[data-testid="coach-sandbox-host-status"]').should("contain.text", "Auto-shuts down & wipes in");
+        cy.get('[data-testid="coach-sandbox-stop-btn"]').should("not.exist");
+        cy.get('[data-testid="coach-sandbox-reset-btn"]').should("not.exist");
     });
 });

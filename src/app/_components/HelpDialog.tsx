@@ -95,7 +95,7 @@ interface LocalizedHelpContent {
 
 const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
     en: {
-        dialogTitle: 'OSCAR 3.11.3 Operator Quick Guide & Glossary',
+        dialogTitle: 'OSCAR 3.11.4 Operator Quick Guide & Glossary',
         dialogSubtitle: 'Plain-language reference for console workflows, multi-format reports, and radiation portal terminology.',
         tabs: {
             pages: 'Console Pages',
@@ -276,12 +276,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Hands-On Training Sandbox & Guided Academy (`oscar-sandbox`)',
                 meaning: 'Isolated ephemeral `:8444` training environment (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) reusing the installed OSCAR image with `archive.enabled = false`, zero writes to production PostgreSQL/Parquet/`config.json`, a built-in loopback Rapiscan + RTSP + OCR + Cargo UFF micro-emulator, a multi-modal Training Coach (videos, screenshots, 1-click fault/alarm injection, Split-Pane SensorHub Admin, outcome auto-verification, and 1-page PDF Completion Record), and complete `< 2 s` flush on exit.',
             },
+            {
+                term: 'RPM Lights & Sound (`webRelayConfig` — WebRelay-Quad)',
+                meaning: 'Optional per-lane network relay control (`enabled = false` by default) for ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) HTTP/XML modules (`stateFull.xml` / `state.xml`) across a Primary Pillar unit and optional Ancillary Dry-Contact unit. Supports Automatic (`AUTO`) occupancy/EML gatekeeping (arming `R1=1, R2=1`, suppressing `Code 9999: EML Non-Threat` and optionally `Code 9998: Extended Occupancy Gamma Alarm`, pulsing `R3` Gamma Red Light + Siren and/or `R4` Neutron Blue Light on actionable alarms, and failing safe to `0,0,0,0` pass-through when stopped), `PASS_THROUGH`, `MUTED`, and live Administrator manual controls in `/health`, `/lane-view`, and `/sensorhub/admin`.',
+            },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
         adminLinkLabel: 'Open SensorHub Admin & In-UI Operator Manual (`/sensorhub/admin`)',
         adminLinkDesc: 'Requires administrator sign-in. Select OSCAR Service or any sensor module and open its README tab for the localized manual.',
         videoGuidesLinkLabel: 'Open OSCAR How-To Video Guides (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '28 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, Hands-On Training Sandbox, USB NVMe backups, pluggable extensions, offline .pmtiles maps, WCO Cargo UFF 16-bit X-ray inspection, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
+        videoGuidesLinkDesc: '29 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, Hands-On Training Sandbox, per-lane WebRelay RPM Lights & Sound control, USB NVMe backups, pluggable extensions, offline .pmtiles maps, WCO Cargo UFF 16-bit X-ray inspection, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
         supportBundleTitle: 'Troubleshooting & Support Bundle (`.zip`)',
         supportBundleDesc: 'Downloads a single diagnostic `.zip` combining recent browser console/network diagnostics with OSCAR server logs, module states, and JVM/storage health. If the server cannot be reached or fails to start, run `./oscar.sh support-bundle` (Linux) or `oscar.bat support-bundle` (Windows) on the host.',
         supportBundlePrivacyNote: 'Privacy & security: collected only to diagnose technical issues; passwords, tokens, session cookies, RTSP credentials, and private keys are automatically scrubbed.',
@@ -292,7 +296,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Close',
     },
     es: {
-        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.3',
+        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.4',
         dialogSubtitle: 'Referencia en lenguaje claro para flujos de consola, informes multiformato y terminología de pórticos de radiación.',
         tabs: {
             pages: 'Páginas de consola',
@@ -473,12 +477,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Entorno práctico de formación y academia guiada (`oscar-sandbox`)',
                 meaning: 'Entorno efímero aislado en `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) con `archive.enabled = false`, cero impacto en PostgreSQL/Parquet/`config.json` reales, microemulador local Rapiscan + RTSP + OCR + UFF, Guía de Práctica multimodal, SensorHub Admin en pantalla dividida, verificación automática, certificado PDF de 1 página y purga completa en `< 2 s` al salir.',
             },
+            {
+                term: 'Luces y sonido del RPM (`webRelayConfig` — WebRelay-Quad)',
+                meaning: 'Control opcional de relés en red por carril (`enabled = false` por defecto) para módulos ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) mediante HTTP/XML (`stateFull.xml` / `state.xml`) en unidad primaria y unidad auxiliar opcional de contactos secos. Admite modo Automático (`AUTO`) (arma `R1=1, R2=1`, suprime `Code 9999` y opcionalmente `Code 9998`, pulsa `R3` luz roja gamma + sirena y/o `R4` luz azul de neutrones en alarmas reales y vuelve a `0,0,0,0` al detenerse), `PASS_THROUGH`, `MUTED` y controles manuales para administradores en `/health`, `/lane-view` y `/sensorhub/admin`.',
+            },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
         adminLinkLabel: 'Abrir administración de SensorHub y manual integrado (`/sensorhub/admin`)',
         adminLinkDesc: 'Requiere cuenta de administrador. Seleccione el Servicio OSCAR o cualquier módulo y abra la pestaña README.',
         videoGuidesLinkLabel: 'Abrir videoguías prácticas de OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '28 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, entorno práctico de formación, copias USB NVMe, extensiones, mapas .pmtiles sin conexión, radiografías WCO Cargo UFF de 16 bits, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
+        videoGuidesLinkDesc: '29 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, entorno práctico de formación, luces y sonido RPM por carril (WebRelay-Quad), copias USB NVMe, extensiones, mapas .pmtiles sin conexión, radiografías WCO Cargo UFF de 16 bits, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
         supportBundleTitle: 'Diagnóstico y paquete de soporte (`.zip`)',
         supportBundleDesc: 'Descarga un archivo `.zip` de diagnóstico que combina eventos recientes del navegador con registros del servidor OSCAR, estado de módulos y salud de JVM/almacenamiento. Si el servidor no responde o no arranca, ejecute `./oscar.sh support-bundle` (Linux) u `oscar.bat support-bundle` (Windows) en el servidor.',
         supportBundlePrivacyNote: 'Privacidad y seguridad: se recopila únicamente para diagnosticar incidencias técnicas; contraseñas, tokens, cookies de sesión, credenciales RTSP y claves privadas se redactan automáticamente.',
@@ -489,7 +497,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Cerrar',
     },
     fr: {
-        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.3',
+        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.4',
         dialogSubtitle: 'Référence en langage clair pour les flux de console, les rapports multiformats et la terminologie des portiques.',
         tabs: {
             pages: 'Pages de la console',
@@ -670,12 +678,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Bac à sable de formation pratique et académie guidée (`oscar-sandbox`)',
                 meaning: 'Environnement éphémère isolé sur `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) avec `archive.enabled = false`, zéro écriture dans PostgreSQL/Parquet/`config.json` réels, micro-émulateur local Rapiscan + RTSP + OCR + UFF, Coach Formation multimodal, SensorHub Admin en vue partagée, auto-vérification, certificat PDF d’une page et purge complète en `< 2 s` à la fermeture.',
             },
+            {
+                term: 'Feux et sirène du RPM (`webRelayConfig` — WebRelay-Quad)',
+                meaning: 'Commande réseau facultative par voie (`enabled = false` par défaut) pour modules ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) via HTTP/XML (`stateFull.xml` / `state.xml`) sur unité primaire et unité auxiliaire facultative à contacts secs. Prend en charge le mode Automatique (`AUTO`) (armement `R1=1, R2=1`, masquage `Code 9999` et en option `Code 9998`, impulsion `R3` feu rouge gamma + sirène et/ou `R4` feu bleu neutron sur alarme réelle, retour de sécurité `0,0,0,0` à l’arrêt), `PASS_THROUGH`, `MUTED` et les commandes manuelles administrateur dans `/health`, `/lane-view` et `/sensorhub/admin`.',
+            },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
         adminLinkLabel: 'Ouvrir l’administration SensorHub et le manuel intégré (`/sensorhub/admin`)',
         adminLinkDesc: 'Connexion administrateur requise. Sélectionnez le Service OSCAR ou un module et ouvrez l’onglet README.',
         videoGuidesLinkLabel: 'Ouvrir les guides vidéo pratiques OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '28 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, bac à sable de formation, sauvegardes USB NVMe, extensions, cartes .pmtiles hors ligne, radiographies OMD UFF 16 bits, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
+        videoGuidesLinkDesc: '29 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, bac à sable de formation, feux et sirène RPM par voie (WebRelay-Quad), sauvegardes USB NVMe, extensions, cartes .pmtiles hors ligne, radiographies OMD UFF 16 bits, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
         supportBundleTitle: 'Dépannage et archive d’assistance (`.zip`)',
         supportBundleDesc: 'Télécharge une archive `.zip` réunissant les diagnostics récents du navigateur et les journaux du serveur OSCAR, l’état des modules et la santé JVM/stockage. Si le serveur est injoignable ou ne démarre pas, exécutez `./oscar.sh support-bundle` (Linux) ou `oscar.bat support-bundle` (Windows) sur l’hôte.',
         supportBundlePrivacyNote: 'Confidentialité et sécurité : collecté uniquement pour le diagnostic technique ; mots de passe, jetons, cookies de session, identifiants RTSP et clés privées sont automatiquement masqués.',
@@ -686,7 +698,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Fermer',
     },
     el: {
-        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.3',
+        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.4',
         dialogSubtitle: 'Αναφορά σε απλή γλώσσα για τις ροές εργασίας κονσόλας, τις αναφορές πολλαπλών μορφών και την ορολογία πυλών ακτινοβολίας.',
         tabs: {
             pages: 'Σελίδες κονσόλας',
@@ -867,12 +879,16 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Πρακτικό περιβάλλον εκπαίδευσης & καθοδηγούμενη ακαδημία (`oscar-sandbox`)',
                 meaning: 'Απομονωμένο προσωρινό περιβάλλον εκπαίδευσης στη θύρα `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) με `archive.enabled = false`, μηδενική εγγραφή στην παραγωγική PostgreSQL/Parquet/`config.json`, τοπικό μικρο-εξομοιωτή Rapiscan + RTSP + OCR + UFF, πολυτροπικό Οδηγό Εκπαίδευσης, διπλή προβολή SensorHub Admin, αυτόματη επαλήθευση, PDF ολοκλήρωσης 1 σελίδας και πλήρη εκκαθάριση σε `< 2 s`.',
             },
+            {
+                term: 'Φώτα και ήχος RPM (`webRelayConfig` — WebRelay-Quad)',
+                meaning: 'Προαιρετικός δικτυακός έλεγχος ρελέ ανά λωρίδα (`enabled = false` από προεπιλογή) για μονάδες ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) μέσω HTTP/XML (`stateFull.xml` / `state.xml`) σε κύρια και προαιρετική βοηθητική μονάδα ξηρών επαφών. Υποστηρίζει Αυτόματη λειτουργία (`AUTO`) (όπλιση `R1=1, R2=1`, καταστολή `Code 9999` και προαιρετικά `Code 9998`, παλμό `R3` κόκκινου φωτός γάμμα + σειρήνας ή/και `R4` μπλε φωτός νετρονίων σε πραγματικούς συναγερμούς και ασφαλή επαναφορά `0,0,0,0` κατά τη διακοπή), `PASS_THROUGH`, `MUTED` και ζωντανό χειροκίνητο έλεγχο διαχειριστή στις σελίδες `/health`, `/lane-view` και `/sensorhub/admin`.',
+            },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',
         adminLinkLabel: 'Άνοιγμα διαχείρισης SensorHub & ενσωματωμένου εγχειριδίου (`/sensorhub/admin`)',
         adminLinkDesc: 'Απαιτείται σύνδεση διαχειριστή. Επιλέξτε την Υπηρεσία OSCAR ή οποιαδήποτε μονάδα και ανοίξτε την καρτέλα README.',
         videoGuidesLinkLabel: 'Άνοιγμα βιντεοοδηγών εργασιών OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '28 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, περιβάλλον εκπαίδευσης, αντίγραφα USB NVMe, επεκτάσεις, χάρτες .pmtiles εκτός σύνδεσης, ακτινογραφίες φορτίου WCO UFF 16-bit, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
+        videoGuidesLinkDesc: '29 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, περιβάλλον εκπαίδευσης, έλεγχο φώτων & ήχου RPM ανά λωρίδα (WebRelay-Quad), αντίγραφα USB NVMe, επεκτάσεις, χάρτες .pmtiles εκτός σύνδεσης, ακτινογραφίες φορτίου WCO UFF 16-bit, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
         supportBundleTitle: 'Αντιμετώπιση προβλημάτων & πακέτο υποστήριξης (`.zip`)',
         supportBundleDesc: 'Λήψη ενιαίου διαγνωστικού αρχείου `.zip` που συνδυάζει συμβάντα του περιηγητή με αρχεία καταγραφής διακομιστή OSCAR, κατάσταση μονάδων και υγεία JVM/αποθήκευσης. Εάν ο διακομιστής δεν αποκρίνεται ή δεν εκκινεί, εκτελέστε `./oscar.sh support-bundle` (Linux) ή `oscar.bat support-bundle` (Windows) στον κεντρικό υπολογιστή.',
         supportBundlePrivacyNote: 'Απόρρητο & ασφάλεια: συλλέγονται αποκλειστικά για τεχνική διάγνωση· κωδικοί, διακριτικά, cookies συνεδρίας, διαπιστευτήρια RTSP και ιδιωτικά κλειδιά αφαιρούνται αυτόματα.',
@@ -929,6 +945,7 @@ export default function HelpDialog({
     fetchImpl,
     skipBrowserDownload,
     onBundleExported,
+    onOpenGuidedWalkthrough,
 }: {
     open: boolean;
     onClose: () => void;
@@ -938,6 +955,7 @@ export default function HelpDialog({
     fetchImpl?: typeof fetch;
     skipBrowserDownload?: boolean;
     onBundleExported?: (result: SupportBundleExportResult) => void;
+    onOpenGuidedWalkthrough?: () => void;
 }) {
     const { language } = useLanguage();
     const activeLocale: Locale = HELP_CONTENT[language] ? language : 'en';
@@ -1537,7 +1555,10 @@ export default function HelpDialog({
                                 </Box>
                             </Stack>
                         </Paper>
-                        <TrainingSandboxLauncherCard locale={activeLocale} />
+                        <TrainingSandboxLauncherCard
+                            locale={activeLocale}
+                            onOpenGuidedWalkthrough={onOpenGuidedWalkthrough}
+                        />
                         <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-support-bundle-card">
                             <Stack spacing={1} alignItems="flex-start">
                                 <Typography variant="subtitle2" fontWeight={700}>

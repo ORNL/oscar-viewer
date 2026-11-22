@@ -40,6 +40,8 @@ export interface LaneHealth {
     nodeName: string;
     rpm: ComponentHealth;
     cameras: ComponentHealth[];
+    webRelayConfigured?: boolean;
+    webRelays?: ComponentHealth[];
     faults: FaultHealth;
     occupancyState: OccupancyState;
     occupancyStartedAt: number | null;
@@ -237,6 +239,20 @@ function streamKind(stream: any): StreamKind | null {
 }
 
 const LANE_THRESHOLD_KEYWORD_PREFIX = "oscar:extended-occupancy-threshold-min:";
+const LANE_WEBRELAY_ENABLED_KEYWORD = "oscar:webrelay-enabled:true";
+
+function extractLaneWebRelayConfigured(lane: LaneMapEntry): boolean {
+    for (const system of lane.systems ?? []) {
+        const keywords = system?.properties?.keywords ?? system?.properties?.properties?.keywords;
+        if (!Array.isArray(keywords)) continue;
+        for (const raw of keywords) {
+            if (typeof raw === "string" && raw.trim().toLowerCase() === LANE_WEBRELAY_ENABLED_KEYWORD) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 function clampThresholdMinutes(value: unknown, fallback = DEFAULT_OCCUPANCY_THRESHOLD_MINUTES): number {
     const numeric = Number(value);
@@ -287,6 +303,7 @@ function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
     );
     const rpmSystem = lane.systems.find((system: any) => systemId(system) === streamSystemId(rpmStream));
     const configuredThreshold = extractLaneThresholdMinutes(lane);
+    const webRelayConfigured = extractLaneWebRelayConfigured(lane);
 
     return {
         laneName,
@@ -298,6 +315,7 @@ function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
         },
         cameras: Array.from(cameraSystems.values())
             .sort((a, b) => a.label.localeCompare(b.label, undefined, {numeric: true})),
+        ...(webRelayConfigured ? {webRelayConfigured: true} : {}),
         faults: faultDefaults(),
         occupancyState: "unknown",
         occupancyStartedAt: null,
@@ -339,7 +357,9 @@ export function deriveLaneHealthRows(
                         ? "unknown"
                         : occupancyDuration > thresholdMilliseconds ? "active" : "clear";
         const hasFault = Object.values(lane.faults).includes("active") || extendedOccupancy === "active";
-        const hasOfflineComponent = lane.rpm.state === "offline" || lane.cameras.some((camera) => camera.state === "offline");
+        const hasOfflineComponent = lane.rpm.state === "offline"
+            || lane.cameras.some((camera) => camera.state === "offline")
+            || (lane.webRelays ?? []).some((relay) => relay.state === "offline");
         const hasUnknownTelemetry = lane.rpm.state === "unknown"
             || lane.cameras.some((camera) => camera.state === "unknown")
             || Object.values(lane.faults).includes("unknown")
