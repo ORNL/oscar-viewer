@@ -4,6 +4,7 @@
  */
 
 dialog.lane-webrelay-dialog {
+    margin: auto;
     padding: 0;
     border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 12px;
@@ -11,7 +12,7 @@ dialog.lane-webrelay-dialog {
     inline-size: 100%;
     max-block-size: calc(100svh - 2rem);
     color: #0f172a;
-    background-color: var(--mui-palette-background-paper, #ffffff);
+    background-color: #ffffff;
     box-shadow: 0 24px 56px rgba(15, 23, 42, 0.32);
 }
 
@@ -28,14 +29,6 @@ dialog.lane-webrelay-dialog::backdrop {
     overflow: hidden;
     overscroll-behavior: contain;
     background: rgba(15, 23, 42, 0.6);
-}
-
-@media (prefers-color-scheme: dark) {
-    dialog.lane-webrelay-dialog {
-        background-color: var(--mui-palette-background-paper, #1e293b);
-        color: #f8fafc;
-        border-color: rgba(148, 163, 184, 0.28);
-    }
 }
 
 .lane-webrelay-header {
@@ -196,23 +189,9 @@ dialog.lane-webrelay-dialog::backdrop {
     color: #dc2626;
 }
 
-@media (prefers-color-scheme: dark) {
-    .lane-webrelay-btn-gamma {
-        color: #fca5a5;
-        border-color: #f87171;
-    }
-}
-
 .lane-webrelay-btn-neutron {
     border-color: #2563eb;
     color: #2563eb;
-}
-
-@media (prefers-color-scheme: dark) {
-    .lane-webrelay-btn-neutron {
-        color: #93c5fd;
-        border-color: #60a5fa;
-    }
 }
 
 .lane-webrelay-btn[aria-pressed="true"] {
