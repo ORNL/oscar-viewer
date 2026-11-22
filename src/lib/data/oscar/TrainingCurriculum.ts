@@ -60,9 +60,9 @@ export interface TrainingCoachUiStrings {
     practiceSignInBullet: string;
     practiceRunningStatus: (durationText: string, timeText: string | null) => string;
     practiceStoppedStatus: (ttlMinutes: number) => string;
-    launchPracticeBtn: (port: number) => string;
+    launchPracticeBtn: (badgeLabel: string) => string;
     startingPracticeBtn: string;
-    openPracticeBtn: (port: number) => string;
+    openPracticeBtn: (badgeLabel: string) => string;
     practiceBridgeHint: string;
     refresherSimulationNote: string;
     refresherAdminTabLabel: string;
@@ -102,12 +102,12 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
         practiceCardTitle: "Need Safe Hands-On Practice? Launch Isolated Sandbox (:8444)",
         practiceIsolationBullet: "Zero Live Impact: Runs disposable practice lanes (DemoLane01 / DemoLane02) with simulated RPM & camera streams (archive.enabled = false). Nothing on :8444 ever touches live PostgreSQL, Parquet archives, config.json, or physical RPM relays.",
         practiceShutdownBullet: (m) => `Automatic Shutdown & Wipe (${m} min / ${Math.round((m / 60) * 10) / 10}h): Automatically shuts down after ${m} minutes and permanently erases all practice alarms, uploads, and edits (< 2s) so server RAM is never tied up overnight.`,
-        practiceSignInBullet: "Sign-In, HTTPS & Exports: Opens https://<host>:8444 in a new tab (accept the local HTTPS prompt once if shown) and sign in with your existing OSCAR username/password or Passkey. All exports carry a TRAINING SANDBOX — NON-OPERATIONAL watermark; download your PDF Completion Record before shutdown.",
+        practiceSignInBullet: "Sign-In, HTTPS & Exports: Opens https://<host>:8444 on LAN/VPN (or https://<site>-sandbox.<hub> with Let's Encrypt HTTPS over remote Federation Hub tunnels) using your existing OSCAR username/password, SSO, or Passkey. All exports carry a TRAINING SANDBOX — NON-OPERATIONAL watermark; download your PDF Completion Record before shutdown.",
         practiceRunningStatus: (dur, at) => `Practice Sandbox RUNNING · Auto-shuts down & wipes in ${dur}${at ? ` (at ${at})` : ""}`,
         practiceStoppedStatus: (m) => `Practice Sandbox STOPPED · Auto-shuts down ${m} min after launch (requires ≥ 3.5 GiB free RAM)`,
-        launchPracticeBtn: (p) => `Launch Practice Sandbox (:${p})`,
+        launchPracticeBtn: (b) => `Launch Practice Sandbox (${b})`,
         startingPracticeBtn: "Starting Practice Sandbox (~20–40s)...",
-        openPracticeBtn: (p) => `Open Practice Sandbox (:${p})`,
+        openPracticeBtn: (b) => `Open Practice Sandbox (${b})`,
         practiceBridgeHint: "1-click browser launch can be enabled once on Ubuntu with `sudo bash oscar.sh sandbox enable-ui-bridge`, or started via CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
         refresherSimulationNote: "Simulated alarm injection & practice sample files activate automatically inside the :8444 Practice Sandbox.",
         refresherAdminTabLabel: "Open SensorHub Admin (New Tab — Live Console)",
@@ -148,9 +148,9 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
         practiceSignInBullet: "Acceso, HTTPS y exportaciones: Abre https://<host>:8444 en una pestaña nueva (acepte el aviso HTTPS local si aparece) e inicie sesión con su usuario/contraseña o Passkey actual. Toda exportación lleva marca TRAINING SANDBOX — NON-OPERATIONAL; descargue su PDF de finalización antes del apagado.",
         practiceRunningStatus: (dur, at) => `Entorno ACTIVO · Se apaga y purga en ${dur}${at ? ` (a las ${at})` : ""}`,
         practiceStoppedStatus: (m) => `Entorno DETENIDO · Se apaga automáticamente ${m} min después de iniciar (requiere ≥ 3.5 GiB de RAM libre)`,
-        launchPracticeBtn: (p) => `Iniciar entorno de práctica (:${p})`,
+        launchPracticeBtn: (b) => `Iniciar entorno de práctica (${b})`,
         startingPracticeBtn: "Iniciando entorno de práctica (~20–40 s)...",
-        openPracticeBtn: (p) => `Abrir entorno de práctica (:${p})`,
+        openPracticeBtn: (b) => `Abrir entorno de práctica (${b})`,
         practiceBridgeHint: "El inicio en 1 clic en Ubuntu se habilita una vez con `sudo bash oscar.sh sandbox enable-ui-bridge`, o por CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
         refresherSimulationNote: "La inyección de alarmas simuladas y los archivos de muestra se activan automáticamente dentro del entorno :8444.",
         refresherAdminTabLabel: "Abrir SensorHub Admin (nueva pestaña — consola real)",
@@ -191,9 +191,9 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
         practiceSignInBullet: "Connexion, HTTPS et exports : Ouvre https://<hôte>:8444 dans un nouvel onglet (acceptez l’invite HTTPS locale si affichée) et connectez-vous avec vos identifiants ou Passkey habituels. Tous les exports portent le filigrane TRAINING SANDBOX — NON-OPERATIONAL ; téléchargez votre PDF de réussite avant l’extinction.",
         practiceRunningStatus: (dur, at) => `Bac à sable ACTIF · Arrêt et purge dans ${dur}${at ? ` (à ${at})` : ""}`,
         practiceStoppedStatus: (m) => `Bac à sable ARRÊTÉ · Extinction automatique ${m} min après lancement (≥ 3,5 Gio de RAM libre requis)`,
-        launchPracticeBtn: (p) => `Lancer le bac à sable (:${p})`,
+        launchPracticeBtn: (b) => `Lancer le bac à sable (${b})`,
         startingPracticeBtn: "Démarrage du bac à sable (~20–40 s)...",
-        openPracticeBtn: (p) => `Ouvrir le bac à sable (:${p})`,
+        openPracticeBtn: (b) => `Ouvrir le bac à sable (${b})`,
         practiceBridgeHint: "Le lancement en 1 clic sous Ubuntu s’active une fois via `sudo bash oscar.sh sandbox enable-ui-bridge`, ou par CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
         refresherSimulationNote: "L’injection d’alarmes simulées et les fichiers d’exemple s’activent automatiquement dans le bac à sable :8444.",
         refresherAdminTabLabel: "Ouvrir SensorHub Admin (nouvel onglet — console réelle)",
@@ -234,9 +234,9 @@ export const TRAINING_COACH_UI: Record<Locale, TrainingCoachUiStrings> = {
         practiceSignInBullet: "Σύνδεση, HTTPS & εξαγωγές: Ανοίγει το https://<host>:8444 σε νέα καρτέλα (αποδεχθείτε την τοπική προειδοποίηση HTTPS αν εμφανιστεί) και συνδεθείτε με τα υπάρχοντα στοιχεία ή Passkey σας. Κάθε εξαγωγή φέρει υδατογράφημα TRAINING SANDBOX — NON-OPERATIONAL· κατεβάστε το PDF ολοκλήρωσης πριν από τον τερματισμό.",
         practiceRunningStatus: (dur, at) => `Περιβάλλον ΕΝΕΡΓΟ · Αυτόματος τερματισμός & εκκαθάριση σε ${dur}${at ? ` (στις ${at})` : ""}`,
         practiceStoppedStatus: (m) => `Περιβάλλον ΑΝΕΝΕΡΓΟ · Αυτόματος τερματισμός ${m} λεπτά μετά την εκκίνηση (απαιτεί ≥ 3,5 GiB ελεύθερη RAM)`,
-        launchPracticeBtn: (p) => `Εκκίνηση περιβάλλοντος εξάσκησης (:${p})`,
+        launchPracticeBtn: (b) => `Εκκίνηση περιβάλλοντος εξάσκησης (${b})`,
         startingPracticeBtn: "Εκκίνηση περιβάλλοντος εξάσκησης (~20–40 δευτ.)...",
-        openPracticeBtn: (p) => `Άνοιγμα περιβάλλοντος εξάσκησης (:${p})`,
+        openPracticeBtn: (b) => `Άνοιγμα περιβάλλοντος εξάσκησης (${b})`,
         practiceBridgeHint: "Η εκκίνηση με 1 κλικ σε Ubuntu ενεργοποιείται μία φορά με `sudo bash oscar.sh sandbox enable-ui-bridge`, ή μέσω CLI (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`).",
         refresherSimulationNote: "Η έγχυση εικονικών συναγερμών και τα δείγματα αρχείων ενεργοποιούνται αυτόματα μέσα στο περιβάλλον :8444.",
         refresherAdminTabLabel: "Άνοιγμα SensorHub Admin (νέα καρτέλα — ζωντανή κονσόλα)",

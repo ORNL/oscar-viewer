@@ -22,6 +22,7 @@ import {
     computeSandboxShutdownSummary,
     fetchSandboxActiveStatus,
     fetchSandboxHostStatus,
+    resolveSandboxLaunchTarget,
     SandboxHostStatus,
     submitSandboxHostAction,
 } from "@/lib/data/oscar/TrainingSandboxApi";
@@ -37,9 +38,9 @@ interface LauncherCopy {
     credentialsNote: string;
     insideSandboxAlert: string;
     walkthroughBtn: string;
-    launchBtn: string;
+    launchBtn: (badgeLabel: string) => string;
     startingBtn: string;
-    openSandboxBtn: string;
+    openSandboxBtn: (badgeLabel: string) => string;
     resetBtn: string;
     stopBtn: string;
     copyLinuxBtn: string;
@@ -56,18 +57,18 @@ const LAUNCHER_COPY: Record<Locale, LauncherCopy> = {
         safetyNote: "Isolation guarantee: :8444 runs in disposable containers (`archive.enabled = false`) and permanently wipes all practice data (`down -v` in < 2s) when stopped or when its auto-shutdown timer expires.",
         whatToKnowTitle: "What to Expect & When It Shuts Down:",
         shutdownStopped: (ttl) => `• Auto-Shutdown Timer: STOPPED right now — once launched, :8444 automatically shuts down and wipes all practice data after ${ttl} minutes (requires ≥ 3.5 GiB free server RAM).`,
-        shutdownRunning: (dur, at) => `• Active Session Countdown: RUNNING on :8444 — automatically shuts down and erases all practice data in ${dur}${at ? ` (at ${at})` : ""}. Export your 1-page PDF Completion Record before shutdown.`,
-        credentialsNote: "• Sign-In, HTTPS & Watermarks: Opens https://<host>:8444 in a new tab (accept the local HTTPS prompt once if shown) and sign in with your existing OSCAR username/password or Passkey (one-way read-only copy). Every :8444 export is stamped TRAINING SANDBOX — NON-OPERATIONAL.",
+        shutdownRunning: (dur, at) => `• Active Session Countdown: RUNNING — automatically shuts down and erases all practice data in ${dur}${at ? ` (at ${at})` : ""}. Export your 1-page PDF Completion Record before shutdown.`,
+        credentialsNote: "• Sign-In, HTTPS & Watermarks: Opens https://<host>:8444 on LAN/VPN (or https://<site>-sandbox.<hub> with Let's Encrypt HTTPS over remote Federation Hub tunnels) using your existing OSCAR username/password, SSO, or Passkey (one-way read-only copy). Every sandbox export is stamped TRAINING SANDBOX — NON-OPERATIONAL.",
         insideSandboxAlert: "Active session: You are currently inside the ephemeral Hands-On Training Sandbox. Click 'Training Coach' in the top bar to switch tracks, inject practice events, or download your 1-page PDF Completion Record before auto-shutdown.",
         walkthroughBtn: "Open Guided Walkthrough (Read-Only Refresher)",
-        launchBtn: "Launch Sandbox (:8444)",
+        launchBtn: (b) => `Launch Sandbox (${b})`,
         startingBtn: "Starting Sandbox (~20–40s)...",
-        openSandboxBtn: "Open Training Sandbox (:8444)",
+        openSandboxBtn: (b) => `Open Training Sandbox (${b})`,
         resetBtn: "Reset Sandbox",
         stopBtn: "Stop & Flush",
         copyLinuxBtn: "Copy Linux Start Command",
         copyWindowsBtn: "Copy Windows Start Command",
-        bridgeNote: "Optional 1-click browser launch on Ubuntu: an Administrator can enable the host watcher once with",
+        bridgeNote: "Optional 1-click browser launch: an Administrator can enable the host watcher once with",
         copiedMsg: "Copied command:",
     },
     es: {
@@ -77,18 +78,18 @@ const LAUNCHER_COPY: Record<Locale, LauncherCopy> = {
         safetyNote: "Aislamiento garantizado: :8444 se ejecuta en contenedores desechables (`archive.enabled = false`) y se purga por completo (`down -v` en < 2 s) al detenerse o expirar el temporizador.",
         whatToKnowTitle: "Qué esperar y cuándo se apaga:",
         shutdownStopped: (ttl) => `• Apagado automático: DETENIDO ahora — tras iniciar, :8444 se apaga automáticamente y borra todos los datos de práctica a los ${ttl} minutos (requiere ≥ 3.5 GiB de RAM libre).`,
-        shutdownRunning: (dur, at) => `• Cuenta atrás activa: EN EJECUCIÓN en :8444 — se apaga y purga automáticamente en ${dur}${at ? ` (a las ${at})` : ""}. Descargue su PDF de finalización antes del apagado.`,
-        credentialsNote: "• Acceso, HTTPS y marcas: Abre https://<host>:8444 en otra pestaña (acepte el aviso HTTPS local si aparece) con su usuario/contraseña o Passkey actual. Toda exportación lleva TRAINING SANDBOX — NON-OPERATIONAL.",
+        shutdownRunning: (dur, at) => `• Cuenta atrás activa: EN EJECUCIÓN — se apaga y purga automáticamente en ${dur}${at ? ` (a las ${at})` : ""}. Descargue su PDF de finalización antes del apagado.`,
+        credentialsNote: "• Acceso, HTTPS y marcas: Abre https://<host>:8444 en LAN/VPN (o https://<sitio>-sandbox.<hub> con Let's Encrypt en túneles remotos) con su usuario/contraseña, SSO o Passkey actual. Toda exportación lleva TRAINING SANDBOX — NON-OPERATIONAL.",
         insideSandboxAlert: "Sesión activa: está dentro del entorno efímero de práctica. Pulse 'Guía de Práctica' en la barra superior para cambiar de bloque o descargar su PDF antes del apagado.",
         walkthroughBtn: "Abrir recorrido guiado (repaso solo lectura)",
-        launchBtn: "Iniciar entorno (:8444)",
+        launchBtn: (b) => `Iniciar entorno (${b})`,
         startingBtn: "Iniciando entorno (~20–40 s)...",
-        openSandboxBtn: "Abrir entorno (:8444)",
+        openSandboxBtn: (b) => `Abrir entorno (${b})`,
         resetBtn: "Reiniciar entorno",
         stopBtn: "Detener y purgar",
         copyLinuxBtn: "Copiar comando Linux",
         copyWindowsBtn: "Copiar comando Windows",
-        bridgeNote: "Inicio opcional en 1 clic desde el navegador en Ubuntu:",
+        bridgeNote: "Inicio opcional en 1 clic desde el navegador:",
         copiedMsg: "Comando copiado:",
     },
     fr: {
@@ -98,18 +99,18 @@ const LAUNCHER_COPY: Record<Locale, LauncherCopy> = {
         safetyNote: "Isolation garantie : :8444 tourne sur des conteneurs jetables (`archive.enabled = false`) et est intégralement purgé (`down -v` en < 2 s) à l’arrêt ou à l’expiration du minuteur.",
         whatToKnowTitle: "Fonctionnement et extinction automatique :",
         shutdownStopped: (ttl) => `• Extinction automatique : ARRÊTÉ actuellement — une fois lancé, :8444 s’éteint et efface toutes les données d’exercice après ${ttl} minutes (≥ 3,5 Gio de RAM libre requis).`,
-        shutdownRunning: (dur, at) => `• Compte à rebours actif : EN COURS sur :8444 — arrêt et purge automatiques dans ${dur}${at ? ` (à ${at})` : ""}. Téléchargez votre PDF de réussite avant l’arrêt.`,
-        credentialsNote: "• Connexion, HTTPS et filigranes : Ouvre https://<hôte>:8444 dans un nouvel onglet (acceptez l’invite HTTPS locale si affichée) avec vos identifiants ou Passkey habituels. Chaque export porte TRAINING SANDBOX — NON-OPERATIONAL.",
+        shutdownRunning: (dur, at) => `• Compte à rebours actif : EN COURS — arrêt et purge automatiques dans ${dur}${at ? ` (à ${at})` : ""}. Téléchargez votre PDF de réussite avant l’arrêt.`,
+        credentialsNote: "• Connexion, HTTPS et filigranes : Ouvre https://<hôte>:8444 sur LAN/VPN (ou https://<site>-sandbox.<hub> avec Let's Encrypt via tunnel distant) avec vos identifiants, SSO ou Passkey habituels. Chaque export porte TRAINING SANDBOX — NON-OPERATIONAL.",
         insideSandboxAlert: "Session active : vous êtes dans le bac à sable éphémère de formation. Cliquez sur « Coach Formation » en haut pour choisir un parcours ou exporter votre PDF avant l’extinction.",
         walkthroughBtn: "Ouvrir le parcours guidé (lecture seule)",
-        launchBtn: "Lancer le bac à sable (:8444)",
+        launchBtn: (b) => `Lancer le bac à sable (${b})`,
         startingBtn: "Démarrage en cours (~20–40 s)...",
-        openSandboxBtn: "Ouvrir le bac à sable (:8444)",
+        openSandboxBtn: (b) => `Ouvrir le bac à sable (${b})`,
         resetBtn: "Réinitialiser",
         stopBtn: "Arrêter et purger",
         copyLinuxBtn: "Copier la commande Linux",
         copyWindowsBtn: "Copier la commande Windows",
-        bridgeNote: "Lancement optionnel en 1 clic sous Ubuntu :",
+        bridgeNote: "Lancement optionnel en 1 clic :",
         copiedMsg: "Commande copiée :",
     },
     el: {
@@ -119,18 +120,18 @@ const LAUNCHER_COPY: Record<Locale, LauncherCopy> = {
         safetyNote: "Εγγύηση απομόνωσης: το :8444 εκτελείται σε αναλώσιμα κοντέινερ (`archive.enabled = false`) και διαγράφεται πλήρως (`down -v` σε < 2 δευτ.) στον τερματισμό ή στη λήξη του χρονομέτρου.",
         whatToKnowTitle: "Τι να γνωρίζετε & πότε τερματίζεται:",
         shutdownStopped: (ttl) => `• Αυτόματος τερματισμός: ΑΝΕΝΕΡΓΟ τώρα — μετά την εκκίνηση, το :8444 τερματίζεται αυτόματα και διαγράφει όλα τα δεδομένα εξάσκησης σε ${ttl} λεπτά (απαιτεί ≥ 3,5 GiB ελεύθερη RAM).`,
-        shutdownRunning: (dur, at) => `• Αντίστροφη μέτρηση: ΕΝΕΡΓΟ στο :8444 — αυτόματος τερματισμός και εκκαθάριση σε ${dur}${at ? ` (στις ${at})` : ""}. Εξαγάγετε το PDF ολοκλήρωσης πριν από τη λήξη.`,
-        credentialsNote: "• Σύνδεση, HTTPS & υδατογραφήματα: Ανοίγει το https://<host>:8444 σε νέα καρτέλα (αποδεχθείτε την τοπική προειδοποίηση HTTPS αν εμφανιστεί) με τα υπάρχοντα στοιχεία ή Passkey σας. Κάθε εξαγωγή φέρει TRAINING SANDBOX — NON-OPERATIONAL.",
+        shutdownRunning: (dur, at) => `• Αντίστροφη μέτρηση: ΕΝΕΡΓΟ — αυτόματος τερματισμός και εκκαθάριση σε ${dur}${at ? ` (στις ${at})` : ""}. Εξαγάγετε το PDF ολοκλήρωσης πριν από τη λήξη.`,
+        credentialsNote: "• Σύνδεση, HTTPS & υδατογραφήματα: Ανοίγει το https://<host>:8444 σε LAN/VPN (ή https://<site>-sandbox.<hub> με Let's Encrypt σε απομακρυσμένη σύνδεση) με τα υπάρχοντα στοιχεία, SSO ή Passkey σας. Κάθε εξαγωγή φέρει TRAINING SANDBOX — NON-OPERATIONAL.",
         insideSandboxAlert: "Ενεργή συνεδρία: βρίσκεστε στο προσωρινό περιβάλλον εκπαίδευσης. Πατήστε «Οδηγός Εκπαίδευσης» στην επάνω γραμμή.",
         walkthroughBtn: "Άνοιγμα καθοδηγούμενης περιήγησης (μόνο ανάγνωση)",
-        launchBtn: "Εκκίνηση περιβάλλοντος (:8444)",
+        launchBtn: (b) => `Εκκίνηση περιβάλλοντος (${b})`,
         startingBtn: "Εκκίνηση περιβάλλοντος (~20–40 δευτ.)...",
-        openSandboxBtn: "Άνοιγμα περιβάλλοντος (:8444)",
+        openSandboxBtn: (b) => `Άνοιγμα περιβάλλοντος (${b})`,
         resetBtn: "Επαναφορά",
         stopBtn: "Τερματισμός & εκκαθάριση",
         copyLinuxBtn: "Αντιγραφή εντολής Linux",
         copyWindowsBtn: "Αντιγραφή εντολής Windows",
-        bridgeNote: "Προαιρετική εκκίνηση με 1 κλικ σε Ubuntu:",
+        bridgeNote: "Προαιρετική εκκίνηση με 1 κλικ:",
         copiedMsg: "Αντιγράφηκε:",
     },
 };
@@ -192,10 +193,15 @@ export default function TrainingSandboxLauncherCard({
         [hostStatus?.expiresAt, sandboxTtl],
     );
 
-    const sandboxUrl = React.useMemo(() => {
-        if (typeof window === "undefined") return `https://localhost:${sandboxPort}`;
-        return `https://${window.location.hostname}:${sandboxPort}`;
-    }, [sandboxPort]);
+    const launchTarget = React.useMemo(
+        () =>
+            resolveSandboxLaunchTarget(
+                hostStatus,
+                typeof window !== "undefined" ? window.location.hostname : undefined,
+            ),
+        [hostStatus],
+    );
+    const sandboxUrl = launchTarget.url;
 
     const handleCopyCmd = async (cmd: string) => {
         try {
@@ -318,7 +324,7 @@ export default function TrainingSandboxLauncherCard({
                                         data-testid="help-sandbox-open-btn"
                                         sx={{ textTransform: "none" }}
                                     >
-                                        {copy.openSandboxBtn}
+                                        {copy.openSandboxBtn(launchTarget.badgeLabel)}
                                     </Button>
                                     {canStopOrReset && (
                                         <>
@@ -360,7 +366,7 @@ export default function TrainingSandboxLauncherCard({
                                         data-testid="help-sandbox-launch-btn"
                                         sx={{ textTransform: "none" }}
                                     >
-                                        {hostStarting ? copy.startingBtn : copy.launchBtn}
+                                        {hostStarting ? copy.startingBtn : copy.launchBtn(launchTarget.badgeLabel)}
                                     </Button>
                                 )
                             )}

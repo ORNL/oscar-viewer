@@ -4,6 +4,7 @@ import HelpDialog from "../../src/app/_components/HelpDialog";
 import TrainingCoachDock from "../../src/app/_components/sandbox/TrainingCoachDock";
 import { TRAINING_LABS, TRAINING_TRACKS } from "../../src/lib/data/oscar/TrainingCurriculum";
 import {
+    resolveSandboxLaunchTarget,
     SandboxActiveStatus,
     SANDBOX_WATERMARK_TEXT,
     setTrainingSandboxRuntimeActiveForTests,
@@ -215,7 +216,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             </LanguageProvider>,
         );
 
-        cy.contains("OSCAR 3.11.4 Operator Quick Guide & Glossary").should("be.visible");
+        cy.contains("OSCAR 3.11.5 Operator Quick Guide & Glossary").should("be.visible");
         cy.contains('[role="tab"]', "Manual & Video Guides").click();
         cy.get('[data-testid="help-training-sandbox-card"]').should("be.visible");
         cy.get('[data-testid="help-sandbox-launch-btn"]').should("be.visible");
@@ -314,5 +315,31 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         cy.get('[data-testid="coach-sandbox-host-status"]').should("contain.text", "Auto-shuts down & wipes in");
         cy.get('[data-testid="coach-sandbox-stop-btn"]').should("not.exist");
         cy.get('[data-testid="coach-sandbox-reset-btn"]').should("not.exist");
+    });
+
+    it("resolves isolated <site>-sandbox.<hub> HTTPS URL on remote tunnel hosts while keeping :8444 on LAN hosts", () => {
+        const remoteTarget = resolveSandboxLaunchTarget(
+            {
+                httpsPort: 8444,
+                remoteDomain: "hub.example.org",
+                remoteSandboxUrl: "https://north-gate-sandbox.hub.example.org",
+            },
+            "north-gate.hub.example.org",
+        );
+        expect(remoteTarget.isRemoteTunnel).to.equal(true);
+        expect(remoteTarget.url).to.equal("https://north-gate-sandbox.hub.example.org");
+        expect(remoteTarget.badgeLabel).to.equal("north-gate-sandbox.hub.example.org");
+
+        const lanTarget = resolveSandboxLaunchTarget(
+            {
+                httpsPort: 8444,
+                remoteDomain: "hub.example.org",
+                remoteSandboxUrl: "https://north-gate-sandbox.hub.example.org",
+            },
+            "oscar.ubuntu",
+        );
+        expect(lanTarget.isRemoteTunnel).to.equal(false);
+        expect(lanTarget.url).to.equal("https://oscar.ubuntu:8444");
+        expect(lanTarget.badgeLabel).to.equal(":8444");
     });
 });

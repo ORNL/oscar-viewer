@@ -85,6 +85,8 @@ export interface SandboxHostStatus {
     ttlMinutes: number;
     expiresAt?: string;
     availableRamMib?: number;
+    remoteDomain?: string;
+    remoteSandboxUrl?: string;
     linuxStartCommand: string;
     linuxStopCommand: string;
     linuxEnableBridgeCommand: string;
@@ -97,6 +99,48 @@ export interface SandboxHostStatus {
         state: string;
         startedAt?: string;
         message?: string;
+    };
+}
+
+export interface SandboxLaunchTarget {
+    url: string;
+    isRemoteTunnel: boolean;
+    badgeLabel: string;
+}
+
+export function resolveSandboxLaunchTarget(
+    hostStatus?: Pick<SandboxHostStatus, "httpsPort" | "remoteDomain" | "remoteSandboxUrl"> | null,
+    locationHostname?: string,
+): SandboxLaunchTarget {
+    const port = hostStatus?.httpsPort ?? 8444;
+    const currentHost = (locationHostname || "").trim();
+    const currentLower = currentHost.toLowerCase();
+    const remoteDomain = (hostStatus?.remoteDomain || "").trim().toLowerCase();
+    const remoteUrl = (hostStatus?.remoteSandboxUrl || "").trim();
+
+    if (
+        remoteDomain &&
+        remoteUrl.startsWith("https://") &&
+        currentLower &&
+        (currentLower === remoteDomain || currentLower.endsWith(`.${remoteDomain}`))
+    ) {
+        try {
+            const parsed = new URL(remoteUrl);
+            return {
+                url: parsed.origin,
+                isRemoteTunnel: true,
+                badgeLabel: parsed.host,
+            };
+        } catch {
+            // Fall through to direct port target if remoteSandboxUrl is malformed
+        }
+    }
+
+    const fallbackHost = currentHost || "localhost";
+    return {
+        url: `https://${fallbackHost}:${port}`,
+        isRemoteTunnel: false,
+        badgeLabel: `:${port}`,
     };
 }
 
