@@ -16,6 +16,7 @@ import {
     isTamperDataStream,
     isVideoDataStream,
 } from "@/lib/data/oscar/Utilities";
+import {OSCAR_SANDBOX_TELEMETRY_EVENT} from "@/lib/data/oscar/TrainingSandboxApi";
 
 export type ConnectionState = "online" | "offline" | "unknown";
 export type TelemetryState = "active" | "clear" | "unknown";
@@ -116,6 +117,7 @@ async function fetchHealthQueryPage(
         const fetchOptions: RequestInit = {
             method: "GET",
             credentials: "include",
+            cache: "no-store",
             headers: query.headers ?? {},
             signal,
             ...(lowPriority ? ({priority: "low"} as RequestInit) : {}),
@@ -851,8 +853,31 @@ export function useLaneHealth() {
         };
 
         void initialize();
+
+        let followUpTimer: number | null = null;
+        const handleSandboxTelemetryMutation = () => {
+            void requestFreshReconciliation();
+            if (followUpTimer != null) {
+                window.clearTimeout(followUpTimer);
+            }
+            followUpTimer = window.setTimeout(() => {
+                if (active) {
+                    void requestFreshReconciliation();
+                }
+            }, 650);
+        };
+        if (typeof window !== "undefined") {
+            window.addEventListener(OSCAR_SANDBOX_TELEMETRY_EVENT, handleSandboxTelemetryMutation);
+        }
+
         return () => {
             active = false;
+            if (typeof window !== "undefined") {
+                window.removeEventListener(OSCAR_SANDBOX_TELEMETRY_EVENT, handleSandboxTelemetryMutation);
+            }
+            if (followUpTimer != null) {
+                window.clearTimeout(followUpTimer);
+            }
             healthRequestControllers.forEach((controller) => controller.abort());
             healthRequestControllers.clear();
             if (reconcileLatestRef.current === requestFreshReconciliation)

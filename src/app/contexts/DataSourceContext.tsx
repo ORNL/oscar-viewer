@@ -74,7 +74,18 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
     const [viewError, setViewError] = useState<"invalid" | "empty" | "unauthorized" | null>(null);
     const [availableViews, setAvailableViews] = useState<OperationalViewOption[]>([]);
     const [totalCatalogLaneCount, setTotalCatalogLaneCount] = useState(0);
+    const [sandboxLaneReloadEpoch, setSandboxLaneReloadEpoch] = useState(0);
     const discoveryGenerationRef = useRef(0);
+
+    useEffect(() => {
+        const handleSandboxLanesChanged = () => {
+            setSandboxLaneReloadEpoch((prev) => prev + 1);
+        };
+        window.addEventListener("oscar:sandbox-lanes-changed", handleSandboxLanesChanged);
+        return () => {
+            window.removeEventListener("oscar:sandbox-lanes-changed", handleSandboxLanesChanged);
+        };
+    }, []);
 
     const refreshSession = useCallback(async () => {
         const session = await fetchCurrentSession();
@@ -302,7 +313,7 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
             await testSysFetch(effectiveViewResolution.effectiveKey);
         }
         init();
-    }, [nodesConnectionKey, viewSelection, sessionLoaded, userAllowedViewsKey]);
+    }, [nodesConnectionKey, viewSelection, sessionLoaded, userAllowedViewsKey, sandboxLaneReloadEpoch]);
 
     useEffect(() => {
         if (!sessionLoaded || (!laneMapReady && !viewError) || nodes.length === 0) {

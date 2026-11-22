@@ -33,6 +33,7 @@ import {
     buildSandboxSampleDownloadUrl,
     CompletedLabSubmission,
     computeSandboxShutdownSummary,
+    dispatchSandboxRefreshEvents,
     resolveSandboxLaunchTarget,
     downloadTrainingCertificatePdf,
     fetchSandboxHostStatus,
@@ -129,6 +130,11 @@ export default function TrainingCoachDock({
     const [busyAction, setBusyAction] = React.useState<boolean>(false);
     const [hostStatus, setHostStatus] = React.useState<SandboxHostStatus | null>(null);
     const [hostBusy, setHostBusy] = React.useState<boolean>(false);
+    const [pendingHostAction, setPendingHostAction] = React.useState<{
+        action: "start" | "stop" | "reset";
+        requestId?: string;
+        deadlineMs: number;
+    } | null>(null);
     const [feedbackBanner, setFeedbackBanner] = React.useState<{
         severity: "success" | "info" | "error";
         text: string;
@@ -163,21 +169,61 @@ export default function TrainingCoachDock({
         return () => controller.abort();
     }, [refresherMode]);
 
+    const jobInFlight =
+        hostStatus?.activeJob?.state === "QUEUED" || hostStatus?.activeJob?.state === "RUNNING";
     const hostStarting =
-        !hostStatus?.sandboxRunning &&
-        (hostStatus?.activeJob?.state === "QUEUED" || hostStatus?.activeJob?.state === "RUNNING");
+        (!hostStatus?.sandboxRunning && jobInFlight) ||
+        pendingHostAction?.action === "start" ||
+        pendingHostAction?.action === "reset";
+    const shouldPollHost = refresherMode && (jobInFlight || pendingHostAction !== null);
 
     React.useEffect(() => {
-        if (!refresherMode || !hostStarting) return;
+        if (!shouldPollHost) return;
         const timer = setInterval(() => {
             fetchSandboxHostStatus()
                 .then((st) => {
-                    if (st) setHostStatus(st);
+                    if (!st) return;
+                    setHostStatus(st);
+                    const jobState = st.activeJob?.state;
+                    if (jobState === "FAILED") {
+                        setPendingHostAction(null);
+                        setFeedbackBanner({
+                            severity: "error",
+                            text: st.activeJob?.message ?? "Training Sandbox operation failed.",
+                        });
+                        return;
+                    }
+                    if (pendingHostAction) {
+                        const matchedDone =
+                            jobState === "COMPLETED" &&
+                            (!pendingHostAction.requestId || st.activeJob?.requestId === pendingHostAction.requestId);
+                        const startReady =
+                            pendingHostAction.action === "start" && st.sandboxRunning && jobState !== "RUNNING" && jobState !== "QUEUED";
+                        const stopDone =
+                            pendingHostAction.action === "stop" && !st.sandboxRunning && jobState !== "RUNNING" && jobState !== "QUEUED";
+                        const resetDone =
+                            pendingHostAction.action === "reset" && matchedDone && st.sandboxRunning;
+                        if (matchedDone || startReady || stopDone || resetDone) {
+                            setPendingHostAction(null);
+                            setFeedbackBanner({
+                                severity: "success",
+                                text:
+                                    st.activeJob?.message ??
+                                    (st.sandboxRunning
+                                        ? `Training Sandbox ready on port ${st.httpsPort ?? 8444}.`
+                                        : "Training Sandbox stopped and flushed."),
+                            });
+                            return;
+                        }
+                        if (Date.now() > pendingHostAction.deadlineMs) {
+                            setPendingHostAction(null);
+                        }
+                    }
                 })
                 .catch(() => {});
-        }, 3_000);
+        }, 2_500);
         return () => clearInterval(timer);
-    }, [refresherMode, hostStarting]);
+    }, [shouldPollHost, pendingHostAction]);
 
     React.useEffect(() => {
         if (status.activeTrack && status.activeTrack !== selectedTrack) {
@@ -253,11 +299,31 @@ export default function TrainingCoachDock({
         try {
             const next = await submitSandboxHostAction(action, sandboxPort, sandboxTtl);
             setHostStatus(next);
-            setFeedbackBanner({
-                severity: "success",
-                text: next.activeJob?.message ?? `Submitted '${action}' to host sandbox agent.`,
-            });
+            const jobState = next.activeJob?.state;
+            const stillInProgress =
+                jobState === "QUEUED" ||
+                jobState === "RUNNING" ||
+                (action === "start" && !next.sandboxRunning && jobState !== "FAILED") ||
+                (action === "stop" && next.sandboxRunning && jobState !== "FAILED");
+            if (stillInProgress) {
+                setPendingHostAction({
+                    action,
+                    requestId: next.activeJob?.requestId,
+                    deadlineMs: Date.now() + 120_000,
+                });
+                setFeedbackBanner({
+                    severity: "info",
+                    text: next.activeJob?.message ?? `Executing sandbox '${action}'...`,
+                });
+            } else {
+                setPendingHostAction(null);
+                setFeedbackBanner({
+                    severity: jobState === "FAILED" ? "error" : "success",
+                    text: next.activeJob?.message ?? `Completed '${action}' on host sandbox agent.`,
+                });
+            }
         } catch (err: any) {
+            setPendingHostAction(null);
             setFeedbackBanner({
                 severity: "error",
                 text: err?.message ?? "Host sandbox request failed.",
@@ -285,6 +351,11 @@ export default function TrainingCoachDock({
             try {
                 const updated = await stageSandboxTrack(trackId);
                 onStatusUpdated(updated);
+                dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true });
+                setTimeout(() => {
+                    dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                    onRefreshRequested();
+                }, 1_200);
                 setFeedbackBanner({
                     severity: "success",
                     text: updated.stageStatusMessage ?? `Staged ${trackId} environment.`,
@@ -306,6 +377,11 @@ export default function TrainingCoachDock({
         try {
             const updated = await stageSandboxTrack(selectedTrack);
             onStatusUpdated(updated);
+            dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true });
+            setTimeout(() => {
+                dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                onRefreshRequested();
+            }, 1_200);
             setFeedbackBanner({
                 severity: "success",
                 text: updated.stageStatusMessage ?? "Track environment reset.",
@@ -325,8 +401,42 @@ export default function TrainingCoachDock({
         setFeedbackBanner(null);
         try {
             const res = await injectSandboxScenario(scenario, laneSlot);
-            setFeedbackBanner({ severity: "info", text: res.message });
-            setTimeout(() => onRefreshRequested(), 1_600);
+            const isInstantFaultControl =
+                scenario === "fault_gamma_high" ||
+                scenario === "fault_tamper" ||
+                scenario === "clear_faults";
+            setFeedbackBanner({
+                severity: scenario === "clear_faults" ? "success" : "info",
+                text: res.message,
+            });
+            if (isInstantFaultControl) {
+                setTimeout(() => {
+                    dispatchSandboxRefreshEvents({ telemetry: true });
+                }, 250);
+                setTimeout(() => {
+                    onRefreshRequested();
+                }, 400);
+                setTimeout(() => {
+                    dispatchSandboxRefreshEvents({ telemetry: true });
+                }, 950);
+                setTimeout(() => {
+                    onRefreshRequested();
+                }, 1_100);
+            } else if (scenario === "extended_occupancy") {
+                for (const delayMs of [1_200, 9_200, 11_500]) {
+                    setTimeout(() => {
+                        dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                        onRefreshRequested();
+                    }, delayMs);
+                }
+            } else {
+                for (const delayMs of [800, 4_650, 6_200]) {
+                    setTimeout(() => {
+                        dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                        onRefreshRequested();
+                    }, delayMs);
+                }
+            }
         } catch (err: any) {
             setFeedbackBanner({
                 severity: "error",

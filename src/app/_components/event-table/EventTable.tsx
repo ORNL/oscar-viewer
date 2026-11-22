@@ -1062,8 +1062,10 @@ export default function EventTable({
             }
         };
         window.addEventListener("online", reconcileAfterReconnect);
+        window.addEventListener("oscar:sandbox-events-mutated", reconcileAfterReconnect);
         return () => {
             window.removeEventListener("online", reconcileAfterReconnect);
+            window.removeEventListener("oscar:sandbox-events-mutated", reconcileAfterReconnect);
         };
     }, [stableLaneMap.size, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef]);
 

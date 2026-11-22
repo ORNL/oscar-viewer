@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.6
+
+### Added
+
+- Added **Zero-Refresh Live Training Sandbox Reactivity** across both host lifecycle actions (`TrainingSandboxLauncherCard.tsx`, `TrainingCoachDock.tsx` live `2.5 s` polling with `cache: "no-store"` across `start`, `stop`, and `reset`) and all in-sandbox training controls (`TrainingSandboxApi.ts`, `useLaneHealth.ts`, `EventTable.tsx`, `DataSourceContext.tsx`, `Navbar.tsx`): clicking `Clear Faults`, `Fault: Gamma High`, `Fault: Tamper`, occupancy/alarm scenario injections, track staging/reset, or closing Split-Pane `/sensorhub/admin` now reconciles `/health`, the Priority Alarm Queue (`/`), `/event-log`, scoped operational views, and auto-verified lab badges immediately without refreshing the browser.
+
+### Changed
+
+- Aligned the Guided Academy curriculum (`TrainingCurriculum.ts`) with the moving tractor-trailer sandbox camera feed and full `2048×600` 16-bit Beer-Lambert WCO `UFF 3.0.0` truck NII package (`SCFU8572724` / `SWT03`, UUID `dfb985c4-eb26-41ab-938b-ad2a1f5966d4`), synchronized `VideoGuidesCatalog.ts` with all 29 re-recorded `30 fps` CFR workflow guides, and updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.6` (`oscar-3.11.6.zip`).
+
 ## 3.11.5
 
 ### Added

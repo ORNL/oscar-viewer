@@ -209,6 +209,27 @@ export interface CompletedLabSubmission {
 
 export const SANDBOX_WATERMARK_TEXT = "TRAINING SANDBOX — NON-OPERATIONAL";
 
+export const OSCAR_SANDBOX_TELEMETRY_EVENT = "oscar:sandbox-telemetry-mutated";
+export const OSCAR_SANDBOX_EVENTS_EVENT = "oscar:sandbox-events-mutated";
+export const OSCAR_SANDBOX_LANES_EVENT = "oscar:sandbox-lanes-changed";
+
+export function dispatchSandboxRefreshEvents(opts: {
+    telemetry?: boolean;
+    events?: boolean;
+    lanes?: boolean;
+}): void {
+    if (typeof window === "undefined") return;
+    if (opts.lanes) {
+        window.dispatchEvent(new CustomEvent(OSCAR_SANDBOX_LANES_EVENT));
+    }
+    if (opts.telemetry) {
+        window.dispatchEvent(new CustomEvent(OSCAR_SANDBOX_TELEMETRY_EVENT));
+    }
+    if (opts.events) {
+        window.dispatchEvent(new CustomEvent(OSCAR_SANDBOX_EVENTS_EVENT));
+    }
+}
+
 let runtimeSandboxActiveFlag = false;
 
 export function isTrainingSandboxRuntimeActive(): boolean {
@@ -225,6 +246,7 @@ export async function fetchSandboxActiveStatus(signal?: AbortSignal): Promise<Sa
     const response = await fetch(`${SANDBOX_BASE}/active`, {
         method: "GET",
         credentials: "include",
+        cache: "no-store",
         headers: { Accept: "application/json" },
         signal,
     });
@@ -315,6 +337,7 @@ export async function fetchSandboxHostStatus(signal?: AbortSignal): Promise<Sand
     const response = await fetch(`${SANDBOX_BASE}/host`, {
         method: "GET",
         credentials: "include",
+        cache: "no-store",
         headers: { Accept: "application/json" },
         signal,
     });
