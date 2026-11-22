@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.4
+
+### Added
+
+- Added per-lane **ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) Physical RPM Lights & Sound Control** (`WebRelayApi.ts`, `LaneWebRelayDialog.tsx`, `LaneWebRelayDialog.css`, `health/page.tsx`, `lane-view/page.tsx`, `useLaneHealth.ts`, `HelpDialog.tsx`, `VideoGuidesCatalog.ts` across `807` locale keys in `en`, `es`, `fr`, `el`): remains 100% invisible on unconfigured operator views (`0` extra chips when `enabled === false`), displays live `WebRelay` / `WebRelay Aux` online/offline telemetry chips on enabled lanes in **Status of Health (`/health`)** and **Lane View (`/lane-view`)**, and provides an Administrator modal dialog (native `<dialog>` with `showModal()`) to switch lanes, inspect live `R1–R4` coil states and EML (`Code 9999`) / Extended Occupancy (`Code 9998`) suppression counters, trigger hardware-timed pulses or latched walk-around overrides on **Gamma Light + Sound** and **Neutron Blue Light**, silence/arm or release to `0,0,0,0` hardware pass-through, test HTTP/XML connectivity (`stateFull.xml` / `state.xml`), and persist per-lane `AUTO` / `PASS_THROUGH` / `MUTED` settings, alongside bundled how-to video guide `#29` (`29-lane-webrelay-lights-and-sound`).
+
+### Changed
+
+- Updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.4` (`oscar-3.11.4.zip`).
+
 ## 3.11.3
 
 ### Added

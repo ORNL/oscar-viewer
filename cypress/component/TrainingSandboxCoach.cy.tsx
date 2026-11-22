@@ -18,8 +18,8 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         setTrainingSandboxRuntimeActiveForTests(false);
     });
 
-    it("maps all 12 curriculum labs across 3 role tracks to valid 28-guide catalog entries", () => {
-        expect(VIDEO_GUIDES_CATALOG.length).to.equal(28);
+    it("maps all 12 curriculum labs across 3 role tracks to valid 29-guide catalog entries", () => {
+        expect(VIDEO_GUIDES_CATALOG.length).to.equal(29);
         const guide28 = getVideoGuideBySlug("28-hands-on-training-sandbox");
         expect(guide28).to.not.equal(undefined);
         expect(guide28?.badge).to.equal("28");
@@ -209,7 +209,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             </LanguageProvider>,
         );
 
-        cy.contains("OSCAR 3.11.3 Operator Quick Guide & Glossary").should("be.visible");
+        cy.contains("OSCAR 3.11.4 Operator Quick Guide & Glossary").should("be.visible");
         cy.contains('[role="tab"]', "Manual & Video Guides").click();
         cy.get('[data-testid="help-training-sandbox-card"]').should("be.visible");
         cy.get('[data-testid="help-sandbox-launch-btn"]').should("be.visible");

@@ -161,6 +161,31 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
     return payload as T;
 }
 
+let cachedSessionInfo: OscarSessionInfo | null = null;
+const sessionInfoListeners = new Set<(session: OscarSessionInfo | null) => void>();
+
+export function getCachedSessionInfo(): OscarSessionInfo | null {
+    return cachedSessionInfo;
+}
+
+export function subscribeSessionInfo(listener: (session: OscarSessionInfo | null) => void): () => void {
+    sessionInfoListeners.add(listener);
+    return () => {
+        sessionInfoListeners.delete(listener);
+    };
+}
+
+function publishCachedSessionInfo(next: OscarSessionInfo | null): void {
+    cachedSessionInfo = next;
+    sessionInfoListeners.forEach((listener) => {
+        try {
+            listener(next);
+        } catch {
+            // ignore listener error
+        }
+    });
+}
+
 export async function fetchCurrentSession(signal?: AbortSignal): Promise<OscarSessionInfo | null> {
     try {
         const res = await fetch(SESSION_API_BASE, {
@@ -171,7 +196,7 @@ export async function fetchCurrentSession(signal?: AbortSignal): Promise<OscarSe
         if (!res.ok) return null;
         const json = await res.json();
         if (!json || typeof json.username !== 'string') return null;
-        return {
+        const parsed: OscarSessionInfo = {
             username: json.username,
             displayName: json.displayName || json.username,
             roles: Array.isArray(json.roles) ? json.roles : [],
@@ -190,6 +215,8 @@ export async function fetchCurrentSession(signal?: AbortSignal): Promise<OscarSe
             idleTimeoutSeconds: Number(json.idleTimeoutSeconds ?? 0),
             absoluteTimeoutSeconds: Number(json.absoluteTimeoutSeconds ?? 0),
         };
+        publishCachedSessionInfo(parsed);
+        return parsed;
     } catch (err: any) {
         if (err?.name !== 'AbortError') {
             console.warn('Unable to load OSCAR session metadata:', err);
