@@ -2,6 +2,7 @@ import React from "react";
 import {strFromU8, strToU8, unzipSync, zipSync} from "fflate";
 import {LanguageProvider} from "../../src/app/contexts/LanguageContext";
 import HelpDialog from "../../src/app/_components/HelpDialog";
+import {getVideoGuideBySlug} from "../../src/lib/data/oscar/VideoGuidesCatalog";
 import {
     clearSupportDiagnosticEventsForTesting,
     getSupportDiagnosticEventsSnapshot,
@@ -218,11 +219,14 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
             </LanguageProvider>,
         );
 
+        const guide14 = getVideoGuideBySlug("14-airgapped-alarm-qr-transfer");
+        expect(guide14?.durationLabel).to.equal("17.5s");
+
         cy.get('[data-testid="help-inline-video-player"]').should("not.exist");
         cy.get('[data-testid="help-contextual-guide-14"]')
             .should("be.visible")
             .and("have.attr", "aria-pressed", "false")
-            .and("contain.text", "Ver #14 (25.2s)")
+            .and("contain.text", `Ver #14 (${guide14!.durationLabel})`)
             .click();
 
         cy.get('[data-testid="help-contextual-guide-14"]').should("have.attr", "aria-pressed", "true");
