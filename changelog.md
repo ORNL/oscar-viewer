@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.5
+
+### Added
+
+- Added context-aware **Remote Zero-Trust Subdomain Practice Sandbox Launching** (`resolveSandboxLaunchTarget` in `TrainingSandboxApi.ts`, `TrainingSandboxLauncherCard.tsx`, `TrainingCoachDock.tsx`, `TrainingCurriculum.ts` across `en`, `es`, `fr`, `el`): automatically opens `https://<site>-sandbox.<hub>` over standard HTTPS `:443` (with Let's Encrypt TLS and shared parent-domain Passkey `rpId`) whenever a user accesses OSCAR through a Federation Hub tunnel (`<site>.<hub>`), while preserving direct `https://<host>:8444` launching on local LAN, VPN, and Tailscale connections.
+
+### Changed
+
+- Updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.5` (`oscar-3.11.5.zip`).
+
 ## 3.11.4
 
 ### Added

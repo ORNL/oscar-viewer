@@ -33,6 +33,7 @@ import {
     buildSandboxSampleDownloadUrl,
     CompletedLabSubmission,
     computeSandboxShutdownSummary,
+    resolveSandboxLaunchTarget,
     downloadTrainingCertificatePdf,
     fetchSandboxHostStatus,
     injectSandboxScenario,
@@ -217,10 +218,15 @@ export default function TrainingCoachDock({
 
     const sandboxPort = hostStatus?.httpsPort ?? 8444;
     const sandboxTtl = hostStatus?.ttlMinutes ?? status.ttlMinutes ?? 120;
-    const sandboxUrl = React.useMemo(() => {
-        if (typeof window === "undefined") return `https://localhost:${sandboxPort}`;
-        return `https://${window.location.hostname}:${sandboxPort}`;
-    }, [sandboxPort]);
+    const launchTarget = React.useMemo(
+        () =>
+            resolveSandboxLaunchTarget(
+                hostStatus,
+                typeof window !== "undefined" ? window.location.hostname : undefined,
+            ),
+        [hostStatus],
+    );
+    const sandboxUrl = launchTarget.url;
 
     const activeShutdownSummary = React.useMemo(
         () =>
@@ -576,7 +582,7 @@ export default function TrainingCoachDock({
                                             data-testid="coach-sandbox-open-btn"
                                             sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.76rem" }}
                                         >
-                                            {ui.openPracticeBtn(sandboxPort)}
+                                            {ui.openPracticeBtn(launchTarget.badgeLabel)}
                                         </Button>
                                         {hostStatus.canStopOrReset && (
                                             <>
@@ -617,7 +623,9 @@ export default function TrainingCoachDock({
                                         data-testid="coach-sandbox-launch-btn"
                                         sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.76rem" }}
                                     >
-                                        {hostStarting ? ui.startingPracticeBtn : ui.launchPracticeBtn(sandboxPort)}
+                                        {hostStarting
+                                            ? ui.startingPracticeBtn
+                                            : ui.launchPracticeBtn(launchTarget.badgeLabel)}
                                     </Button>
                                 ) : (
                                     <Typography
