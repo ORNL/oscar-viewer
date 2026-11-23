@@ -312,22 +312,22 @@ describe("operational view scoping", () => {
         };
 
         // Operator Track: only north-gate is staged initially
-        const operatorCatalog = await node.fetchOperationalViewCatalog();
-        expect(operatorCatalog.totalLaneCount).to.equal(1);
-        expect(operatorCatalog.options).to.deep.equal([{key: "north-gate", laneCount: 1}]);
+        const operatorMerged = mergeOperationalViewCatalogs([await node.fetchOperationalViewCatalog()]);
+        expect(operatorMerged.totalLaneCount).to.equal(1);
+        expect(operatorMerged.options).to.deep.equal([{key: "north-gate", laneCount: 1}]);
 
         // Switching to Supervisor Track adds DemoLane02 (south-gate)
         activeSystems = [laneNorth, laneSouth];
 
         // Without invalidation, memoized promise returns stale Operator catalog
-        const cachedCatalog = await node.fetchOperationalViewCatalog();
-        expect(cachedCatalog.options).to.deep.equal([{key: "north-gate", laneCount: 1}]);
+        const cachedMerged = mergeOperationalViewCatalogs([await node.fetchOperationalViewCatalog()]);
+        expect(cachedMerged.options).to.deep.equal([{key: "north-gate", laneCount: 1}]);
 
         // Invalidating (or passing forceRefresh=true on oscar:sandbox-lanes-changed) surfaces south-gate immediately
         node.invalidateOperationalViewCatalog();
-        const supervisorCatalog = await node.fetchOperationalViewCatalog();
-        expect(supervisorCatalog.totalLaneCount).to.equal(2);
-        expect(supervisorCatalog.options).to.deep.equal([
+        const supervisorMerged = mergeOperationalViewCatalogs([await node.fetchOperationalViewCatalog()]);
+        expect(supervisorMerged.totalLaneCount).to.equal(2);
+        expect(supervisorMerged.options).to.deep.equal([
             {key: "north-gate", laneCount: 1},
             {key: "south-gate", laneCount: 1},
         ]);
