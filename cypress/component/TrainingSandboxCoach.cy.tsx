@@ -19,8 +19,10 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         setTrainingSandboxRuntimeActiveForTests(false);
     });
 
-    it("maps all 13 curriculum labs across 3 role tracks to valid 29-guide catalog entries", () => {
-        expect(VIDEO_GUIDES_CATALOG.length).to.equal(29);
+    it("maps all 13 curriculum labs across 3 role tracks to valid 31-guide catalog entries", () => {
+        expect(VIDEO_GUIDES_CATALOG.length).to.equal(31);
+        expect(getVideoGuideBySlug("30-zero-login-github-system-update")?.badge).to.equal("30");
+        expect(getVideoGuideBySlug("31-bare-metal-autoinstall-usb-creator")?.badge).to.equal("31");
         const guide28 = getVideoGuideBySlug("28-hands-on-training-sandbox");
         expect(guide28).to.not.equal(undefined);
         expect(guide28?.badge).to.equal("28");
