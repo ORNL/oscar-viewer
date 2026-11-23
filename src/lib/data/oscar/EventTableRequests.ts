@@ -217,7 +217,7 @@ export interface UseAbortableEventQueriesArgs {
     ) => Promise<EventTableData[]>;
 }
 
-const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 250;
+const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 300;
 const BUCKET_COUNTS_PREWARM_DELAY_MS = 0;
 const MAX_VISITED_PAGE_CACHE_ENTRIES = 64;
 

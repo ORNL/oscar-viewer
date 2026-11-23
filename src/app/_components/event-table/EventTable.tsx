@@ -1010,7 +1010,9 @@ export default function EventTable({
                         }
                     }
                     if (!passesLocal) return;
-                    invalidatePrefetch();
+                    // Historical pages (page >= 1) and their adjacent prefetches/visited-page cache
+                    // are anchored to the immutable snapshot cutoff (pageLoadedTime); do not abort
+                    // in-flight historical prefetches or wipe visited pages on live occupancy arrival.
                     if (allFilteredCutoffRef.current && event.status !== "None" && !event.adjudicatedIds?.length) {
                         setPostSelectionKeys(previous => new Set(previous).add(eventSelectionKey(event)));
                     }
@@ -1049,7 +1051,6 @@ export default function EventTable({
         advanceSnapshotCutoff,
         currentPageRef,
         filter,
-        invalidatePrefetch,
         isAlarmTable,
         setRowCount,
         setRows,
