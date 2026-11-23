@@ -1,6 +1,18 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.7
+
+### Added
+
+- Added **Adjacent Next-Page (`page + 1`) Background Prefetch & In-Flight Promise Reuse** (`useAbortableEventQueries` in `EventTableRequests.ts`, `EventTable.tsx`): as soon as the active page finishes rendering and additional rows exist (`rowCount > (page + 1) * pageSize`), prefetches `page + 1` in the background using the exact query key (filters, node scope, operational view, sort mode, temporal window, and cutoff timestamp) with zero `/observations/count` calls, reuses resolved or in-flight prefetch promises on **Next page** clicks to keep 50-lane Dashboard pagination well within the `1,500 ms` SLO, and invalidates stale prefetches immediately on filter/sort/view/node changes, adjudications, manual retries, or live matching alarm arrivals.
+- Added **4-Language (`en`, `es`, `fr`, `el`) WebVTT Closed-Caption `<track>` Synchronization** across all 29 bundled how-to video guides (`VideoGuidesCatalog.ts`, `HelpDialog.tsx`, `TrainingCoachDock.tsx`), rendering `English`, `Español`, `Français`, and `Ελληνικά` caption tracks with live `HTMLMediaElement.textTracks` mode synchronization whenever the UI language changes.
+- Added **Platform-Wide Visual Symbol Introductions & 1-Click Icon Spotlights** (`PlatformIcons.tsx`, `Navbar.tsx`, `LanguageSelector.tsx`, `TrainingCurriculum.ts`, `TrainingCoachDock.tsx`, `HelpDialog.tsx`, and console page headers): pairs every left-drawer route and top-bar tool with deterministic `data-testid` spotlight targets, inline `{{icon:...}}` MUI symbol badges plus plain-language symbol descriptions across all 13 Training Coach labs and all 11 localized `Help (?)` Console Page cards (`en`, `es`, `fr`, `el`), and contextual **Highlight Icon** buttons (including **Highlight Status of Health Icon** on Lab `1.1`).
+
+### Changed
+
+- Upgraded GitHub Actions workflow steps (`.github/workflows/gradle_build.yml`) to Node 24-ready `actions/checkout@v5` and `actions/setup-node@v5`, and updated operator help titles, support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.7` (`oscar-3.11.7.zip`).
+
 ## 3.11.6
 
 ### Added

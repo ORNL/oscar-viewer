@@ -4,6 +4,7 @@
  */
 
 import { Locale } from "@/app/contexts/LanguageContext";
+import type { PlatformIconKey } from "@/app/_components/common/PlatformIcons";
 import {
     SandboxScenarioId,
     SandboxTrackId,
@@ -16,11 +17,19 @@ export interface TrainingInjectAction {
     laneSlot?: 1 | 2;
 }
 
+export interface TrainingSpotlightTarget {
+    id: string;
+    selector: string;
+    label: string;
+    iconKey?: PlatformIconKey;
+}
+
 export interface TrainingLabDefinition {
     id: string;
     trackId: SandboxTrackId;
     badge: string;
     route: string;
+    pageIconKey?: PlatformIconKey;
     splitPaneAdmin?: boolean;
     videoGuideSlug: string;
     screenshotFile: string;
@@ -32,6 +41,7 @@ export interface TrainingLabDefinition {
     injectActions?: TrainingInjectAction[];
     sampleFiles?: { fileName: string; buttonLabel: string }[];
     copySnippets?: { label: string; value: string }[];
+    spotlights?: TrainingSpotlightTarget[];
     spotlightSelector?: string;
     spotlightLabel?: string;
     objectiveSummary: string;
@@ -337,17 +347,18 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "operator",
         badge: "1.1",
         route: "/health",
+        pageIconKey: "health",
         videoGuideSlug: "15-status-of-health-and-site-map",
         screenshotFile: "18-viewer-dashboard.png",
         screenshotCaption: "Live Dashboard & Status of Health showing Online RPM/camera tiles and fault badges.",
         title: "Live Lane Monitoring, Status of Health & Fault Triage",
         durationEstimate: "3 min",
         whyItMatters:
-            "Before trusting clean portal passes, operators must confirm both the RPM and lane camera are Online with zero active Gamma High/Low or Tamper faults.",
+            "Before trusting clean portal passes, operators must check Status of Health {{icon:health}} (the heart-pulse monitor icon) and Dashboard {{icon:dashboard}} (the four-tile grid icon) to confirm both the RPM and lane camera are Online with zero active Gamma High/Low or Tamper faults.",
         steps: [
-            "Open Status of Health (/health) or Dashboard (/) and confirm DemoLane01 shows Online for both the Rapiscan RPM and camera.",
-            "Click 'Inject Gamma High Fault' or 'Inject Tamper Alarm' below and watch the lane health indicator immediately flag the detector fault.",
-            "Click 'Clear Faults' to restore normal background (`GB` / `TC`) and click 'Inject Clean Vehicle Pass' to observe a non-alarm occupancy.",
+            "Open Status of Health {{icon:health}} (`/health`, the heart-pulse monitor icon in the left navigation bar) or Dashboard {{icon:dashboard}} (`/`, the four-tile grid icon) and confirm `DemoLane01` shows Online for both the Rapiscan RPM and camera — or click Help {{icon:help}} (the circled `?` icon in the top-right bar) anytime for quick reference.",
+            "Click 'Inject Gamma High Fault' or 'Inject Tamper Alarm' below and watch the Status of Health {{icon:health}} indicator immediately flag the detector fault.",
+            "Click 'Clear Faults' to restore normal background (`GB` / `TC`) and click 'Inject Clean Pass' to observe a non-alarm occupancy.",
         ],
         injectActions: [
             { scenario: "fault_gamma_high", label: "Inject Gamma High Fault" },
@@ -355,8 +366,28 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
             { scenario: "clear_faults", label: "Clear Faults" },
             { scenario: "clean_pass", label: "Inject Clean Pass" },
         ],
-        spotlightSelector: '[data-testid="navbar-help-button"]',
-        spotlightLabel: "Highlight Help (?) Button",
+        spotlights: [
+            {
+                id: "health",
+                selector: '[data-testid="nav-item-health"]',
+                label: "Highlight Status of Health Icon",
+                iconKey: "health",
+            },
+            {
+                id: "dashboard",
+                selector: '[data-testid="nav-item-dashboard"]',
+                label: "Highlight Dashboard Icon",
+                iconKey: "dashboard",
+            },
+            {
+                id: "help",
+                selector: '[data-testid="navbar-help-button"]',
+                label: "Highlight Help (?) Icon",
+                iconKey: "help",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-health"]',
+        spotlightLabel: "Highlight Status of Health Icon",
         objectiveSummary: "At least 1 lane online and 1 occupancy recorded (`onlineLaneCount >= 1 && totalOccupancies >= 1`).",
         isAutoVerified: (v) => v.onlineLaneCount >= 1 && v.totalOccupancies >= 1,
     },
@@ -365,21 +396,44 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "operator",
         badge: "1.2",
         route: "/",
+        pageIconKey: "dashboard",
         videoGuideSlug: "09-dashboard-monitoring-and-quick-adjudication",
         screenshotFile: "26-dashboard-adjudication.png",
         screenshotCaption: "Dashboard quick-preview drawer with 5 retained JPEG keyframes, count profile, and disposition selector.",
         title: "Priority Alarm Queue & 5-Frame Alarm Adjudication",
         durationEstimate: "4 min",
         whyItMatters:
-            "Every un-suppressed Gamma or Neutron alarm stays bold in the shared Gatehouse queue until an operator reviews the radiation profile, retained 5-JPEG frames, and records an auditable disposition code.",
+            "Every un-suppressed Gamma or Neutron alarm stays bold in the shared Gatehouse queue on Dashboard {{icon:dashboard}} (the four-tile grid icon) until an operator reviews the radiation profile, retained 5-JPEG frames, and records an auditable disposition code.",
         steps: [
-            "Click 'Inject Gamma Alarm' below if you want a fresh localized point-source gamma spike on DemoLane01.",
-            "On Dashboard (/) or Events (/event-log), click the bold alarm row to inspect its gamma count curve above the NSIGMA threshold and its retained camera snapshots.",
+            "Click 'Inject Gamma Alarm' below if you want a fresh localized point-source gamma spike on `DemoLane01`.",
+            "On Dashboard {{icon:dashboard}} (`/`, the four-tile grid icon in the left navigation bar) or Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon), click the bold alarm row to inspect its gamma count curve above the NSIGMA threshold and its retained camera snapshots (use Settings {{icon:settings}}, the top-right gear icon, to configure visual or audio unread alerts).",
             "Select a Disposition Code (for example Code 9: Authorized Test, Maintenance, or Training Activity), set Secondary Inspection Status, enter operator notes, and click Submit Adjudication.",
         ],
         injectActions: [
             { scenario: "gamma_alarm", label: "Inject Gamma Alarm" },
         ],
+        spotlights: [
+            {
+                id: "dashboard",
+                selector: '[data-testid="nav-item-dashboard"]',
+                label: "Highlight Dashboard Icon",
+                iconKey: "dashboard",
+            },
+            {
+                id: "events",
+                selector: '[data-testid="nav-item-events"]',
+                label: "Highlight Events Icon",
+                iconKey: "events",
+            },
+            {
+                id: "settings",
+                selector: '[data-testid="navbar-settings-button"]',
+                label: "Highlight Settings Gear Icon",
+                iconKey: "settings",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-dashboard"]',
+        spotlightLabel: "Highlight Dashboard Icon",
         objectiveSummary: "Submit at least 1 human operator adjudication (`operatorAdjudicatedCount >= 1`).",
         isAutoVerified: (v) => v.operatorAdjudicatedCount >= 1,
     },
@@ -388,6 +442,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "operator",
         badge: "1.3",
         route: "/event-log",
+        pageIconKey: "events",
         videoGuideSlug: "12-event-log-filtering-and-adjudication-codes",
         screenshotFile: "27-event-list.png",
         screenshotCaption: "Events log filtering across Code 9999 (EML Non-Threat), Code 9998 (Extended Occupancy), and active Neutron alarms.",
@@ -396,15 +451,31 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         whyItMatters:
             "OSCAR reduces nuisance workload by auto-releasing spatially uniform NORM cargo (`Code 9999`) and stalled gamma-only holds (`Code 9998`), while strictly refusing to auto-release any Neutron alarm.",
         steps: [
-            "Click 'Inject Distributed NORM (Code 9999)' to stream a balanced 4-panel cargo profile; verify in Events (/event-log) that EML auto-adjudicates it as Code 9999: EML Non-Threat.",
-            "Click 'Inject Extended Occupancy (Code 9998)' (takes ~10s in sandbox mode) to watch Fault - Extended Occupancy trigger and auto-adjudicate gamma-only exit as Code 9998.",
-            "Click 'Inject Neutron Alarm' and confirm that Neutron triggers NEVER auto-release and immediately demand human secondary inspection.",
+            "Click 'Inject Distributed NORM (Code 9999)' to stream a balanced 4-panel cargo profile; verify in Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon in the left navigation bar) that EML auto-adjudicates it as `Code 9999: EML Non-Threat`.",
+            "Click 'Inject Extended Hold (Code 9998)' (takes ~10s in sandbox mode) to watch `Fault - Extended Occupancy` appear in Status of Health {{icon:health}} (the heart-pulse monitor icon) and auto-adjudicate gamma-only exit as `Code 9998`.",
+            "Click 'Inject Neutron Alarm' and confirm in Events {{icon:events}} that Neutron triggers NEVER auto-release and immediately demand human secondary inspection.",
         ],
         injectActions: [
             { scenario: "norm_eml", label: "Inject Distributed NORM (Code 9999)" },
             { scenario: "extended_occupancy", label: "Inject Extended Hold (Code 9998)" },
             { scenario: "neutron_alarm", label: "Inject Neutron Alarm" },
         ],
+        spotlights: [
+            {
+                id: "events",
+                selector: '[data-testid="nav-item-events"]',
+                label: "Highlight Events Icon",
+                iconKey: "events",
+            },
+            {
+                id: "health",
+                selector: '[data-testid="nav-item-health"]',
+                label: "Highlight Status of Health Icon",
+                iconKey: "health",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-events"]',
+        spotlightLabel: "Highlight Events Icon",
         objectiveSummary: "Observe at least 1 automated `Code 9999` or `Code 9998` disposition (`emlCode9999Count >= 1 || extendedCode9998Count >= 1`).",
         isAutoVerified: (v) => v.emlCode9999Count >= 1 || v.extendedCode9998Count >= 1,
     },
@@ -413,6 +484,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "operator",
         badge: "1.4",
         route: "/event-log",
+        pageIconKey: "alarm-transfer",
         videoGuideSlug: "17-vehicle-ocr-and-adjudication",
         screenshotFile: "29-event-details-adjudication.png",
         screenshotCaption: "Event Details adjudication workflow with ISO 6346 Container OCR chip, .n42 spectrum upload, and QR export.",
@@ -421,9 +493,9 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         whyItMatters:
             "Attaching the handheld RIID `.n42` spectrum and verified ISO 6346 container ID ties physical secondary inspection evidence permanently to the portal occupancy.",
         steps: [
-            "Click 'Download Practice Cs-137/Co-60 (.n42)' below to save a synthetic secondary-inspection gamma spectrum to your computer.",
-            "Open any alarm's Event Details page from Events (/event-log), inspect the Vehicle / Container ID field (or click an OCR suggestion chip), upload `sample-cs137-co60.n42`, select Cs-137 / Co-60, and submit.",
-            "Optional: Click 'Share / Export QR' on the event (or open /alarm-transfer) — notice sandbox QR exports carry an explicit TRAINING SANDBOX — NON-OPERATIONAL watermark.",
+            "Click 'Download Practice Spectrum (.n42)' below to save a synthetic secondary-inspection gamma spectrum to your computer.",
+            "Open any alarm's Event Details page from Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon in the left navigation bar), inspect the Vehicle / Container ID field (or click an OCR suggestion chip), upload `sample-cs137-co60.n42`, select Cs-137 / Co-60, and submit.",
+            "Optional: Click 'Share / Export QR' {{icon:qr}} on the event or open Alarm Transfer {{icon:alarm-transfer}} (`/alarm-transfer`, the QR-scanner frame icon in the left navigation bar) — notice sandbox QR exports carry an explicit `TRAINING SANDBOX — NON-OPERATIONAL` watermark.",
         ],
         sampleFiles: [
             { fileName: "sample-cs137-co60.n42", buttonLabel: "Download Practice Spectrum (.n42)" },
@@ -431,6 +503,22 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         copySnippets: [
             { label: "Copy Container ID", value: "SCFU8572724" },
         ],
+        spotlights: [
+            {
+                id: "events",
+                selector: '[data-testid="nav-item-events"]',
+                label: "Highlight Events Icon",
+                iconKey: "events",
+            },
+            {
+                id: "alarm-transfer",
+                selector: '[data-testid="nav-item-alarm-transfer"]',
+                label: "Highlight Alarm Transfer QR Icon",
+                iconKey: "alarm-transfer",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-events"]',
+        spotlightLabel: "Highlight Events Icon",
         objectiveSummary: "Record an adjudication with isotope/spectrum evidence or a normalized Vehicle/Container ID.",
         isAutoVerified: (v) => v.adjudicatedWithEvidenceCount >= 1 || v.adjudicatedWithVehicleIdCount >= 1,
     },
@@ -439,16 +527,17 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "operator",
         badge: "1.5",
         route: "/event-log",
+        pageIconKey: "uff",
         videoGuideSlug: "27-cargo-uff-smb-and-xray-inspection",
         screenshotFile: "49-cargo-uff-16bit-xray-inspector.png",
         screenshotCaption: "16-bit WCO UFF 3.0 cargo radiograph inspector with window/level LUT controls, HEMD effective-Z material bands, and aligned RPM count strip.",
         title: "16-Bit WCO UFF Cargo X-Ray & HEMD Material Inspection",
         durationEstimate: "4 min",
         whyItMatters:
-            "Correlating dual-energy cargo X-ray High-Z shielding anomalies (`Z_eff > 72`) with the RPM gamma/neutron count profile pinpoints shielded sources inside dense cargo pallets.",
+            "Correlating dual-energy cargo X-ray High-Z shielding anomalies (`Z_eff > 72`) via the Cargo X-Ray / UFF inspector {{icon:uff}} (the stacked-layers icon) with the RPM gamma/neutron count profile pinpoints shielded sources inside dense cargo pallets.",
         steps: [
-            "In Events (/event-log), paste the sandbox UFF UUID (`dfb985c4-eb26-41ab-938b-ad2a1f5966d4`) or container `SCFU8572724` into the search bar, OR open an Event Details page and click Browse Cargo NII Share / Upload `.uff`.",
-            "Open the 16-bit X-Ray Inspector, adjust Window/Level contrast, toggle the HEMD High-Z material overlay (`Organic`, `Intermediate`, `Inorganic`, `High-Z Shielding`), and inspect the localized High-Z metallic attenuation anomaly.",
+            "Open Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon in the left navigation bar) and paste the sandbox UFF UUID (`dfb985c4-eb26-41ab-938b-ad2a1f5966d4`) or container `SCFU8572724` into the search bar to reveal the Open Cargo X-Ray {{icon:uff}} stacked-layers button, OR open an Event Details page and click Browse Cargo NII Share / Upload `.uff`.",
+            "Open the 16-bit X-Ray Inspector {{icon:uff}}, adjust Window/Level contrast, toggle the HEMD High-Z material overlay (`Organic`, `Intermediate`, `Inorganic`, `High-Z Shielding`), and inspect the localized High-Z metallic attenuation anomaly.",
             "You can also download `sample-cargo-uff3.uff` below to test direct client-side `.uff` file upload.",
         ],
         sampleFiles: [
@@ -457,6 +546,22 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         copySnippets: [
             { label: "Copy UFF Scan UUID", value: "dfb985c4-eb26-41ab-938b-ad2a1f5966d4" },
         ],
+        spotlights: [
+            {
+                id: "events",
+                selector: '[data-testid="nav-item-events"]',
+                label: "Highlight Events Icon",
+                iconKey: "events",
+            },
+            {
+                id: "uff",
+                selector: '[data-testid="event-log-open-uff-btn"], [data-testid="vehicle-id-search-bar"]',
+                label: "Highlight Cargo UFF Search / X-Ray Control",
+                iconKey: "uff",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-events"]',
+        spotlightLabel: "Highlight Events Icon",
         objectiveSummary: "Sandbox Cargo NII index active with practice `.uff` packages (`cargoUffEnabled && cargoUffIndexedCount >= 1`).",
         isAutoVerified: (v) => v.cargoUffEnabled && v.cargoUffIndexedCount >= 1,
     },
@@ -467,20 +572,35 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "supervisor",
         badge: "2.1",
         route: "/event-log",
+        pageIconKey: "scoped-view",
         videoGuideSlug: "10-operational-views-scoping",
         screenshotFile: "35-vehicle-pass-comparison.png",
         screenshotCaption: "Scoped View workstation filter and Multi-Pass Vehicle Comparison correlating passes across North Gate and South Gate.",
         title: "Operational Views (`north-gate` / `south-gate`) & Multi-Pass Correlation",
         durationEstimate: "4 min",
         whyItMatters:
-            "Shift supervisors scope gatehouse screens to specific portals (`?view=north-gate`) while correlating repeat or re-scan passes of the same container across all lanes.",
+            "Shift supervisors scope gatehouse screens to specific portals (`?view=north-gate`) using the top-bar Scoped View {{icon:scoped-view}} selector while correlating repeat or re-scan passes of the same container across all lanes.",
         steps: [
-            "Use the top-bar Scoped View dropdown to switch between All Lanes, `north-gate` (DemoLane01), and `south-gate` (DemoLane02).",
-            "Open Events (/event-log), search for container `SCFU8572724`, and open Multi-Pass Vehicle Comparison to compare the primary and confirmation passes side by side.",
+            "Use the top-bar Scoped View {{icon:scoped-view}} dropdown (in the upper console bar) to switch between All Lanes, `north-gate` (`DemoLane01`), and `south-gate` (`DemoLane02`).",
+            "Open Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon in the left navigation bar), search for container `SCFU8572724`, and open Multi-Pass Vehicle Comparison to compare the primary and confirmation passes side by side.",
             "Save a reusable filter in Saved Queries (for example, Alarms Only or Code 1 Real Alarms) for one-click shift handoff.",
         ],
         copySnippets: [
             { label: "Copy Multi-Pass Container", value: "SCFU8572724" },
+        ],
+        spotlights: [
+            {
+                id: "scoped-view",
+                selector: '[data-testid="navbar-scoped-view-select"], [data-testid="navbar-scoped-view-badge"]',
+                label: "Highlight Scoped View Selector",
+                iconKey: "scoped-view",
+            },
+            {
+                id: "events",
+                selector: '[data-testid="nav-item-events"]',
+                label: "Highlight Events Icon",
+                iconKey: "events",
+            },
         ],
         spotlightSelector: '[data-testid="navbar-scoped-view-select"]',
         spotlightLabel: "Highlight Scoped View Selector",
@@ -492,21 +612,38 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "supervisor",
         badge: "2.2",
         route: "/report",
+        pageIconKey: "report",
         videoGuideSlug: "16-national-statistics-and-reports",
         screenshotFile: "40-upset-category-filters-and-other-snm.png",
         screenshotCaption: "Adjudication Report UpSet co-occurrence plot with crimson SNM highlighting and multi-format PDF/CSV/JSON/XLSX export.",
         title: "UpSet SNM Co-Occurrence Analytics & 6-Type Multi-Format Reports",
         durationEstimate: "4 min",
         whyItMatters:
-            "Supervisors audit alarm rates, EML suppression (`Code 9999`), and Special Nuclear Material (`SNM`) isotope intersections across PDF, CSV, JSON, and Excel workbooks.",
+            "Supervisors audit alarm rates, EML suppression (`Code 9999`), and Special Nuclear Material (`SNM`) isotope intersections in Report Generator {{icon:report}} (the three-bar chart icon) across PDF, CSV, JSON, and Excel workbooks.",
         steps: [
-            "Open Report Generator (/report) and select Adjudication Report (`ADJUDICATION`) or RDS Site Report (`RDS_SITE`).",
+            "Open Report Generator {{icon:report}} (`/report`, the three-bar chart icon in the left navigation bar) and select Adjudication Report (`ADJUDICATION`) or RDS Site Report (`RDS_SITE`).",
             "Generate a PDF report and inspect the inline preview: verify the `TRAINING SANDBOX — NON-OPERATIONAL` header/footer watermark and the UpSet Alarm & Source-Category Co-Occurrence chart.",
             "Switch format to Excel (`.xlsx`), CSV, or JSON (or run a `VEHICLE_INCIDENT` report for `SCFU8572724`) to verify structured exports.",
         ],
         copySnippets: [
             { label: "Copy Incident Vehicle ID", value: "SCFU8572724" },
         ],
+        spotlights: [
+            {
+                id: "report",
+                selector: '[data-testid="nav-item-report"]',
+                label: "Highlight Report Generator Icon",
+                iconKey: "report",
+            },
+            {
+                id: "events",
+                selector: '[data-testid="nav-item-events"]',
+                label: "Highlight Events Icon",
+                iconKey: "events",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-report"]',
+        spotlightLabel: "Highlight Report Generator Icon",
         objectiveSummary: "Generate at least 1 report in `/report` (`generatedReportCount >= 1`).",
         isAutoVerified: (v) => v.generatedReportCount >= 1,
     },
@@ -515,19 +652,40 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "supervisor",
         badge: "2.3",
         route: "/national-view",
+        pageIconKey: "national",
         videoGuideSlug: "18-operator-help-and-support-bundle",
         screenshotFile: "34-viewer-help-support-bundle.png",
         screenshotCaption: "National node overview and 1-click secret-redacted Support Bundle export inside Help (?).",
         title: "National Node Summary & Secret-Redacted Support Bundles",
         durationEstimate: "3 min",
         whyItMatters:
-            "When escalating field anomalies, supervisors export a single `.zip` diagnostic bundle with all passwords, tokens, cookies, and RTSP credentials automatically scrubbed.",
+            "When escalating field anomalies across sites in National {{icon:national}} (the connected-nodes network icon), supervisors open Help {{icon:help}} (the circled `?` icon) to export a single `.zip` diagnostic bundle with all passwords, tokens, cookies, and RTSP credentials automatically scrubbed.",
         steps: [
-            "Open National (/national-view) to review aggregated occupancies, gamma/neutron alarms, and faults across time windows.",
-            "Click the top-right Help (`?`) button, open the 'Manual & Video Guides' tab, and click 'Export Support Bundle' to download a redacted diagnostic `.zip`.",
+            "Open National {{icon:national}} (`/national-view`, the connected-nodes network icon in the left navigation bar) to review aggregated occupancies, gamma/neutron alarms, and faults across time windows (federated nodes are managed in Nodes {{icon:servers}}, the cloud icon).",
+            "Click the top-right Help {{icon:help}} button (the circled `?` icon), open the 'Manual & Video Guides' tab, and click 'Export Support Bundle' to download a redacted diagnostic `.zip`.",
         ],
-        spotlightSelector: '[data-testid="navbar-help-button"]',
-        spotlightLabel: "Highlight Help (?) Button",
+        spotlights: [
+            {
+                id: "national",
+                selector: '[data-testid="nav-item-national"]',
+                label: "Highlight National Icon",
+                iconKey: "national",
+            },
+            {
+                id: "help",
+                selector: '[data-testid="navbar-help-button"]',
+                label: "Highlight Help (?) Icon",
+                iconKey: "help",
+            },
+            {
+                id: "servers",
+                selector: '[data-testid="nav-item-servers"]',
+                label: "Highlight Nodes (Cloud) Icon",
+                iconKey: "servers",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-national"]',
+        spotlightLabel: "Highlight National Icon",
         objectiveSummary: "Supervisor 2-lane node healthy (`onlineLaneCount >= 2`).",
         isAutoVerified: (v) => v.onlineLaneCount >= 2,
     },
@@ -538,6 +696,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "administrator",
         badge: "3.1",
         route: "/",
+        pageIconKey: "split-admin",
         splitPaneAdmin: true,
         videoGuideSlug: "06-admin-manual-lane-and-site-diagram",
         screenshotFile: "25-lane-options-filled.png",
@@ -545,11 +704,11 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         title: "Manual Lane, Rapiscan RPM & Loopback RTSP Camera Setup",
         durationEstimate: "6 min",
         whyItMatters:
-            "Starting from 0 lanes in this sandbox lets administrators practice adding a Lane System in SensorHub Admin without touching production sensors or `config.json`.",
+            "Starting from 0 lanes in this sandbox lets administrators practice adding a Lane System in Split-Pane SensorHub Admin {{icon:split-admin}} (the dual-pane icon) without touching production sensors or `config.json`.",
         steps: [
-            "Click 'Open Split-Pane SensorHub Admin' below to open `/sensorhub/admin` right beside this Training Coach.",
+            "Click 'Open Split-Pane SensorHub Admin' {{icon:split-admin}} (the dual-pane icon button above) to open `/sensorhub/admin` right beside this Training Coach.",
             "Right-click the Systems pane -> Add Module -> Lane System (`DemoLane01`, UID `tutorial-lane-01`, Auto-Start checked). Under Lane Options, add Initial RPM Config (`Rapiscan`, Host `127.0.0.1`, Port `10099`, EML enabled) and Initial Camera Config (`Custom`, Host `127.0.0.1:8554`, Stream Path `/tutorial-cam`).",
-            "Click Apply Changes and Start the module — this Coach will automatically verify as soon as your new lane comes Online!",
+            "Click Apply Changes and Start the module — then verify on Status of Health {{icon:health}} (the heart-pulse monitor icon in the left navigation bar) that your new lane comes Online!",
         ],
         copySnippets: [
             { label: "Copy RPM Host", value: "127.0.0.1" },
@@ -557,6 +716,22 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
             { label: "Copy Camera Host", value: "127.0.0.1:8554" },
             { label: "Copy Stream Path", value: "/tutorial-cam" },
         ],
+        spotlights: [
+            {
+                id: "split-admin",
+                selector: '[data-testid="training-toggle-split-admin"], [data-testid="training-refresher-admin-link"]',
+                label: "Highlight Split-Pane Admin Button",
+                iconKey: "split-admin",
+            },
+            {
+                id: "health",
+                selector: '[data-testid="nav-item-health"]',
+                label: "Highlight Status of Health Icon",
+                iconKey: "health",
+            },
+        ],
+        spotlightSelector: '[data-testid="training-toggle-split-admin"], [data-testid="training-refresher-admin-link"]',
+        spotlightLabel: "Highlight Split-Pane Admin Button",
         objectiveSummary: "Configure and start at least 1 online Lane System (`configuredLaneCount >= 1 && onlineLaneCount >= 1`).",
         isAutoVerified: (v) => v.configuredLaneCount >= 1 && v.onlineLaneCount >= 1,
     },
@@ -565,6 +740,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "administrator",
         badge: "3.2",
         route: "/",
+        pageIconKey: "split-admin",
         splitPaneAdmin: true,
         videoGuideSlug: "05-admin-lane-spreadsheet-sync",
         screenshotFile: "16-csv-upload-success.png",
@@ -572,15 +748,31 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         title: "1-Click Bulk Lane Spreadsheet Import (`tutorial-1-lane.csv`)",
         durationEstimate: "3 min",
         whyItMatters:
-            "At multi-lane ports of entry, importing a validated `config.csv` provisions RPMs, RTSP cameras, coordinates, and `OperationalViews` in seconds.",
+            "At multi-lane ports of entry, importing a validated `config.csv` in SensorHub Admin {{icon:split-admin}} provisions RPMs, RTSP cameras, coordinates, and `OperationalViews` in seconds.",
         steps: [
             "Click 'Download 1-Lane Tutorial CSV' below to save `tutorial-1-lane.csv` (pre-targeted at loopback `127.0.0.1:10099` and `127.0.0.1:8554/tutorial-cam` with `archiveEnabled=false`).",
-            "Open Split-Pane SensorHub Admin -> Services -> OSCAR Service, upload `tutorial-1-lane.csv` under Lane Configuration Spreadsheet, and click Apply.",
-            "Return to OSCAR Viewer (`Return to Viewer Page`) and confirm `DemoLane01` is online and streaming live video!",
+            "Open Split-Pane SensorHub Admin {{icon:split-admin}} (the dual-pane icon button) -> Services -> OSCAR Service, upload `tutorial-1-lane.csv` under Lane Configuration Spreadsheet, and click Apply.",
+            "Return to OSCAR Viewer (`Return to Viewer Page`) on Dashboard {{icon:dashboard}} (`/`, the four-tile grid icon in the left navigation bar) and confirm `DemoLane01` is online and streaming live video!",
         ],
         sampleFiles: [
             { fileName: "tutorial-1-lane.csv", buttonLabel: "Download 1-Lane Tutorial CSV" },
         ],
+        spotlights: [
+            {
+                id: "split-admin",
+                selector: '[data-testid="training-toggle-split-admin"], [data-testid="training-refresher-admin-link"]',
+                label: "Highlight Split-Pane Admin Button",
+                iconKey: "split-admin",
+            },
+            {
+                id: "dashboard",
+                selector: '[data-testid="nav-item-dashboard"]',
+                label: "Highlight Dashboard Icon",
+                iconKey: "dashboard",
+            },
+        ],
+        spotlightSelector: '[data-testid="training-toggle-split-admin"], [data-testid="training-refresher-admin-link"]',
+        spotlightLabel: "Highlight Split-Pane Admin Button",
         objectiveSummary: "At least 1 lane provisioned and started (`configuredLaneCount >= 1 && onlineLaneCount >= 1`).",
         isAutoVerified: (v) => v.configuredLaneCount >= 1 && v.onlineLaneCount >= 1,
     },
@@ -589,18 +781,35 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "administrator",
         badge: "3.3",
         route: "/users",
+        pageIconKey: "users",
         videoGuideSlug: "19-viewer-users-passkeys-and-access",
         screenshotFile: "36-users-and-passkeys.png",
         screenshotCaption: "Users & Access self-service WebAuthn Passkeys, role scoping, bulk QR enrollment invites, and Federation Tokens.",
         title: "Users, RBAC View Scoping, QR Enrollment & Offline Passkeys",
         durationEstimate: "4 min",
         whyItMatters:
-            "Administrators enroll operators via 1-tap QR codes or temporary passwords, scope accounts to specific `OperationalViews` (`north-gate`), and mint scoped `oscar_fed_...` tokens.",
+            "In Users & Access {{icon:users}} (the person-and-gear icon), administrators enroll operators via 1-tap QR codes or temporary passwords, scope accounts to specific `OperationalViews` (`north-gate`), and mint scoped `oscar_fed_...` tokens.",
         steps: [
-            "Open Users & Access (/users) and explore creating a practice Operator account scoped to `north-gate`, or test Bulk CSV/Paste User Enrollment to preview printable QR onboarding invites.",
-            "Inspect the Federation Tokens section (`oscar_fed_...`) and the Backup & Hardware Replacement readiness checklist — everything created here lives strictly in disposable sandbox memory/volumes.",
+            "Open Users & Access {{icon:users}} (`/users`, the person-and-gear icon in the left navigation bar and top-bar signed-in badge) and explore creating a practice Operator account scoped to `north-gate`, or test Bulk CSV/Paste User Enrollment to preview printable QR onboarding invites.",
+            "Inspect the Federation Tokens section (`oscar_fed_...`, paired on remote sites in Nodes {{icon:servers}}, the cloud icon) and the Backup & Hardware Replacement readiness checklist — everything created here lives strictly in disposable sandbox memory/volumes.",
             "Click 'Mark Step Completed' below once you have explored account, Passkey, and token workflows.",
         ],
+        spotlights: [
+            {
+                id: "users",
+                selector: '[data-testid="nav-item-users"], [data-testid="navbar-user-account-btn"]',
+                label: "Highlight Users & Access Icon",
+                iconKey: "users",
+            },
+            {
+                id: "servers",
+                selector: '[data-testid="nav-item-servers"]',
+                label: "Highlight Nodes (Cloud) Icon",
+                iconKey: "servers",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-users"], [data-testid="navbar-user-account-btn"]',
+        spotlightLabel: "Highlight Users & Access Icon",
         objectiveSummary: "Review RBAC roles, QR enrollment invites, and Passkey / Federation Token controls in `/users`.",
         isAutoVerified: () => false,
     },
@@ -609,17 +818,18 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "administrator",
         badge: "3.4",
         route: "/extensions",
+        pageIconKey: "extensions",
         videoGuideSlug: "25-pluggable-runtime-extensions-and-pmtiles",
         screenshotFile: "46-runtime-extensions-hub.png",
         screenshotCaption: "Runtime Extensions hub for air-gapped .pmtiles basemaps, custom policy packs, OCR/spectroscopy packs, and Cargo NII shares.",
         title: "Runtime Extensions (`.pmtiles` Maps, Policy Packs & Cargo NII)",
         durationEstimate: "5 min",
         whyItMatters:
-            "Runtime Extensions let sites hot-swap regional `.pmtiles` basemaps, agency disposition codes (`Code 101+`), and read-only Cargo UFF shares without modifying shipped OSCAR defaults.",
+            "Runtime Extensions {{icon:extensions}} (the puzzle-piece icon) let sites hot-swap regional `.pmtiles` basemaps, agency disposition codes (`Code 101+`), and read-only Cargo UFF shares without modifying shipped OSCAR defaults.",
         steps: [
             "Download `sample-regional-map.pmtiles` and `sample-policy-pack.json` using the buttons below.",
-            "In Runtime Extensions (/extensions), upload `sample-regional-map.pmtiles` under Offline Regional Basemaps (then check `/map`), OR upload `sample-policy-pack.json` under Adjudication Policy Packs (`Code 101` & `Code 102`).",
-            "Optional: Under Cargo NII (WCO UFF), test Local Directory mode using path `/var/lib/oscar/sandbox-tutorial/uff-share`, and visit `/usb-backups` to review the zero-downtime USB NVMe backup workflow.",
+            "In Runtime Extensions {{icon:extensions}} (`/extensions`, the puzzle-piece icon in the left navigation bar), upload `sample-regional-map.pmtiles` under Offline Regional Basemaps (then check Map {{icon:map}} `/map`, the map-pin icon), OR upload `sample-policy-pack.json` under Adjudication Policy Packs (`Code 101` & `Code 102`).",
+            "Optional: Under Cargo NII (WCO UFF) {{icon:uff}}, test Local Directory mode using path `/var/lib/oscar/sandbox-tutorial/uff-share`, and visit USB Backups {{icon:usb-backups}} (`/usb-backups`, the USB trident icon) to review the zero-downtime USB NVMe backup workflow.",
         ],
         sampleFiles: [
             { fileName: "sample-regional-map.pmtiles", buttonLabel: "Download Practice Map (.pmtiles)" },
@@ -628,6 +838,28 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         copySnippets: [
             { label: "Copy Sandbox UFF Path", value: "/var/lib/oscar/sandbox-tutorial/uff-share" },
         ],
+        spotlights: [
+            {
+                id: "extensions",
+                selector: '[data-testid="nav-item-extensions"]',
+                label: "Highlight Runtime Extensions Icon",
+                iconKey: "extensions",
+            },
+            {
+                id: "map",
+                selector: '[data-testid="nav-item-map"]',
+                label: "Highlight Map Icon",
+                iconKey: "map",
+            },
+            {
+                id: "usb-backups",
+                selector: '[data-testid="nav-item-usb-backups"]',
+                label: "Highlight USB Backups Icon",
+                iconKey: "usb-backups",
+            },
+        ],
+        spotlightSelector: '[data-testid="nav-item-extensions"]',
+        spotlightLabel: "Highlight Runtime Extensions Icon",
         objectiveSummary: "Activate an offline `.pmtiles` basemap, Policy Pack, or Cargo NII share in `/extensions`.",
         isAutoVerified: (v) => v.offlineMapActive || v.policyPackActive || v.cargoUffEnabled,
     },
@@ -636,22 +868,37 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         trackId: "administrator",
         badge: "3.5",
         route: "/health",
+        pageIconKey: "webrelay",
         videoGuideSlug: "29-lane-webrelay-lights-and-sound",
         screenshotFile: "53-lane-webrelay-lights-and-sound.png",
         screenshotCaption: "Per-lane RPM Lights & Sound (WebRelay-Quad) control modal showing Automatic EML gatekeeping, relay coil telemetry (R1–R4), and timed alarm test pulses.",
         title: "Per-Lane Physical RPM Lights & Sound (`WebRelay-Quad`)",
         durationEstimate: "4 min",
         whyItMatters:
-            "Administrators can suppress nuisance physical siren/beacon activations on benign NORM (`Code 9999`) and stalled gamma holds (`Code 9998`) while pulsing Gamma Red + Siren (`R3`) and Neutron Blue (`R4`) on actionable threats, with fail-safe `0,0,0,0` pass-through if OSCAR stops.",
+            "Administrators can suppress nuisance physical siren/beacon activations on benign NORM (`Code 9999`) and stalled gamma holds (`Code 9998`) via Lights & Sound {{icon:webrelay}} (the megaphone/siren icon) while pulsing Gamma Red + Siren (`R3`) and Neutron Blue (`R4`) on actionable threats, with fail-safe `0,0,0,0` pass-through if OSCAR stops.",
         steps: [
-            "Open Status of Health (/health) or a lane's Lane View (/lane-view) as an Administrator and click the per-lane 'Lights & Sound' button (or configure under SensorHub Admin -> Lane System -> WebRelay).",
+            "Open Status of Health {{icon:health}} (`/health`, the heart-pulse monitor icon in the left navigation bar) or a lane's Lane View (`/lane-view`) as an Administrator and click the per-lane 'Lights & Sound' {{icon:webrelay}} megaphone button (or configure under SensorHub Admin {{icon:split-admin}} -> Lane System -> WebRelay).",
             "Review Operating Modes: `AUTO` (arms `R1=1, R2=1` intercept coils, suppresses `Code 9999` and optional `Code 9998`, pulses `R3`/`R4` on real alarms), `PASS_THROUGH` (`0,0,0,0` direct hardware wiring), `MUTED` (`1,1,0,0` silence), and `MANUAL`.",
             "Click 'Test Connection' to verify ControlByWeb HTTP/XML (`stateFull.xml` / `state.xml`) reachability, or use timed pulse controls during authorized lane commissioning.",
         ],
         copySnippets: [
             { label: "Copy Example Relay Host", value: "198.51.100.21" },
         ],
-        spotlightSelector: '[data-testid^="webrelay-open-lane-"]',
+        spotlights: [
+            {
+                id: "health",
+                selector: '[data-testid="nav-item-health"]',
+                label: "Highlight Status of Health Icon",
+                iconKey: "health",
+            },
+            {
+                id: "webrelay",
+                selector: '[data-testid^="webrelay-open-lane-"], [data-testid="webrelay-open-header-btn"], [data-testid="lane-view-webrelay-btn"]',
+                label: "Highlight Lane Lights & Sound Button",
+                iconKey: "webrelay",
+            },
+        ],
+        spotlightSelector: '[data-testid^="webrelay-open-lane-"], [data-testid="webrelay-open-header-btn"], [data-testid="lane-view-webrelay-btn"]',
         spotlightLabel: "Highlight Lane Lights & Sound Button",
         objectiveSummary: "Review per-lane WebRelay-Quad operating modes (`AUTO` / `PASS_THROUGH` / `MUTED`), EML suppression, and fail-safe `0,0,0,0` behavior.",
         isAutoVerified: () => false,

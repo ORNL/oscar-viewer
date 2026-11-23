@@ -14,6 +14,7 @@ import {INode, Node} from "@/lib/data/osh/Node";
 import {useAppDispatch} from "@/lib/state/Hooks";
 import React, {useState} from "react";
 import {useLanguage} from "@/app/contexts/LanguageContext";
+import {PlatformIconBadge} from "@/app/_components/common/PlatformIcons";
 
 interface NodeListProps {
     modeChangeCallback?: (editMode: boolean, editNode: INode) => void
@@ -68,9 +69,12 @@ export default function NodeList({modeChangeCallback}: NodeListProps) {
     };
     return (
         <Box sx={{width: '100%'}}>
-            <Typography variant="h4" align="left" sx={{margin: 2}}>
-                { t('nodes') }
-            </Typography>
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{margin: 2}}>
+                <PlatformIconBadge iconKey="servers" size="header" />
+                <Typography variant="h4" align="left">
+                    { t('nodes') }
+                </Typography>
+            </Stack>
             {nodes.length === 0 ? (
                 <p>{t('noNodes')}</p>
             ) : (

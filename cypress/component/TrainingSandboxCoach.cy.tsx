@@ -117,6 +117,21 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             return (
                 <LanguageProvider>
                     <div>
+                        <button type="button" data-testid="nav-item-health">
+                            Health Target
+                        </button>
+                        <button type="button" data-testid="nav-item-dashboard">
+                            Dashboard Target
+                        </button>
+                        <button type="button" data-testid="nav-item-report">
+                            Report Target
+                        </button>
+                        <button type="button" data-testid="nav-item-users">
+                            Users Target
+                        </button>
+                        <button type="button" data-testid="nav-item-extensions">
+                            Extensions Target
+                        </button>
                         <button type="button" data-testid="navbar-help-button">
                             Help Target
                         </button>
@@ -157,24 +172,63 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             .should("have.attr", "width", "1920")
             .and("have.attr", "height", "1080")
             .and("have.attr", "preload", "none");
-        cy.get('[data-testid="training-coach-video"] track')
-            .should("have.attr", "kind", "captions");
+        cy.get('[data-testid="training-coach-video"] track').should("have.length", 4);
+        cy.get('[data-testid="training-coach-video"] track[srclang="en"]')
+            .should("have.attr", "kind", "captions")
+            .and("have.prop", "default", true);
+        cy.get('[data-testid="training-coach-video"] track[srclang="es"]')
+            .should("have.attr", "src", "/video-guides/captions/es/15-status-of-health-and-site-map.vtt");
+        cy.get('[data-testid="training-coach-video"] track[srclang="fr"]')
+            .should("have.attr", "src", "/video-guides/captions/fr/15-status-of-health-and-site-map.vtt");
+        cy.get('[data-testid="training-coach-video"] track[srclang="el"]')
+            .should("have.attr", "src", "/video-guides/captions/el/15-status-of-health-and-site-map.vtt");
         cy.get('[data-testid="training-coach-screenshot"]')
             .should("have.attr", "width", "1920")
             .and("have.attr", "height", "1080")
             .and("have.attr", "loading", "lazy");
 
-        // Inject scenario & spotlight button
+        // Verify Lab 1.1 inline visual symbol introductions + Status of Health / Dashboard / Help spotlight buttons
+        cy.get('[data-testid="training-coach-dock"]')
+            .should("contain.text", "heart-pulse monitor icon")
+            .and("contain.text", "four-tile grid icon");
+        cy.get('[data-testid="training-coach-dock"] .oscar-inline-platform-icon[data-platform-icon="health"]')
+            .should("exist");
+        cy.get('[data-testid="training-coach-dock"] .oscar-inline-platform-icon[data-platform-icon="dashboard"]')
+            .should("exist");
+
+        // Inject scenario & spotlight Status of Health + Help buttons
         cy.get('[data-testid="training-inject-fault_gamma_high"]').click();
         cy.wait("@injectScenario");
-        cy.get('[data-testid="training-spotlight-btn"]').click();
+        cy.get('[data-testid="training-spotlight-btn"]')
+            .should("contain.text", "Highlight Status of Health Icon")
+            .click();
+        cy.get('[data-testid="nav-item-health"]').should("have.attr", "data-oscar-coach-spotlight", "true");
+        cy.get('[data-testid="training-spotlight-btn-dashboard"]')
+            .should("contain.text", "Highlight Dashboard Icon")
+            .click();
+        cy.get('[data-testid="nav-item-dashboard"]').should("have.attr", "data-oscar-coach-spotlight", "true");
+        cy.get('[data-testid="training-spotlight-btn-help"]')
+            .should("contain.text", "Highlight Help (?) Icon")
+            .click();
         cy.get('[data-testid="navbar-help-button"]').should("have.attr", "data-oscar-coach-spotlight", "true");
 
-        // Switch to Administrator track and toggle Split-Pane SensorHub Admin
+        // Switch to Administrator track, verify Lab 3.3 / 3.4 icon buttons & inline symbols, and toggle Split-Pane Admin
         cy.get('[data-testid="training-track-btn-administrator"]').click();
         cy.wait("@stageTrack");
         cy.get('[data-testid="training-toggle-split-admin"]').should("contain.text", "Open Split-Pane SensorHub Admin").click();
         cy.get('[data-testid="training-toggle-split-admin"]').should("contain.text", "Return to Viewer Page");
+        cy.get('[data-testid="training-lab-chip-adm-3"]').click();
+        cy.get('[data-testid="training-coach-dock"]').should("contain.text", "person-and-gear icon");
+        cy.get('[data-testid="training-spotlight-btn"]')
+            .should("contain.text", "Highlight Users & Access Icon")
+            .click();
+        cy.get('[data-testid="nav-item-users"]').should("have.attr", "data-oscar-coach-spotlight", "true");
+        cy.get('[data-testid="training-lab-chip-adm-4"]').click();
+        cy.get('[data-testid="training-coach-dock"]').should("contain.text", "puzzle-piece icon");
+        cy.get('[data-testid="training-spotlight-btn"]')
+            .should("contain.text", "Highlight Runtime Extensions Icon")
+            .click();
+        cy.get('[data-testid="nav-item-extensions"]').should("have.attr", "data-oscar-coach-spotlight", "true");
     });
 
     it("surfaces the Training Sandbox launcher and Video Guide #28 inside Help (?)", () => {
@@ -216,7 +270,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             </LanguageProvider>,
         );
 
-        cy.contains("OSCAR 3.11.6 Operator Quick Guide & Glossary").should("be.visible");
+        cy.contains("OSCAR 3.11.7 Operator Quick Guide & Glossary").should("be.visible");
         cy.contains('[role="tab"]', "Manual & Video Guides").click();
         cy.get('[data-testid="help-training-sandbox-card"]').should("be.visible");
         cy.get('[data-testid="help-sandbox-launch-btn"]').should("be.visible");

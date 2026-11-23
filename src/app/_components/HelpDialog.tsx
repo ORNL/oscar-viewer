@@ -26,9 +26,19 @@ import {
 } from '@mui/material';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import GpsFixedRoundedIcon from '@mui/icons-material/GpsFixedRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import PlayCircleOutlineRoundedIcon from '@mui/icons-material/PlayCircleOutlineRounded';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
+import {
+    CONSOLE_PAGE_CARD_ICON_KEYS,
+    PLATFORM_ICONS,
+    PlatformIconBadge,
+    PlatformIconKey,
+    renderTextWithIconsAndCode,
+    TOP_BAR_TOOL_ICON_KEYS,
+    triggerPlatformSpotlight,
+} from '@/app/_components/common/PlatformIcons';
 import {
     exportSupportBundle,
     SupportBundleExportResult,
@@ -39,15 +49,24 @@ import {
     CONSOLE_PAGE_CARD_GUIDE_SLUGS,
     getContextualVideoGuidesForPath,
     getVideoGuideBySlug,
+    getVideoGuideCaptionTracks,
     GLOSSARY_INDEX_GUIDE_SLUGS,
     REPORT_CARD_GUIDE_SLUGS,
     resolveVideoGuidesBySlugs,
+    syncVideoElementCaptionLocale,
     VIDEO_GUIDE_UI_STRINGS,
     VIDEO_GUIDES_CATALOG,
     VideoGuideEntry,
     VideoGuideTrackId,
 } from '@/lib/data/oscar/VideoGuidesCatalog';
 import TrainingSandboxLauncherCard from '@/app/_components/sandbox/TrainingSandboxLauncherCard';
+
+const TOP_BAR_TOOLS_CARD_TITLE: Record<Locale, string> = {
+    en: 'Top-Bar Console Controls & Visual Symbols',
+    es: 'Controles y símbolos visuales de la barra superior',
+    fr: 'Commandes et symboles visuels de la barre supérieure',
+    el: 'Στοιχεία ελέγχου & οπτικά σύμβολα επάνω γραμμής',
+};
 
 interface HelpSectionItem {
     title: string;
@@ -95,7 +114,7 @@ interface LocalizedHelpContent {
 
 const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
     en: {
-        dialogTitle: 'OSCAR 3.11.6 Operator Quick Guide & Glossary',
+        dialogTitle: 'OSCAR 3.11.7 Operator Quick Guide & Glossary',
         dialogSubtitle: 'Plain-language reference for console workflows, multi-format reports, and radiation portal terminology.',
         tabs: {
             pages: 'Console Pages',
@@ -296,7 +315,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Close',
     },
     es: {
-        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.6',
+        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.7',
         dialogSubtitle: 'Referencia en lenguaje claro para flujos de consola, informes multiformato y terminología de pórticos de radiación.',
         tabs: {
             pages: 'Páginas de consola',
@@ -497,7 +516,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Cerrar',
     },
     fr: {
-        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.6',
+        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.7',
         dialogSubtitle: 'Référence en langage clair pour les flux de console, les rapports multiformats et la terminologie des portiques.',
         tabs: {
             pages: 'Pages de la console',
@@ -698,7 +717,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Fermer',
     },
     el: {
-        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.6',
+        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.7',
         dialogSubtitle: 'Αναφορά σε απλή γλώσσα για τις ροές εργασίας κονσόλας, τις αναφορές πολλαπλών μορφών και την ορολογία πυλών ακτινοβολίας.',
         tabs: {
             pages: 'Σελίδες κονσόλας',
@@ -1008,6 +1027,28 @@ export default function HelpDialog({
         }
     }, [activeGuide, focusPendingSlug, open]);
 
+    React.useEffect(() => {
+        const videoEl = videoRef.current;
+        if (!open || !videoEl || !activeGuide) return;
+        const applySync = () => syncVideoElementCaptionLocale(videoEl, activeLocale);
+        applySync();
+        const textTracks = videoEl.textTracks;
+        textTracks?.addEventListener?.('addtrack', applySync);
+        return () => {
+            textTracks?.removeEventListener?.('addtrack', applySync);
+        };
+    }, [activeGuide, activeLocale, open]);
+
+    const handleHighlightControl = React.useCallback(
+        (iconKey: PlatformIconKey) => {
+            const def = PLATFORM_ICONS[iconKey];
+            if (!def) return;
+            onClose();
+            triggerPlatformSpotlight(def.spotlightSelector, { delayMs: 80 });
+        },
+        [onClose],
+    );
+
     const handleCloseActiveVideo = React.useCallback((restoreTriggerFocus = true) => {
         videoRef.current?.pause();
         setActiveGuideSlug(null);
@@ -1253,13 +1294,16 @@ export default function HelpDialog({
                                     data-testid="help-video-element"
                                 >
                                     <source src={activeGuide.mp4Url} type="video/mp4" />
-                                    <track
-                                        kind="captions"
-                                        src={activeGuide.vttUrl}
-                                        srcLang="en"
-                                        label="English"
-                                        default
-                                    />
+                                    {getVideoGuideCaptionTracks(activeGuide).map((track) => (
+                                        <track
+                                            key={track.locale}
+                                            kind="captions"
+                                            src={track.src}
+                                            srcLang={track.locale}
+                                            label={track.label}
+                                            default={activeLocale === track.locale}
+                                        />
+                                    ))}
                                 </video>
                             </Box>
                             <Typography variant="caption" color="text.secondary">
@@ -1278,18 +1322,97 @@ export default function HelpDialog({
                             const pageGuides = resolveVideoGuidesBySlugs(
                                 CONSOLE_PAGE_CARD_GUIDE_SLUGS[pageIndex] ?? [],
                             );
+                            const pageIconKey = CONSOLE_PAGE_CARD_ICON_KEYS[pageIndex];
+                            const iconDef = pageIconKey ? PLATFORM_ICONS[pageIconKey] : undefined;
+                            const IconComp = iconDef?.Icon;
                             return (
                                 <Paper key={item.title} variant="outlined" sx={{ p: 1.5 }}>
-                                    <Typography variant="subtitle2" fontWeight={700}>
-                                        {item.title}
-                                    </Typography>
+                                    <Stack
+                                        direction="row"
+                                        justifyContent="space-between"
+                                        alignItems="center"
+                                        spacing={1}
+                                        useFlexGap
+                                        flexWrap="wrap"
+                                    >
+                                        <Stack direction="row" spacing={1} alignItems="center" sx={{ minInlineSize: 0 }}>
+                                            {pageIconKey && <PlatformIconBadge iconKey={pageIconKey} size="card" />}
+                                            <Typography variant="subtitle2" fontWeight={700}>
+                                                {renderTextWithIconsAndCode(item.title)}
+                                            </Typography>
+                                        </Stack>
+                                        {pageIconKey && iconDef && IconComp && (
+                                            <Button
+                                                type="button"
+                                                size="small"
+                                                variant="outlined"
+                                                startIcon={<IconComp fontSize="small" aria-hidden="true" />}
+                                                endIcon={<GpsFixedRoundedIcon sx={{ fontSize: '14px !important', opacity: 0.78 }} aria-hidden="true" />}
+                                                onClick={() => handleHighlightControl(pageIconKey)}
+                                                data-testid={`help-highlight-page-${pageIconKey}`}
+                                                sx={{ ...touchSafeButtonSx, textTransform: 'none', fontSize: '0.76rem' }}
+                                            >
+                                                {iconDef.highlightLabel[activeLocale]}
+                                            </Button>
+                                        )}
+                                    </Stack>
+                                    {pageIconKey && iconDef && (
+                                        <Typography
+                                            variant="caption"
+                                            color="primary.main"
+                                            data-testid={`help-page-symbol-note-${pageIconKey}`}
+                                            sx={{ display: 'block', mt: 0.65, fontWeight: 600 }}
+                                        >
+                                            <PlatformIconBadge iconKey={pageIconKey} size="inline" />
+                                            {iconDef.locationNote[activeLocale]}
+                                        </Typography>
+                                    )}
                                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                        {item.summary}
+                                        {renderTextWithIconsAndCode(item.summary)}
                                     </Typography>
                                     {renderWatchButtons(pageGuides, item.title, `help-page-${pageIndex}-guide`)}
                                 </Paper>
                             );
                         })}
+                        <Paper variant="outlined" sx={{ p: 1.5 }} data-testid="help-top-bar-tools-card">
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                                {TOP_BAR_TOOLS_CARD_TITLE[activeLocale]}
+                            </Typography>
+                            <Stack spacing={1}>
+                                {TOP_BAR_TOOL_ICON_KEYS.map((toolKey) => {
+                                    const toolDef = PLATFORM_ICONS[toolKey];
+                                    const ToolIcon = toolDef.Icon;
+                                    return (
+                                        <Stack
+                                            key={toolKey}
+                                            direction="row"
+                                            justifyContent="space-between"
+                                            alignItems="center"
+                                            spacing={1}
+                                            useFlexGap
+                                            flexWrap="wrap"
+                                        >
+                                            <Typography variant="body2" color="text.secondary">
+                                                <PlatformIconBadge iconKey={toolKey} size="inline" />
+                                                {toolDef.locationNote[activeLocale]}
+                                            </Typography>
+                                            <Button
+                                                type="button"
+                                                size="small"
+                                                variant="text"
+                                                startIcon={<ToolIcon fontSize="small" aria-hidden="true" />}
+                                                endIcon={<GpsFixedRoundedIcon sx={{ fontSize: '14px !important', opacity: 0.78 }} aria-hidden="true" />}
+                                                onClick={() => handleHighlightControl(toolKey)}
+                                                data-testid={`help-highlight-tool-${toolKey}`}
+                                                sx={{ ...touchSafeButtonSx, textTransform: 'none', fontSize: '0.76rem' }}
+                                            >
+                                                {toolDef.highlightLabel[activeLocale]}
+                                            </Button>
+                                        </Stack>
+                                    );
+                                })}
+                            </Stack>
+                        </Paper>
                     </Stack>
                 )}
 
