@@ -269,7 +269,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         changePasswordTitle: 'Password (Works in Phone-Free Facilities & Offline)',
         changePasswordDesc: 'Choose a password of at least 12 characters. Changing your OSCAR password keeps this browser signed in, signs out any other OSCAR sessions, and does NOT require changing your Octelium Zero-Trust tunnel password (keeping separate tunnel and OSCAR credentials provides two-layer defense-in-depth).',
         currentPasswordLabel: 'Current password',
-        newPasswordLabel: 'New password (12+ characters)',
+        newPasswordLabel: 'New password (14+ characters)',
         confirmPasswordLabel: 'Confirm new password',
         showLabel: 'Show',
         hideLabel: 'Hide',
@@ -301,7 +301,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         gateViewsInputLabel: 'Restrict to Operational Views (comma-separated, leave blank for all lanes)',
         gateViewsHelper: 'Example: east-gate, truck-portal (leave blank to allow all facility lanes)',
         autoGenerateTempPwLabel: 'Generate a readable temporary password automatically (Recommended)',
-        initialPasswordLabel: 'Initial password (12+ characters)',
+        initialPasswordLabel: 'Initial password (14+ characters)',
         requirePwChangeOnLoginLabel: 'Require user to choose a new password on first sign-in',
         saveBtn: 'Save',
         cancelBtn: 'Cancel',
@@ -412,7 +412,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         changePasswordTitle: 'Contraseña (Instalaciones sin teléfonos y sin conexión)',
         changePasswordDesc: 'Elija una contraseña de al menos 12 caracteres. Cambiar su contraseña de OSCAR mantiene activa esta sesión, cierra las demás y NO requiere cambiar la contraseña del túnel Octelium Zero-Trust (mantener credenciales separadas ofrece defensa en profundidad).',
         currentPasswordLabel: 'Contraseña actual',
-        newPasswordLabel: 'Nueva contraseña (12+ caracteres)',
+        newPasswordLabel: 'Nueva contraseña (14+ caracteres)',
         confirmPasswordLabel: 'Confirmar nueva contraseña',
         showLabel: 'Mostrar',
         hideLabel: 'Ocultar',
@@ -444,7 +444,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         gateViewsInputLabel: 'Restringir a Vistas Operativas (separadas por comas; vacío = todos los carriles)',
         gateViewsHelper: 'Ejemplo: east-gate, truck-portal',
         autoGenerateTempPwLabel: 'Generar contraseña temporal legible automáticamente (Recomendado)',
-        initialPasswordLabel: 'Contraseña inicial (12+ caracteres)',
+        initialPasswordLabel: 'Contraseña inicial (14+ caracteres)',
         requirePwChangeOnLoginLabel: 'Solicitar cambio de contraseña en el primer acceso',
         saveBtn: 'Guardar',
         cancelBtn: 'Cancelar',
@@ -555,7 +555,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         changePasswordTitle: 'Mot de passe (Sites sans téléphone et hors ligne)',
         changePasswordDesc: 'Choisissez un mot de passe d’au moins 12 caractères. Modifier votre mot de passe OSCAR ne nécessite PAS de changer votre mot de passe de tunnel Zero-Trust Octelium (conserver des identifiants distincts assure une défense en profondeur).',
         currentPasswordLabel: 'Mot de passe actuel',
-        newPasswordLabel: 'Nouveau mot de passe (12+ caractères)',
+        newPasswordLabel: 'Nouveau mot de passe (14+ caractères)',
         confirmPasswordLabel: 'Confirmer le nouveau mot de passe',
         showLabel: 'Afficher',
         hideLabel: 'Masquer',
@@ -587,7 +587,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         gateViewsInputLabel: 'Restreindre aux Vues Opérationnelles (séparées par virgules, vide = toutes)',
         gateViewsHelper: 'Exemple : east-gate, truck-portal',
         autoGenerateTempPwLabel: 'Générer automatiquement un mot de passe temporaire lisible (Recommandé)',
-        initialPasswordLabel: 'Mot de passe initial (12+ caractères)',
+        initialPasswordLabel: 'Mot de passe initial (14+ caractères)',
         requirePwChangeOnLoginLabel: 'Imposer le changement du mot de passe à la première connexion',
         saveBtn: 'Enregistrer',
         cancelBtn: 'Annuler',
@@ -698,7 +698,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         changePasswordTitle: 'Κωδικός πρόσβασης (Χώροι χωρίς τηλέφωνα & εκτός σύνδεσης)',
         changePasswordDesc: 'Επιλέξτε κωδικό τουλάχιστον 12 χαρακτήρων. Η αλλαγή του κωδικού OSCAR ΔΕΝ απαιτεί αλλαγή του κωδικού σήραγγας Octelium Zero-Trust (η διατήρηση ξεχωριστών κωδικών προσφέρει άμυνα σε βάθος).',
         currentPasswordLabel: 'Τρέχων κωδικός',
-        newPasswordLabel: 'Νέος κωδικός (12+ χαρακτήρες)',
+        newPasswordLabel: 'Νέος κωδικός (14+ χαρακτήρες)',
         confirmPasswordLabel: 'Επιβεβαίωση νέου κωδικού',
         showLabel: 'Εμφάνιση',
         hideLabel: 'Απόκρυψη',
@@ -730,7 +730,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
         gateViewsInputLabel: 'Περιορισμός σε Λειτουργικές Προβολές (με κόμμα, κενό = όλες οι λωρίδες)',
         gateViewsHelper: 'Παράδειγμα: east-gate, truck-portal',
         autoGenerateTempPwLabel: 'Αυτόματη δημιουργία ευανάγνωστου προσωρινού κωδικού (Συνιστάται)',
-        initialPasswordLabel: 'Αρχικός κωδικός (12+ χαρακτήρες)',
+        initialPasswordLabel: 'Αρχικός κωδικός (14+ χαρακτήρες)',
         requirePwChangeOnLoginLabel: 'Απαίτηση αλλαγής κωδικού στην πρώτη σύνδεση',
         saveBtn: 'Αποθήκευση',
         cancelBtn: 'Ακύρωση',
@@ -1437,7 +1437,7 @@ export default function UsersAccessManager() {
                                                 value={newPassword}
                                                 onChange={(e) => setNewPassword(e.target.value)}
                                                 autoComplete="new-password"
-                                                inputProps={{ minLength: 12, maxLength: 512, spellCheck: false, autoCorrect: 'off', autoCapitalize: 'none' }}
+                                                inputProps={{ minLength: 14, maxLength: 512, spellCheck: false, autoCorrect: 'off', autoCapitalize: 'none' }}
                                             />
                                             <TextField
                                                 required
@@ -1446,7 +1446,7 @@ export default function UsersAccessManager() {
                                                 value={confirmPassword}
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                                 autoComplete="new-password"
-                                                inputProps={{ minLength: 12, maxLength: 512, spellCheck: false, autoCorrect: 'off', autoCapitalize: 'none' }}
+                                                inputProps={{ minLength: 14, maxLength: 512, spellCheck: false, autoCorrect: 'off', autoCapitalize: 'none' }}
                                             />
                                             <Stack direction="row" spacing={1.5}>
                                                 <Button type="submit" variant="contained">
@@ -2371,7 +2371,7 @@ export default function UsersAccessManager() {
                                                 value={formExplicitPw}
                                                 onChange={(e) => setFormExplicitPw(e.target.value)}
                                                 autoComplete="new-password"
-                                                inputProps={{ minLength: 12, maxLength: 512, spellCheck: false }}
+                                                inputProps={{ minLength: 14, maxLength: 512, spellCheck: false }}
                                             />
                                             <FormControlLabel
                                                 control={
