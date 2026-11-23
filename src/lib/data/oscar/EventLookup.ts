@@ -269,6 +269,16 @@ function sameTimestampInstant(left: unknown, right: unknown): boolean {
  * lookup first and fall back to a bounded `phenomenonTime` scan matched by
  * parsed epoch milliseconds when trailing-zero formatting differs.
  */
+export function buildEventBoundedPhenomenonTime(
+    startTime?: string | null,
+    endTime?: string | null,
+): string | undefined {
+    const startMs = Date.parse(startTime ?? "");
+    const endMs = Date.parse(endTime ?? "");
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return undefined;
+    return `${new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString()}/${new Date(Math.max(startMs, endMs) + 5000).toISOString()}`;
+}
+
 export async function resolveEventObservationId(
     event: EventTableData,
     lane: LaneMapEntry,
@@ -315,11 +325,7 @@ export async function resolveEventObservationId(
         return response.json();
     };
 
-    const startMs = Date.parse(event.startTime);
-    const endMs = Date.parse(event.endTime);
-    const boundedPhenomenonTime = Number.isFinite(startMs) && Number.isFinite(endMs)
-        ? `${new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString()}/${new Date(Math.max(startMs, endMs) + 5000).toISOString()}`
-        : undefined;
+    const boundedPhenomenonTime = buildEventBoundedPhenomenonTime(event.startTime, event.endTime);
 
     const exactParams = new URLSearchParams({
         dataStream: stream.properties.id,

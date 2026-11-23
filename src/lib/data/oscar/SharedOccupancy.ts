@@ -1,5 +1,6 @@
 import {INode} from "@/lib/data/osh/Node";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
+import {buildEventBoundedPhenomenonTime} from "@/lib/data/oscar/EventLookup";
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
 import {isOccupancyDataStream} from "@/lib/data/oscar/Utilities";
 import {hashString} from "@/app/utils/Utils";
@@ -75,16 +76,16 @@ export async function resolveOccupancyId(event: EventTableData, lane: LaneMapEnt
     const endMs = new Date(event.endTime).getTime();
     const streams = lane.datastreams.filter((stream: any) => isOccupancyDataStream(stream)
         && (!event.dataStreamId || stream.properties.id === event.dataStreamId));
+    const phenomenonTime = buildEventBoundedPhenomenonTime(event.startTime, event.endTime);
     const matches = await Promise.all(streams.map(async (stream: any) => {
         const query = await stream.searchObservations(new ObservationFilter({
+            ...(phenomenonTime ? {phenomenonTime} : {}),
             filter: `startTime='${new Date(event.startTime).toISOString()}' AND endTime='${new Date(event.endTime).toISOString()}'`,
         }), 2);
         let items: any[] = (await query.nextPage()) ?? [];
-        if (items.length === 0 && Number.isFinite(startMs) && Number.isFinite(endMs)) {
-            const lowIso = new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString();
-            const highIso = new Date(Math.max(startMs, endMs) + 5000).toISOString();
+        if (items.length === 0 && phenomenonTime) {
             const rangeQuery = await stream.searchObservations(new ObservationFilter({
-                phenomenonTime: `${lowIso}/${highIso}`,
+                phenomenonTime,
             }), 25);
             items = ((await rangeQuery.nextPage()) ?? []).filter((observation: any) => {
                 const data = observation.properties ?? observation;
