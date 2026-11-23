@@ -274,7 +274,13 @@ export function EventPreview() {
                     resolvedObsId = await resolveEventObservationId(eventPreview.eventData, currLaneEntry);
                 } catch (lookupErr) {
                     if (!(lookupErr instanceof EventLookupError && lookupErr.code === "not-found") && ds?.searchObservations) {
+                        const startMs = Date.parse(eventPreview.eventData.startTime ?? "");
+                        const endMs = Date.parse(eventPreview.eventData.endTime ?? "");
+                        const phenomenonTime = Number.isFinite(startMs) && Number.isFinite(endMs)
+                            ? `${new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString()}/${new Date(Math.max(startMs, endMs) + 5000).toISOString()}`
+                            : undefined;
                         const query = await ds.searchObservations(new ObservationFilter({
+                            ...(phenomenonTime ? {phenomenonTime} : {}),
                             filter: `startTime='${eventPreview.eventData.startTime}' AND endTime='${eventPreview.eventData.endTime}'`
                         }), 1);
                         const occupancyObservation: any[] = (await query.nextPage()) ?? [];

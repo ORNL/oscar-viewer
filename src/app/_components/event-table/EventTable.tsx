@@ -981,7 +981,13 @@ export default function EventTable({
                     event.setDataStreamId(occupancyStream.properties.id);
                     event.setRPMSystemId(occupancyStream.properties["system@id"]);
                     advanceSnapshotCutoff(event.endTime);
-                    resolveIdentityAndNotify(event, lane);
+                    const passesLocal = rowPassesLocalFilters(event, lane);
+                    if (
+                        Boolean(notificationServiceRef.current?.isReady())
+                        || (currentPageRef.current === 0 && passesLocal)
+                    ) {
+                        resolveIdentityAndNotify(event, lane);
+                    }
                     const isLiveAlarm = isAlarmTable
                         && event.status !== "None"
                         && !event.adjudicatedIds?.length
@@ -1003,7 +1009,7 @@ export default function EventTable({
                             ));
                         }
                     }
-                    if (!rowPassesLocalFilters(event, lane)) return;
+                    if (!passesLocal) return;
                     invalidatePrefetch();
                     if (allFilteredCutoffRef.current && event.status !== "None" && !event.adjudicatedIds?.length) {
                         setPostSelectionKeys(previous => new Set(previous).add(eventSelectionKey(event)));

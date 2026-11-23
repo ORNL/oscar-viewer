@@ -315,8 +315,15 @@ export async function resolveEventObservationId(
         return response.json();
     };
 
+    const startMs = Date.parse(event.startTime);
+    const endMs = Date.parse(event.endTime);
+    const boundedPhenomenonTime = Number.isFinite(startMs) && Number.isFinite(endMs)
+        ? `${new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString()}/${new Date(Math.max(startMs, endMs) + 5000).toISOString()}`
+        : undefined;
+
     const exactParams = new URLSearchParams({
         dataStream: stream.properties.id,
+        ...(boundedPhenomenonTime ? {phenomenonTime: boundedPhenomenonTime} : {}),
         filter: `startTime='${event.startTime}' AND endTime='${event.endTime}'`,
         format: "application/om+json",
         order: "desc",
@@ -327,22 +334,16 @@ export async function resolveEventObservationId(
             const payload = await fetchObservationsPage(exactParams, requestSignal);
             let matching = findMatchingObservation(payload?.items);
 
-            if (!matching?.id) {
-                const startMs = Date.parse(event.startTime);
-                const endMs = Date.parse(event.endTime);
-                if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
-                    const lowIso = new Date(Math.max(0, Math.min(startMs, endMs) - 2000)).toISOString();
-                    const highIso = new Date(Math.max(startMs, endMs) + 5000).toISOString();
-                    const rangeParams = new URLSearchParams({
-                        dataStream: stream.properties.id,
-                        phenomenonTime: `${lowIso}/${highIso}`,
-                        format: "application/om+json",
-                        order: "desc",
-                        limit: "25",
-                    });
-                    const rangePayload = await fetchObservationsPage(rangeParams, requestSignal);
-                    matching = findMatchingObservation(rangePayload?.items);
-                }
+            if (!matching?.id && boundedPhenomenonTime) {
+                const rangeParams = new URLSearchParams({
+                    dataStream: stream.properties.id,
+                    phenomenonTime: boundedPhenomenonTime,
+                    format: "application/om+json",
+                    order: "desc",
+                    limit: "25",
+                });
+                const rangePayload = await fetchObservationsPage(rangeParams, requestSignal);
+                matching = findMatchingObservation(rangePayload?.items);
             }
 
             if (!matching?.id)
