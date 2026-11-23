@@ -683,8 +683,8 @@ export const VIDEO_GUIDES_CATALOG: readonly VideoGuideEntry[] = [
         '31',
         '31-bare-metal-autoinstall-usb-creator',
         'A',
-        '65s',
-        '1681.4 KiB',
+        '67s',
+        '1739.4 KiB',
         {
             en: 'Build an Air-Gapped Ubuntu 24.04 Autoinstall USB Drive (GUI, TUI & CLI)',
             es: 'Crear una unidad USB de autoinstalación Ubuntu 24.04 sin conexión (GUI, TUI y CLI)',
@@ -692,10 +692,10 @@ export const VIDEO_GUIDES_CATALOG: readonly VideoGuideEntry[] = [
             el: 'Δημιουργία USB αυτόματης εγκατάστασης Ubuntu 24.04 εκτός δικτύου (GUI, TUI & CLI)',
         },
         {
-            en: 'Use the standalone oscar-3.11.9-autoinstall-usb-creator.zip on Windows 11 or Ubuntu—via Desktop GUI, interactive terminal TUI, or CLI—to combine ubuntu-24.04-live-server-amd64.iso and oscar-3.11.9-ubuntu-x86_64-offline-full.zip with SHA-512 password hashing and optional LUKS2 encryption.',
-            es: 'Use oscar-3.11.9-autoinstall-usb-creator.zip en Windows 11 o Ubuntu —mediante GUI de escritorio, TUI interactiva o CLI— para combinar el ISO de Ubuntu 24.04 y offline-full.zip con hash SHA-512 y cifrado LUKS2 opcional.',
-            fr: 'Utilisez oscar-3.11.9-autoinstall-usb-creator.zip sous Windows 11 ou Ubuntu — via GUI de bureau, TUI interactive ou CLI — pour assembler l’ISO Ubuntu 24.04 et offline-full.zip avec hachage SHA-512 et chiffrement LUKS2 facultatif.',
-            el: 'Χρησιμοποιήστε το oscar-3.11.9-autoinstall-usb-creator.zip σε Windows 11 ή Ubuntu — μέσω GUI, διαδραστικού TUI ή CLI — για συνδυασμό του ISO Ubuntu 24.04 και του offline-full.zip με SHA-512 και προαιρετική κρυπτογράφηση LUKS2.',
+            en: 'Use the standalone oscar-3.11.9-autoinstall-usb-creator.zip on Windows 11 or Ubuntu—via Desktop GUI, interactive terminal TUI, or CLI—to combine ubuntu-24.04-live-server-amd64.iso, oscar-3.11.9-ubuntu-x86_64-offline-full.zip, a PBKDF2-hashed initial OSCAR web admin password, and lanes.csv with unattended first-boot setup.',
+            es: 'Use oscar-3.11.9-autoinstall-usb-creator.zip en Windows 11 o Ubuntu —mediante GUI de escritorio, TUI interactiva o CLI— para combinar el ISO de Ubuntu 24.04, offline-full.zip, contraseña web inicial admin con hash PBKDF2 y lanes.csv con auto-inicialización.',
+            fr: 'Utilisez oscar-3.11.9-autoinstall-usb-creator.zip sous Windows 11 ou Ubuntu — via GUI de bureau, TUI interactive ou CLI — pour assembler l’ISO Ubuntu 24.04, offline-full.zip, mot de passe web admin PBKDF2 et lanes.csv avec initialisation automatique.',
+            el: 'Χρησιμοποιήστε το oscar-3.11.9-autoinstall-usb-creator.zip σε Windows 11 ή Ubuntu — μέσω GUI, διαδραστικού TUI ή CLI — για συνδυασμό του ISO Ubuntu 24.04, του offline-full.zip, κωδικού web admin PBKDF2 και lanes.csv με αυτόματη αρχικοποίηση.',
         },
     ),
 ];
