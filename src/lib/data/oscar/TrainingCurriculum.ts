@@ -358,7 +358,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         steps: [
             "Open Status of Health {{icon:health}} (`/health`, the heart-pulse monitor icon in the left navigation bar) or Dashboard {{icon:dashboard}} (`/`, the four-tile grid icon) and confirm `DemoLane01` shows Online for both the Rapiscan RPM and camera — or click Help {{icon:help}} (the circled `?` icon in the top-right bar) anytime for quick reference.",
             "Click 'Inject Gamma High Fault' or 'Inject Tamper Alarm' below and watch the Status of Health {{icon:health}} indicator immediately flag the detector fault.",
-            "Click 'Clear Faults' to restore normal background (`GB` / `TC`) and click 'Inject Clean Pass' to observe a non-alarm occupancy.",
+            "Click 'Clear Faults' to restore normal background (`GB` / `TC`), then click 'Inject Clean Pass' to stream a ~4s non-alarm vehicle pass and verify it appears at row #1 of Events {{icon:events}} (`/event-log`) with Status `None` (without interrupting the Dashboard alarm queue).",
         ],
         injectActions: [
             { scenario: "fault_gamma_high", label: "Inject Gamma High Fault" },
@@ -451,9 +451,9 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         whyItMatters:
             "OSCAR reduces nuisance workload by auto-releasing spatially uniform NORM cargo (`Code 9999`) and stalled gamma-only holds (`Code 9998`), while strictly refusing to auto-release any Neutron alarm.",
         steps: [
-            "Click 'Inject Distributed NORM (Code 9999)' to stream a balanced 4-panel cargo profile; verify in Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon in the left navigation bar) that EML auto-adjudicates it as `Code 9999: EML Non-Threat`.",
-            "Click 'Inject Extended Hold (Code 9998)' (takes ~10s in sandbox mode) to watch `Fault - Extended Occupancy` appear in Status of Health {{icon:health}} (the heart-pulse monitor icon) and auto-adjudicate gamma-only exit as `Code 9998`.",
-            "Click 'Inject Neutron Alarm' and confirm in Events {{icon:events}} that Neutron triggers NEVER auto-release and immediately demand human secondary inspection.",
+            "Click 'Inject Distributed NORM (Code 9999)' (~4s transit): the Coach opens Events {{icon:events}} (`/event-log`, the warning-triangle `!` icon) where EML auto-adjudicates the pass at `t = 0` as `Code 9999: EML Non-Threat` — intentionally suppressed from the Dashboard {{icon:dashboard}} (`/`) active alarm queue!",
+            "Click 'Inject Extended Hold (Code 9998)' (~10s stalled vehicle hold): `Fault - Extended Occupancy` triggers at 8s and EML auto-adjudicates gamma-only exit as `Code 9998: Extended Occupancy Gamma Alarm` in Events {{icon:events}} (`/event-log`).",
+            "Click 'Inject Neutron Alarm' (~4s transit) and confirm in Events {{icon:events}} and Dashboard {{icon:dashboard}} that Neutron triggers NEVER auto-release and immediately demand human secondary inspection.",
         ],
         injectActions: [
             { scenario: "norm_eml", label: "Inject Distributed NORM (Code 9999)" },
@@ -877,12 +877,16 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         whyItMatters:
             "Administrators can suppress nuisance physical siren/beacon activations on benign NORM (`Code 9999`) and stalled gamma holds (`Code 9998`) via Lights & Sound {{icon:webrelay}} (the megaphone/siren icon) while pulsing Gamma Red + Siren (`R3`) and Neutron Blue (`R4`) on actionable threats, with fail-safe `0,0,0,0` pass-through if OSCAR stops.",
         steps: [
-            "Open Status of Health {{icon:health}} (`/health`, the heart-pulse monitor icon in the left navigation bar) or a lane's Lane View (`/lane-view`) as an Administrator and click the per-lane 'Lights & Sound' {{icon:webrelay}} megaphone button (or configure under SensorHub Admin {{icon:split-admin}} -> Lane System -> WebRelay).",
-            "Review Operating Modes: `AUTO` (arms `R1=1, R2=1` intercept coils, suppresses `Code 9999` and optional `Code 9998`, pulses `R3`/`R4` on real alarms), `PASS_THROUGH` (`0,0,0,0` direct hardware wiring), `MUTED` (`1,1,0,0` silence), and `MANUAL`.",
-            "Click 'Test Connection' to verify ControlByWeb HTTP/XML (`stateFull.xml` / `state.xml`) reachability, or use timed pulse controls during authorized lane commissioning.",
+            "Click 'Stage DemoLane01 + Loopback WebRelay' below (or open Status of Health {{icon:health}} `/health` if `DemoLane01` is already online) and click the 'Lights & Sound' {{icon:webrelay}} megaphone button.",
+            "Verify the sandbox loopback WebRelay-Quad (`127.0.0.1` port `10180`) using 'Test Connection', then review Operating Modes: `AUTO` (arms `R1=1, R2=1` intercept coils, suppresses `Code 9999` and optional `Code 9998`, pulses `R3`/`R4` on real alarms), `PASS_THROUGH` (`0,0,0,0` direct hardware wiring), `MUTED` (`1,1,0,0` silence), and `MANUAL`.",
+            "Click timed pulse controls (`Pulse Gamma + Sounder` `R3` or `Pulse Neutron` `R4`) inside the modal and watch the live coil telemetry update in real time!",
+        ],
+        injectActions: [
+            { scenario: "stage_webrelay_demo", label: "Stage DemoLane01 + Loopback WebRelay" },
         ],
         copySnippets: [
-            { label: "Copy Example Relay Host", value: "198.51.100.21" },
+            { label: "Copy Sandbox Relay Host", value: "127.0.0.1" },
+            { label: "Copy Sandbox Relay Port", value: "10180" },
         ],
         spotlights: [
             {
@@ -900,7 +904,7 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         ],
         spotlightSelector: '[data-testid^="webrelay-open-lane-"], [data-testid="webrelay-open-header-btn"], [data-testid="lane-view-webrelay-btn"]',
         spotlightLabel: "Highlight Lane Lights & Sound Button",
-        objectiveSummary: "Review per-lane WebRelay-Quad operating modes (`AUTO` / `PASS_THROUGH` / `MUTED`), EML suppression, and fail-safe `0,0,0,0` behavior.",
-        isAutoVerified: () => false,
+        objectiveSummary: "Connect a lane to the loopback WebRelay-Quad (`127.0.0.1:10180`) and verify online coil telemetry (`webRelayOnlineCount >= 1`).",
+        isAutoVerified: (v) => (v.webRelayOnlineCount ?? 0) >= 1,
     },
 ];

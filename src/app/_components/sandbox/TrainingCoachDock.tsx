@@ -46,6 +46,7 @@ import {
     dispatchSandboxRefreshEvents,
     resolveSandboxLaunchTarget,
     downloadTrainingCertificatePdf,
+    fetchSandboxActiveStatus,
     fetchSandboxHostStatus,
     injectSandboxScenario,
     SandboxActiveStatus,
@@ -95,8 +96,17 @@ function renderInlineCode(text: string): React.ReactNode {
     return renderTextWithIconsAndCode(text);
 }
 
+function normalizeViewerRoute(route?: string): string {
+    if (!route) return "/";
+    const qIdx = route.indexOf("?");
+    const rawPath = qIdx >= 0 ? route.slice(0, qIdx) : route;
+    const trimmed = rawPath.trim().replace(/\/+$/, "");
+    return trimmed === "" ? "/" : trimmed;
+}
+
 export interface TrainingCoachDockProps {
     status: SandboxActiveStatus;
+    activePathname?: string;
     onStatusUpdated: (next: SandboxActiveStatus) => void;
     onRefreshRequested: () => void;
     onNavigateRoute: (route: string) => void;
@@ -107,6 +117,7 @@ export interface TrainingCoachDockProps {
 
 export default function TrainingCoachDock({
     status,
+    activePathname,
     onStatusUpdated,
     onRefreshRequested,
     onNavigateRoute,
@@ -129,6 +140,9 @@ export default function TrainingCoachDock({
     const [selectedLabId, setSelectedLabId] = React.useState<string>("op-1");
     const [manualCompletedIds, setManualCompletedIds] = React.useState<string[]>([]);
     const [busyAction, setBusyAction] = React.useState<boolean>(false);
+    const [transitInProgress, setTransitInProgress] = React.useState<boolean>(false);
+    const transitPollCleanupRef = React.useRef<(() => void) | null>(null);
+    const spotlightPollCleanupRef = React.useRef<(() => void) | null>(null);
     const [hostStatus, setHostStatus] = React.useState<SandboxHostStatus | null>(null);
     const [hostBusy, setHostBusy] = React.useState<boolean>(false);
     const [pendingHostAction, setPendingHostAction] = React.useState<{
@@ -252,6 +266,12 @@ export default function TrainingCoachDock({
 
     const activeLab: TrainingLabDefinition =
         trackLabs.find((l) => l.id === selectedLabId) ?? trackLabs[0] ?? TRAINING_LABS[0];
+    const activeLabIndex = trackLabs.findIndex((l) => l.id === activeLab.id);
+    const nextLabInTrack =
+        activeLabIndex >= 0 && activeLabIndex + 1 < trackLabs.length
+            ? trackLabs[activeLabIndex + 1]
+            : null;
+
     const activeTrackDef =
         TRAINING_TRACKS.find((t) => t.id === selectedTrack) ?? TRAINING_TRACKS[0];
     const videoGuide = getVideoGuideBySlug(activeLab.videoGuideSlug);
@@ -363,14 +383,37 @@ export default function TrainingCoachDock({
         }
     };
 
+    React.useEffect(() => {
+        return () => {
+            transitPollCleanupRef.current?.();
+            spotlightPollCleanupRef.current?.();
+        };
+    }, []);
+
+    const activateLabAndSyncRoute = React.useCallback(
+        (lab: TrainingLabDefinition) => {
+            setSelectedLabId(lab.id);
+            setFeedbackBanner(null);
+            if (!lab.splitPaneAdmin && splitAdminOpen) {
+                onToggleSplitAdmin(false);
+            }
+            if (
+                !refresherMode &&
+                !lab.splitPaneAdmin &&
+                activePathname !== undefined &&
+                normalizeViewerRoute(activePathname) !== normalizeViewerRoute(lab.route)
+            ) {
+                onNavigateRoute(lab.route);
+            }
+        },
+        [activePathname, onNavigateRoute, onToggleSplitAdmin, refresherMode, splitAdminOpen],
+    );
+
     const handleSelectTrack = async (trackId: SandboxTrackId) => {
         setSelectedTrack(trackId);
         const firstLab = TRAINING_LABS.find((l) => l.trackId === trackId);
         if (firstLab) {
-            setSelectedLabId(firstLab.id);
-            if (!firstLab.splitPaneAdmin && splitAdminOpen) {
-                onToggleSplitAdmin(false);
-            }
+            activateLabAndSyncRoute(firstLab);
         }
         if (refresherMode) {
             return;
@@ -381,9 +424,9 @@ export default function TrainingCoachDock({
             try {
                 const updated = await stageSandboxTrack(trackId);
                 onStatusUpdated(updated);
-                dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true });
+                dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true, resetForSandboxInjection: true });
                 setTimeout(() => {
-                    dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                    dispatchSandboxRefreshEvents({ telemetry: true, events: true, resetForSandboxInjection: true });
                     onRefreshRequested();
                 }, 1_200);
                 setFeedbackBanner({
@@ -407,9 +450,9 @@ export default function TrainingCoachDock({
         try {
             const updated = await stageSandboxTrack(selectedTrack);
             onStatusUpdated(updated);
-            dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true });
+            dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true, resetForSandboxInjection: true });
             setTimeout(() => {
-                dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                dispatchSandboxRefreshEvents({ telemetry: true, events: true, resetForSandboxInjection: true });
                 onRefreshRequested();
             }, 1_200);
             setFeedbackBanner({
@@ -427,47 +470,177 @@ export default function TrainingCoachDock({
     };
 
     const handleInject = async (scenario: SandboxScenarioId, laneSlot: 1 | 2 = 1) => {
+        transitPollCleanupRef.current?.();
+        transitPollCleanupRef.current = null;
         setBusyAction(true);
         setFeedbackBanner(null);
+
+        const baselineTotal = verification.totalOccupancies;
         try {
             const res = await injectSandboxScenario(scenario, laneSlot);
+
+            if (scenario === "stage_webrelay_demo") {
+                if (splitAdminOpen) onToggleSplitAdmin(false);
+                if (activePathname !== undefined && normalizeViewerRoute(activePathname) !== "/health") {
+                    onNavigateRoute("/health");
+                }
+                dispatchSandboxRefreshEvents({ lanes: true, telemetry: true });
+                onRefreshRequested();
+                setTimeout(() => {
+                    dispatchSandboxRefreshEvents({ lanes: true, telemetry: true });
+                    onRefreshRequested();
+                }, 700);
+                setFeedbackBanner({
+                    severity: "success",
+                    text: `${res.message} Click 'Lights & Sound' on DemoLane01 to test coil modes and pulses.`,
+                });
+                return;
+            }
+
             const isInstantFaultControl =
                 scenario === "fault_gamma_high" ||
                 scenario === "fault_tamper" ||
                 scenario === "clear_faults";
-            setFeedbackBanner({
-                severity: scenario === "clear_faults" ? "success" : "info",
-                text: res.message,
-            });
+
             if (isInstantFaultControl) {
-                setTimeout(() => {
-                    dispatchSandboxRefreshEvents({ telemetry: true });
-                }, 250);
-                setTimeout(() => {
-                    onRefreshRequested();
-                }, 400);
-                setTimeout(() => {
-                    dispatchSandboxRefreshEvents({ telemetry: true });
-                }, 950);
-                setTimeout(() => {
-                    onRefreshRequested();
-                }, 1_100);
-            } else if (scenario === "extended_occupancy") {
-                for (const delayMs of [1_200, 9_200, 11_500]) {
+                if (splitAdminOpen) onToggleSplitAdmin(false);
+                if (
+                    activePathname !== undefined &&
+                    normalizeViewerRoute(activePathname) !== "/health" &&
+                    normalizeViewerRoute(activePathname) !== "/"
+                ) {
+                    onNavigateRoute("/health");
+                }
+                const faultExplain =
+                    scenario === "fault_gamma_high"
+                        ? "Injected Fault - Gamma High (GH) on DemoLane01 — observe the red 'Fault - Gamma High' badge on Status of Health (/health) and Dashboard (/)."
+                        : scenario === "fault_tamper"
+                            ? "Injected Tamper Alarm (TT) on DemoLane01 — observe the red 'Tamper: Active' badge on Status of Health (/health)."
+                            : "Cleared faults and tamper state (TC + GB/NB) on DemoLane01 — lane restored to Online.";
+                setFeedbackBanner({
+                    severity: scenario === "clear_faults" ? "success" : "info",
+                    text: faultExplain,
+                });
+                for (const delayMs of [250, 950]) {
                     setTimeout(() => {
-                        dispatchSandboxRefreshEvents({ telemetry: true, events: true });
+                        dispatchSandboxRefreshEvents({ telemetry: true });
                         onRefreshRequested();
                     }, delayMs);
                 }
-            } else {
-                for (const delayMs of [800, 4_650, 6_200]) {
-                    setTimeout(() => {
-                        dispatchSandboxRefreshEvents({ telemetry: true, events: true });
-                        onRefreshRequested();
-                    }, delayMs);
+                return;
+            }
+
+            // Occupancy transit scenario: navigate immediately to the page where the resulting row appears!
+            if (splitAdminOpen) onToggleSplitAdmin(false);
+            const requiresEventLog =
+                scenario === "norm_eml" ||
+                scenario === "extended_occupancy" ||
+                scenario === "clean_pass";
+            const currentNorm = normalizeViewerRoute(activePathname);
+            if (activePathname !== undefined) {
+                if (requiresEventLog && currentNorm !== "/event-log") {
+                    onNavigateRoute("/event-log");
+                } else if (!requiresEventLog && currentNorm !== "/" && currentNorm !== "/event-log") {
+                    onNavigateRoute(activeLab.route);
                 }
             }
+
+            const inFlightText =
+                scenario === "norm_eml"
+                    ? "Simulating ~4s balanced 4-panel NORM cargo transit on DemoLane01 — opening Events (/event-log) where EML auto-adjudicates Code 9999..."
+                    : scenario === "extended_occupancy"
+                        ? "Simulating ~10s stalled vehicle hold on DemoLane01 — Fault - Extended Occupancy fires at 8s, then exits into Events (/event-log) as Code 9998..."
+                        : scenario === "clean_pass"
+                            ? "Simulating ~4s non-alarm Clean Pass on DemoLane01 — opening Events (/event-log)..."
+                            : scenario === "neutron_alarm"
+                                ? "Simulating ~4s Neutron Alarm transit on DemoLane01 — watch EML refuse auto-release..."
+                                : "Simulating ~4s alarm transit on DemoLane01 — watch the lane pulse red as radiation counts spike...";
+
+            const completionText =
+                scenario === "norm_eml"
+                    ? "Distributed NORM pass complete! Auto-adjudicated at t=0 as 'Code 9999: EML Non-Threat' — shown at row #1 of Events (/event-log) and intentionally suppressed from the Dashboard (/) active alarm queue."
+                    : scenario === "extended_occupancy"
+                        ? "Extended Hold complete! Auto-adjudicated on exit as 'Code 9998: Extended Occupancy Gamma Alarm' — shown at row #1 of Events (/event-log) and suppressed from the Dashboard (/) active alarm queue."
+                        : scenario === "clean_pass"
+                            ? "Clean Pass complete! Recorded at row #1 of Events (/event-log) with Status 'None' (routine non-alarm traffic never enters the Dashboard alarm queue)."
+                            : scenario === "neutron_alarm"
+                                ? "Neutron Alarm recorded at row #1 (Unadjudicated)! Notice EML refused to auto-release it — Neutron triggers always demand human secondary inspection."
+                                : "New Alarm recorded at row #1 on DemoLane01! Click the bold alarm row in the table to inspect its 5 camera frames and submit an adjudication.";
+
+            setTransitInProgress(true);
+            setFeedbackBanner({ severity: "info", text: inFlightText });
+            setTimeout(() => {
+                dispatchSandboxRefreshEvents({ telemetry: true });
+            }, 600);
+
+            const startedMs = Date.now();
+            const maxWaitMs = scenario === "extended_occupancy" ? 14_500 : 7_800;
+            const minTransitMs = scenario === "extended_occupancy" ? 8_500 : 2_200;
+            let finished = false;
+            let followUpTimer: ReturnType<typeof setTimeout> | null = null;
+
+            const finishTransit = (finalStatus?: SandboxActiveStatus) => {
+                if (finished) return;
+                finished = true;
+                clearInterval(pollTimer);
+                setTransitInProgress(false);
+                if (finalStatus?.sandboxMode) {
+                    onStatusUpdated(finalStatus);
+                } else {
+                    onRefreshRequested();
+                }
+                dispatchSandboxRefreshEvents({
+                    telemetry: true,
+                    events: true,
+                    resetForSandboxInjection: true,
+                });
+                setFeedbackBanner({ severity: "success", text: completionText });
+                setLiveAnnouncement(completionText);
+                followUpTimer = setTimeout(() => {
+                    dispatchSandboxRefreshEvents({
+                        telemetry: true,
+                        events: true,
+                        resetForSandboxInjection: true,
+                    });
+                    onRefreshRequested();
+                }, 1_100);
+            };
+
+            const pollTimer = setInterval(() => {
+                const elapsed = Date.now() - startedMs;
+                fetchSandboxActiveStatus()
+                    .then((polled) => {
+                        if (finished) return;
+                        if (!polled.sandboxMode) {
+                            if (elapsed >= maxWaitMs) {
+                                finishTransit();
+                            }
+                            return;
+                        }
+                        onStatusUpdated(polled);
+                        const nextTotal = polled.verification?.totalOccupancies ?? 0;
+                        const transitSettled =
+                            elapsed >= minTransitMs &&
+                            !polled.busyOccupancy &&
+                            (nextTotal > baselineTotal || elapsed >= maxWaitMs);
+                        if (transitSettled || elapsed >= maxWaitMs) {
+                            finishTransit(polled);
+                        }
+                    })
+                    .catch(() => {
+                        if (!finished && elapsed >= maxWaitMs) {
+                            finishTransit();
+                        }
+                    });
+            }, 650);
+
+            transitPollCleanupRef.current = () => {
+                finished = true;
+                clearInterval(pollTimer);
+                if (followUpTimer) clearTimeout(followUpTimer);
+            };
         } catch (err: any) {
+            setTransitInProgress(false);
             setFeedbackBanner({
                 severity: "error",
                 text: err?.message ?? "Practice event injection failed.",
@@ -493,13 +666,47 @@ export default function TrainingCoachDock({
 
     const handleSpotlight = (selector?: string) => {
         if (!selector || typeof document === "undefined") return;
-        const found = triggerPlatformSpotlight(selector);
-        if (!found) {
-            setFeedbackBanner({
-                severity: "info",
-                text: "Open the target page first so the highlighted control is visible on screen.",
-            });
+        spotlightPollCleanupRef.current?.();
+        spotlightPollCleanupRef.current = null;
+
+        if (triggerPlatformSpotlight(selector)) {
+            return;
         }
+
+        const needsViewerPage = !selector.includes("split-admin");
+        if (needsViewerPage && splitAdminOpen) {
+            onToggleSplitAdmin(false);
+        }
+        if (
+            needsViewerPage &&
+            !activeLab.splitPaneAdmin &&
+            (activePathname === undefined ||
+                normalizeViewerRoute(activePathname) !== normalizeViewerRoute(activeLab.route))
+        ) {
+            onNavigateRoute(activeLab.route);
+        }
+
+        let attempts = 0;
+        const timer = setInterval(() => {
+            attempts += 1;
+            if (triggerPlatformSpotlight(selector)) {
+                clearInterval(timer);
+                spotlightPollCleanupRef.current = null;
+                return;
+            }
+            if (attempts >= 18) {
+                clearInterval(timer);
+                spotlightPollCleanupRef.current = null;
+                setFeedbackBanner({
+                    severity: "info",
+                    text:
+                        activeLab.id === "adm-5" && verification.configuredLaneCount === 0
+                            ? "Click 'Stage DemoLane01 + Loopback WebRelay' below first so a lane is visible on Status of Health (/health)."
+                            : `Open ${activeLab.route} so the highlighted control is visible on screen.`,
+                });
+            }
+        }, 120);
+        spotlightPollCleanupRef.current = () => clearInterval(timer);
     };
 
     const handleCopy = async (value: string) => {
@@ -622,7 +829,7 @@ export default function TrainingCoachDock({
                 </Stack>
             </Box>
 
-            {(busyAction || hostBusy || hostStarting || status.stagingInProgress) && (
+            {(busyAction || transitInProgress || hostBusy || hostStarting || status.stagingInProgress || status.busyOccupancy) && (
                 <LinearProgress color="warning" />
             )}
 
@@ -841,12 +1048,7 @@ export default function TrainingCoachDock({
                                 label={`${lab.badge} ${lab.title.split(" ")[0].replace(/[,:;]+$/, "")}`}
                                 color={active ? "primary" : verified ? "success" : done ? "info" : "default"}
                                 variant={active ? "filled" : "outlined"}
-                                onClick={() => {
-                                    setSelectedLabId(lab.id);
-                                    if (!lab.splitPaneAdmin && splitAdminOpen) {
-                                        onToggleSplitAdmin(false);
-                                    }
-                                }}
+                                onClick={() => activateLabAndSyncRoute(lab)}
                                 data-testid={`training-lab-chip-${lab.id}`}
                                 sx={{ fontWeight: active ? 700 : 500 }}
                             />
@@ -1091,18 +1293,34 @@ export default function TrainingCoachDock({
                             <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "#334155" }}>
                                 {ui.objectivePrefix} {renderInlineCode(activeLab.objectiveSummary)}
                             </Typography>
-                            {!isLabVerified(activeLab) && (
-                                <Button
-                                    size="small"
-                                    variant="text"
-                                    onClick={() => handleToggleManualDone(activeLab.id)}
-                                    data-testid="training-manual-complete-btn"
-                                    sx={{ mt: 0.5, p: 0, textTransform: "none", fontSize: "0.76rem" }}
-                                >
-                                    {manualCompletedIds.includes(activeLab.id) ? "✓ " : ""}
-                                    {ui.markCompleteLabel}
-                                </Button>
-                            )}
+                            <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                                {!isLabVerified(activeLab) ? (
+                                    <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={() => handleToggleManualDone(activeLab.id)}
+                                        data-testid="training-manual-complete-btn"
+                                        sx={{ p: 0, textTransform: "none", fontSize: "0.76rem" }}
+                                    >
+                                        {manualCompletedIds.includes(activeLab.id) ? "✓ " : ""}
+                                        {ui.markCompleteLabel}
+                                    </Button>
+                                ) : (
+                                    <span />
+                                )}
+                                {nextLabInTrack && (
+                                    <Button
+                                        size="small"
+                                        variant={isLabDone(activeLab) ? "contained" : "outlined"}
+                                        color={isLabDone(activeLab) ? "primary" : "inherit"}
+                                        onClick={() => activateLabAndSyncRoute(nextLabInTrack)}
+                                        data-testid="training-next-lab-btn"
+                                        sx={{ textTransform: "none", fontSize: "0.75rem", py: 0.25 }}
+                                    >
+                                        Next Lab ({nextLabInTrack.badge}) →
+                                    </Button>
+                                )}
+                            </Stack>
                         </Box>
                     </div>
                 </details>

@@ -324,7 +324,8 @@ describe("Users, Passkeys & Access Control Console", () => {
         );
 
         cy.wait(["@getAdminSession", "@getOverview"]);
-        cy.get('[role="tab"]').should("have.length", 5);
+        cy.get('[role="tab"]').should("have.length", 6);
+        cy.contains('[role="tab"]', "System Update").should("be.visible");
 
         // Open Users & Roles tab and add a scoped Operator with auto-generated temporary password
         cy.contains('[role="tab"]', "Users & Roles").click();

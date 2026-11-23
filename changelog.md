@@ -1,6 +1,22 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.8
+
+### Added
+
+- Added **Zero-Login GitHub & Offline Bundle System Update Console** (`SystemUpdateApi.ts`, `SystemUpdateCard.tsx`, `SystemUpdateDialog.css`, `UsersAccessManager.tsx` `/users?tab=update`, `HelpDialog.tsx` across `en`, `es`, `fr`, `el`): allows Administrators to check public `ORNL/oscar` GitHub Releases anonymously without any GitHub account or token, inspect release notes and expected SHA-256 digests, upload offline/air-gapped `oscar-<version>.zip` bundles, confirm upgrades inside a native `<dialog>` modal (`showModal()`, safe `Cancel` focus), monitor live host-agent stages via a native `<progress>` bar and polite `role="status"` live region across container cutover (`502`/`503` reconnect handling), and reload onto the verified release (or inspect automatic rollback diagnostics).
+- Added **Destination-Aware Training Sandbox Action Navigation, Live Occupancy Transit Feedback & Loopback `WebRelay-Quad` Lab (`3.5`)** (`TrainingCoachDock.tsx`, `TrainingCurriculum.ts`, `TrainingSandboxApi.ts`, `EventTable.tsx`, `HealthPage.tsx` across `en`, `es`, `fr`, `el`):
+  - Selecting any Lab chip, Track tab, or the new **`Next Lab (<badge>) ->`** button inside `:8444` automatically opens `lab.route` so trainees are always on the matching page before clicking an action.
+  - Clicking **Inject NORM (`Code 9999`)**, **Inject Extended Occupancy (`Code 9998`)**, or **Inject Clean Pass** automatically navigates to **Events (`/event-log`)**, displays live occupancy transit progress while `busyOccupancy` is active, resets pagination to `page 0`, enables the **`Adjudication Code`** column by default on `/event-log`, renders **`Code 9998`** alongside **`Code 9999`** badges, and explains why automated non-threat dispositions appear in `/event-log` while remaining suppressed from the active Dashboard (`/`) threat queue.
+  - Clicking **Fault: Gamma High**, **Fault: Tamper**, **Clear Faults**, or Lab `3.5`'s new **Stage `DemoLane01` + Loopback WebRelay (`127.0.0.1:10180`)** automatically navigates to **Status of Health (`/health`)** and reconciles `WebRelay (AUTO) · Online` chips immediately; off-page **Highlight Control** actions also navigate to `lab.route` before applying the spotlight ring.
+- Re-synchronized `VideoGuidesCatalog.ts` with all **29 human-paced `1080p` `30 fps` CFR workflow video guides** and their 232 4-language (`en`, `es`, `fr`, `el`) `.vtt` / `.srt` caption files (smooth cursor glide, pre-click hover preview ring, human typing cadence, `<= 115 WPM` narration pacing, and `>= 4.5 s` post-action steady screen holds).
+
+### Fixed
+
+- Eliminated unused cross-route `<link rel="preload" as="style">` console warnings in Chromium/Chrome by disabling automatic RSC route prefetching (`prefetch={false}`) across the 11 left-navigation `<Link>` items and account button in `Navbar.tsx`.
+- Updated operator help titles, glossary entries (adding `Side-by-Side CAS RPM Edge Proxy`), support-bundle fallback metadata, and hardware-replacement recovery checklist references to `OSCAR 3.11.8` (`oscar-3.11.8.zip`).
+
 ## 3.11.7
 
 ### Added
