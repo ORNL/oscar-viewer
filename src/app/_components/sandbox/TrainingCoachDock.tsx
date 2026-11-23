@@ -426,7 +426,7 @@ export default function TrainingCoachDock({
                 onStatusUpdated(updated);
                 dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true, resetForSandboxInjection: true });
                 setTimeout(() => {
-                    dispatchSandboxRefreshEvents({ telemetry: true, events: true, resetForSandboxInjection: true });
+                    dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true, resetForSandboxInjection: true });
                     onRefreshRequested();
                 }, 1_200);
                 setFeedbackBanner({
@@ -452,7 +452,7 @@ export default function TrainingCoachDock({
             onStatusUpdated(updated);
             dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true, resetForSandboxInjection: true });
             setTimeout(() => {
-                dispatchSandboxRefreshEvents({ telemetry: true, events: true, resetForSandboxInjection: true });
+                dispatchSandboxRefreshEvents({ lanes: true, telemetry: true, events: true, resetForSandboxInjection: true });
                 onRefreshRequested();
             }, 1_200);
             setFeedbackBanner({

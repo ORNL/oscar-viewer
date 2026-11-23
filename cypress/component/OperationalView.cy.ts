@@ -294,4 +294,42 @@ describe("operational view scoping", () => {
         expect(resolveRouteForViewSwitch("/event-details", "?eventId=abc&view=north-gate", null))
             .to.equal("/event-log");
     });
+
+    it("invalidates cached operational view catalog so sandbox track switches immediately surface south-gate", async () => {
+        const laneNorth: any = geoJsonSystem("lane-1", "urn:osh:system:lane:demo-lane-01", "DemoLane01");
+        const laneSouth: any = geoJsonSystem("lane-2", "urn:osh:system:lane:demo-lane-02", "DemoLane02");
+        let activeSystems = [laneNorth];
+
+        const node: any = Object.create(Node.prototype);
+        node.operationalViewCatalogPromise = null;
+        node.fetchSystems = cy.stub().callsFake(async () => activeSystems.map((s) => JSON.parse(JSON.stringify(s))));
+        node.systemsApi = {
+            getSystemById: cy.stub().callsFake(async (id: string) => ({
+                properties: {
+                    keywords: id === "lane-2" ? ["oscar:view:south-gate"] : ["oscar:view:north-gate"],
+                },
+            })),
+        };
+
+        // Operator Track: only north-gate is staged initially
+        const operatorMerged = mergeOperationalViewCatalogs([await node.fetchOperationalViewCatalog()]);
+        expect(operatorMerged.totalLaneCount).to.equal(1);
+        expect(operatorMerged.options).to.deep.equal([{key: "north-gate", laneCount: 1}]);
+
+        // Switching to Supervisor Track adds DemoLane02 (south-gate)
+        activeSystems = [laneNorth, laneSouth];
+
+        // Without invalidation, memoized promise returns stale Operator catalog
+        const cachedMerged = mergeOperationalViewCatalogs([await node.fetchOperationalViewCatalog()]);
+        expect(cachedMerged.options).to.deep.equal([{key: "north-gate", laneCount: 1}]);
+
+        // Invalidating (or passing forceRefresh=true on oscar:sandbox-lanes-changed) surfaces south-gate immediately
+        node.invalidateOperationalViewCatalog();
+        const supervisorMerged = mergeOperationalViewCatalogs([await node.fetchOperationalViewCatalog()]);
+        expect(supervisorMerged.totalLaneCount).to.equal(2);
+        expect(supervisorMerged.options).to.deep.equal([
+            {key: "north-gate", laneCount: 1},
+            {key: "south-gate", laneCount: 1},
+        ]);
+    });
 });

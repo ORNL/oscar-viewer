@@ -29,6 +29,7 @@ interface IDataSourceContext {
     viewError: "invalid" | "empty" | "unauthorized" | null;
     availableViews: readonly OperationalViewOption[];
     totalCatalogLaneCount: number;
+    refreshOperationalViews: () => Promise<void>;
     setActiveView: (nextViewKey: string | null) => void;
     scopedHref: (path: string) => string;
     currentSession: OscarSessionInfo | null;
@@ -75,10 +76,16 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
     const [availableViews, setAvailableViews] = useState<OperationalViewOption[]>([]);
     const [totalCatalogLaneCount, setTotalCatalogLaneCount] = useState(0);
     const [sandboxLaneReloadEpoch, setSandboxLaneReloadEpoch] = useState(0);
+    const lastCatalogRefreshEpochRef = useRef(0);
     const discoveryGenerationRef = useRef(0);
+    const nodesRef = useRef<Node[]>(nodes);
+    nodesRef.current = nodes;
 
     useEffect(() => {
         const handleSandboxLanesChanged = () => {
+            for (const node of nodesRef.current) {
+                node?.invalidateOperationalViewCatalog?.();
+            }
             setSandboxLaneReloadEpoch((prev) => prev + 1);
         };
         window.addEventListener("oscar:sandbox-lanes-changed", handleSandboxLanesChanged);
@@ -315,6 +322,26 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
         init();
     }, [nodesConnectionKey, viewSelection, sessionLoaded, userAllowedViewsKey, sandboxLaneReloadEpoch]);
 
+    const refreshOperationalViews = useCallback(async () => {
+        const currentNodes = nodesRef.current;
+        if (currentNodes.length === 0) {
+            setAvailableViews([]);
+            setTotalCatalogLaneCount(0);
+            return;
+        }
+        const outcomes = await Promise.allSettled(
+            currentNodes
+                .filter((node) => typeof node?.fetchOperationalViewCatalog === "function")
+                .map((node) => node.fetchOperationalViewCatalog(true)),
+        );
+        const catalogs = outcomes
+            .filter((o): o is PromiseFulfilledResult<Awaited<ReturnType<Node["fetchOperationalViewCatalog"]>>> => o.status === "fulfilled")
+            .map((o) => o.value);
+        const merged = mergeOperationalViewCatalogs(catalogs);
+        setAvailableViews(merged.options);
+        setTotalCatalogLaneCount(merged.totalLaneCount);
+    }, []);
+
     useEffect(() => {
         if (!sessionLoaded || (!laneMapReady && !viewError) || nodes.length === 0) {
             if (nodes.length === 0) {
@@ -324,10 +351,12 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
             return;
         }
         let cancelled = false;
+        const forceCatalogRefresh = sandboxLaneReloadEpoch !== lastCatalogRefreshEpochRef.current;
+        lastCatalogRefreshEpochRef.current = sandboxLaneReloadEpoch;
         void Promise.allSettled(
             nodes
                 .filter((node) => typeof node?.fetchOperationalViewCatalog === "function")
-                .map((node) => node.fetchOperationalViewCatalog()),
+                .map((node) => node.fetchOperationalViewCatalog(forceCatalogRefresh)),
         ).then((outcomes) => {
             if (cancelled) return;
             const catalogs = outcomes
@@ -336,11 +365,31 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
             const merged = mergeOperationalViewCatalogs(catalogs);
             setAvailableViews(merged.options);
             setTotalCatalogLaneCount(merged.totalLaneCount);
+            if (
+                forceCatalogRefresh &&
+                (currentSession?.allowedViews ?? []).length === 0 &&
+                viewSelection.key &&
+                !merged.options.some((opt) => opt.key === viewSelection.key)
+            ) {
+                setViewSelection({ resolved: true, key: null, error: null });
+                if (typeof window !== "undefined") {
+                    const nextUrl = resolveRouteForViewSwitch(
+                        window.location.pathname,
+                        window.location.search,
+                        null,
+                    );
+                    try {
+                        window.history.replaceState(window.history.state, "", nextUrl);
+                    } catch {
+                        // Ignore history API restrictions in embedded test harnesses
+                    }
+                }
+            }
         });
         return () => {
             cancelled = true;
         };
-    }, [laneMapReady, nodes, nodesConnectionKey, sessionLoaded, viewError]);
+    }, [laneMapReady, nodes, nodesConnectionKey, sessionLoaded, viewError, sandboxLaneReloadEpoch, currentSession?.allowedViews, viewSelection.key]);
 
     const setActiveView = useCallback(
         (nextViewKey: string | null) => {
@@ -385,6 +434,7 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
             viewError,
             availableViews,
             totalCatalogLaneCount,
+            refreshOperationalViews,
             setActiveView,
             scopedHref,
             currentSession,

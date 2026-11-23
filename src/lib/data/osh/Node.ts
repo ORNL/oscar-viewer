@@ -149,7 +149,9 @@ export interface INode {
 
     fetchLaneSystemsAndSubsystems(viewKey?: string | null): Promise<Map<string, LaneMapEntry>>,
 
-    fetchOperationalViewCatalog(): Promise<OperationalViewCatalog>,
+    fetchOperationalViewCatalog(forceRefresh?: boolean): Promise<OperationalViewCatalog>,
+
+    invalidateOperationalViewCatalog(): void,
 
     fetchLaneControlStreams(laneMap: Map<string, LaneMapEntry>): Promise<any>,
 
@@ -521,7 +523,14 @@ export class Node implements INode {
         return laneMap;
     }
 
-    async fetchOperationalViewCatalog(): Promise<OperationalViewCatalog> {
+    invalidateOperationalViewCatalog(): void {
+        this.operationalViewCatalogPromise = null;
+    }
+
+    async fetchOperationalViewCatalog(forceRefresh = false): Promise<OperationalViewCatalog> {
+        if (forceRefresh) {
+            this.operationalViewCatalogPromise = null;
+        }
         if (this.operationalViewCatalogPromise)
             return this.operationalViewCatalogPromise;
 
