@@ -49,7 +49,9 @@ import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
 import QrCode2RoundedIcon from '@mui/icons-material/QrCode2Rounded';
 import CloudRoundedIcon from '@mui/icons-material/CloudRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import SystemUpdateAltRoundedIcon from '@mui/icons-material/SystemUpdateAltRounded';
 import Link from 'next/link';
+import SystemUpdateCard from '@/app/_components/update/SystemUpdateCard';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
 import { DataSourceContext } from '@/app/contexts/DataSourceContext';
 import { getIntlLocale } from '@/app/utils/LocaleUtils';
@@ -98,6 +100,7 @@ interface UsersUiCopy {
         federation: string;
         policy: string;
         recovery: string;
+        systemUpdate: string;
     };
     roles: Record<OscarRoleId, { label: string; desc: string }>;
     accountSummaryTitle: string;
@@ -230,6 +233,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
             federation: 'Federation Tokens',
             policy: 'Sign-In & SSO Policy',
             recovery: 'Backup & Hardware Recovery',
+            systemUpdate: 'System Update',
         },
         roles: {
             admin: {
@@ -373,6 +377,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
             federation: 'Tokens de federación',
             policy: 'Política de sesión y SSO',
             recovery: 'Copia y reemplazo de equipo',
+            systemUpdate: 'Actualización del sistema',
         },
         roles: {
             admin: {
@@ -516,6 +521,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
             federation: 'Jetons de fédération',
             policy: 'Politique de session et SSO',
             recovery: 'Sauvegarde et remplacement matériel',
+            systemUpdate: 'Mise à jour système',
         },
         roles: {
             admin: {
@@ -659,6 +665,7 @@ const COPY: Record<Locale, UsersUiCopy> = {
             federation: 'Διακριτικά ομοσπονδίας',
             policy: 'Πολιτική συνεδρίας & SSO',
             recovery: 'Αντίγραφα & αντικατάσταση υλικού',
+            systemUpdate: 'Ενημέρωση συστήματος',
         },
         roles: {
             admin: {
@@ -815,6 +822,7 @@ export default function UsersAccessManager() {
     const scopedHref = dataSourceCtx?.scopedHref ?? ((p: string) => p);
 
     const [activeTab, setActiveTab] = React.useState(0);
+    const appliedInitialTabQueryRef = React.useRef(false);
     const [loading, setLoading] = React.useState(true);
     const [banner, setBanner] = React.useState<{ severity: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
 
@@ -1179,7 +1187,7 @@ export default function UsersAccessManager() {
         const hostname = typeof window !== 'undefined' ? window.location.hostname : 'oscar.local';
         const lines = [
             '========================================================================',
-            `OSCAR 3.11.7 — NON-IT INSTALL, BACKUP & HARDWARE REPLACEMENT CHECKLIST`,
+            `OSCAR 3.11.8 — NON-IT INSTALL, BACKUP & HARDWARE REPLACEMENT CHECKLIST`,
             `Generated: ${new Date().toISOString()} | Node: ${hostname}`,
             '========================================================================',
             '',
@@ -1198,7 +1206,7 @@ export default function UsersAccessManager() {
             '     * Octelium Zero Trust remote-access tunnel config & token (remote-access/)',
             '',
             '3. FULL HARDWARE REPLACEMENT (IF SERVER FAILS):',
-            '   Step A: Extract oscar-3.11.7.zip on the replacement Ubuntu 24.04 or Windows 11 PC.',
+            '   Step A: Extract oscar-3.11.8.zip on the replacement Ubuntu 24.04 or Windows 11 PC.',
             '   Step B: Attach your backup drive and place secrets/backup-key.txt in place.',
             '   Step C: Run:',
             '           Linux:   sudo bash oscar.sh restore --backup <BACKUP_ID> --confirm <BACKUP_ID>',
@@ -1217,6 +1225,20 @@ export default function UsersAccessManager() {
     };
 
     const isAdmin = Boolean(session?.isAdmin);
+
+    React.useEffect(() => {
+        if (!isAdmin || appliedInitialTabQueryRef.current || typeof window === 'undefined') {
+            return;
+        }
+        const qTab = new URLSearchParams(window.location.search).get('tab')?.toLowerCase();
+        if (qTab === 'update' || qTab === 'system-update') {
+            appliedInitialTabQueryRef.current = true;
+            setActiveTab(5);
+        } else if (qTab === 'recovery') {
+            appliedInitialTabQueryRef.current = true;
+            setActiveTab(4);
+        }
+    }, [isAdmin]);
     const rpSupported = passkeyData ? passkeyData.rpIdSupported : Boolean(session?.rpIdSupported);
     const validExternalConsoleUrl = normalizeTrustedHttpsConsoleUrl(
         policyDraft?.externalIdentityConsoleUrl ?? overview?.policy?.externalIdentityConsoleUrl,
@@ -1264,6 +1286,14 @@ export default function UsersAccessManager() {
                     )}
                     {isAdmin && (
                         <Tab icon={<DownloadRoundedIcon fontSize="small" />} iconPosition="start" label={copy.tabs.recovery} />
+                    )}
+                    {isAdmin && (
+                        <Tab
+                            icon={<SystemUpdateAltRoundedIcon fontSize="small" />}
+                            iconPosition="start"
+                            label={copy.tabs.systemUpdate}
+                            data-testid="users-tab-system-update"
+                        />
                     )}
                 </Tabs>
 
@@ -2267,7 +2297,7 @@ export default function UsersAccessManager() {
                                                 3. Drop-In Hardware Replacement
                                             </Typography>
                                             <Typography variant="body2" color="text.secondary">
-                                                If a server PC fails, extract <code>oscar-3.11.7.zip</code> on replacement hardware, supply <code>backup-key.txt</code>, and run <code>oscar restore</code>. All users, Passkeys, alarms, and the public Octelium tunnel come back online automatically.
+                                                If a server PC fails, extract <code>oscar-3.11.8.zip</code> on replacement hardware, supply <code>backup-key.txt</code>, and run <code>oscar restore</code>. All users, Passkeys, alarms, and the public Octelium tunnel come back online automatically.
                                             </Typography>
                                         </CardContent>
                                     </Card>
@@ -2290,8 +2320,23 @@ export default function UsersAccessManager() {
                                 >
                                     USB NVMe Backups
                                 </Button>
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<SystemUpdateAltRoundedIcon />}
+                                    onClick={() => setActiveTab(5)}
+                                    data-testid="recovery-open-system-update-btn"
+                                >
+                                    {copy.tabs.systemUpdate}
+                                </Button>
                             </Stack>
                         </Stack>
+                    )}
+
+                    {/* ========================================================= */}
+                    {/* TAB 5: ZERO-LOGIN GITHUB & OFFLINE SYSTEM UPDATE          */}
+                    {/* ========================================================= */}
+                    {isAdmin && activeTab === 5 && (
+                        <SystemUpdateCard isAdmin={isAdmin} />
                     )}
                 </Box>
             </Paper>

@@ -39,6 +39,10 @@ import {
     type LaneWebRelayStatusEntry,
 } from "@/lib/data/oscar/WebRelayApi";
 import {
+    OSCAR_SANDBOX_LANES_EVENT,
+    OSCAR_SANDBOX_TELEMETRY_EVENT,
+} from "@/lib/data/oscar/TrainingSandboxApi";
+import {
     DEFAULT_OCCUPANCY_THRESHOLD_MINUTES,
     deriveLaneHealthRows,
     formatHealthDuration,
@@ -145,10 +149,17 @@ export default function HealthPage() {
         const interval = window.setInterval(() => {
             void pollWebRelays();
         }, 30_000);
+        const onSandboxMutated = () => {
+            void pollWebRelays();
+        };
+        window.addEventListener(OSCAR_SANDBOX_LANES_EVENT, onSandboxMutated);
+        window.addEventListener(OSCAR_SANDBOX_TELEMETRY_EVENT, onSandboxMutated);
         return () => {
             active = false;
             controller.abort();
             window.clearInterval(interval);
+            window.removeEventListener(OSCAR_SANDBOX_LANES_EVENT, onSandboxMutated);
+            window.removeEventListener(OSCAR_SANDBOX_TELEMETRY_EVENT, onSandboxMutated);
         };
     }, [anyLaneHasWebRelayKeyword, applyWebRelayEntries, isAdmin]);
 

@@ -29,6 +29,8 @@ import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import GpsFixedRoundedIcon from '@mui/icons-material/GpsFixedRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import PlayCircleOutlineRoundedIcon from '@mui/icons-material/PlayCircleOutlineRounded';
+import SystemUpdateAltRoundedIcon from '@mui/icons-material/SystemUpdateAltRounded';
+import Link from 'next/link';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
 import {
     CONSOLE_PAGE_CARD_ICON_KEYS,
@@ -60,6 +62,29 @@ import {
     VideoGuideTrackId,
 } from '@/lib/data/oscar/VideoGuidesCatalog';
 import TrainingSandboxLauncherCard from '@/app/_components/sandbox/TrainingSandboxLauncherCard';
+
+const SYSTEM_UPDATE_SHORTCUT_COPY: Record<Locale, { title: string; desc: string; button: string }> = {
+    en: {
+        title: 'Zero-Login GitHub & Offline System Update (Administrators)',
+        desc: 'Check ORNL/oscar GitHub Releases anonymously without any GitHub account or token, verify SHA-256 checksums, and upgrade OSCAR in place (with automatic rollback) — or upload an offline release .zip.',
+        button: 'Open System Update',
+    },
+    es: {
+        title: 'Actualización del sistema desde GitHub sin cuenta (Administradores)',
+        desc: 'Consulte ORNL/oscar en GitHub Releases sin iniciar sesión ni usar tokens, verifique SHA-256 y actualice OSCAR en el lugar — o cargue un archivo .zip sin conexión.',
+        button: 'Abrir actualización del sistema',
+    },
+    fr: {
+        title: 'Mise à jour système GitHub sans compte (Administrateurs)',
+        desc: 'Vérifiez anonymement les versions GitHub ORNL/oscar sans compte ni jeton, contrôlez le SHA-256 et mettez à jour OSCAR sur place — ou importez un fichier .zip hors ligne.',
+        button: 'Ouvrir la mise à jour système',
+    },
+    el: {
+        title: 'Ενημέρωση συστήματος GitHub χωρίς σύνδεση λογαριασμού (Διαχειριστές)',
+        desc: 'Ελέγξτε ανώνυμα τις εκδόσεις ORNL/oscar στο GitHub χωρίς λογαριασμό ή διακριτικό, επαληθεύστε το SHA-256 και αναβαθμίστε το OSCAR επιτόπου — ή μεταφορτώστε αρχείο .zip εκτός σύνδεσης.',
+        button: 'Άνοιγμα ενημέρωσης συστήματος',
+    },
+};
 
 const TOP_BAR_TOOLS_CARD_TITLE: Record<Locale, string> = {
     en: 'Top-Bar Console Controls & Visual Symbols',
@@ -114,7 +139,7 @@ interface LocalizedHelpContent {
 
 const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
     en: {
-        dialogTitle: 'OSCAR 3.11.7 Operator Quick Guide & Glossary',
+        dialogTitle: 'OSCAR 3.11.8 Operator Quick Guide & Glossary',
         dialogSubtitle: 'Plain-language reference for console workflows, multi-format reports, and radiation portal terminology.',
         tabs: {
             pages: 'Console Pages',
@@ -293,11 +318,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Hands-On Training Sandbox & Guided Academy (`oscar-sandbox`)',
-                meaning: 'Isolated ephemeral `:8444` training environment (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) reusing the installed OSCAR image with `archive.enabled = false`, zero writes to production PostgreSQL/Parquet/`config.json`, a built-in loopback Rapiscan + RTSP + OCR + Cargo UFF micro-emulator, a multi-modal Training Coach (videos, screenshots, 1-click fault/alarm injection, Split-Pane SensorHub Admin, outcome auto-verification, and 1-page PDF Completion Record), and complete `< 2 s` flush on exit.',
+                meaning: 'Isolated ephemeral `:8444` training environment (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) reusing the installed OSCAR image with `archive.enabled = false`, zero writes to production PostgreSQL/Parquet/`config.json`, a built-in loopback Rapiscan + RTSP + OCR + Cargo UFF + `WebRelay-Quad` (`127.0.0.1:10180`) micro-emulator, a multi-modal Training Coach (4-language videos, screenshots, destination-aware 1-click fault/alarm injection that opens `/event-log` for `Code 9999` / `Code 9998` / `Clean Pass` and `/health` for faults, Split-Pane SensorHub Admin, outcome auto-verification, and 1-page PDF Completion Record), and complete `< 2 s` flush on exit.',
             },
             {
                 term: 'RPM Lights & Sound (`webRelayConfig` — WebRelay-Quad)',
                 meaning: 'Optional per-lane network relay control (`enabled = false` by default) for ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) HTTP/XML modules (`stateFull.xml` / `state.xml`) across a Primary Pillar unit and optional Ancillary Dry-Contact unit. Supports Automatic (`AUTO`) occupancy/EML gatekeeping (arming `R1=1, R2=1`, suppressing `Code 9999: EML Non-Threat` and optionally `Code 9998: Extended Occupancy Gamma Alarm`, pulsing `R3` Gamma Red Light + Siren and/or `R4` Neutron Blue Light on actionable alarms, and failing safe to `0,0,0,0` pass-through when stopped), `PASS_THROUGH`, `MUTED`, and live Administrator manual controls in `/health`, `/lane-view`, and `/sensorhub/admin`.',
+            },
+            {
+                term: 'Side-by-Side CAS RPM Edge Proxy (`oscar-rpm-proxy`)',
+                meaning: 'Optional isolated Docker stack (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) for portals operating OSCAR alongside an existing Central Alarm Station (CAS). Fans out `1–50` single-client Rapiscan RPM TCP streams simultaneously at `< 1 ms` latency using Port-Mapped (`11601..11650`) or Ubuntu 24.04 Transparent Virtual-IP `:1600` mode, replays cached `SG1..SG3` / `SN1..SN2` setup frames, keeps CAS connected across OSCAR restarts/upgrades, and propagates physical RPM disconnects to both systems in `<= 4.0 s`.',
             },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
@@ -315,7 +344,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Close',
     },
     es: {
-        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.7',
+        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.8',
         dialogSubtitle: 'Referencia en lenguaje claro para flujos de consola, informes multiformato y terminología de pórticos de radiación.',
         tabs: {
             pages: 'Páginas de consola',
@@ -494,11 +523,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Entorno práctico de formación y academia guiada (`oscar-sandbox`)',
-                meaning: 'Entorno efímero aislado en `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) con `archive.enabled = false`, cero impacto en PostgreSQL/Parquet/`config.json` reales, microemulador local Rapiscan + RTSP + OCR + UFF, Guía de Práctica multimodal, SensorHub Admin en pantalla dividida, verificación automática, certificado PDF de 1 página y purga completa en `< 2 s` al salir.',
+                meaning: 'Entorno efímero aislado en `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) con `archive.enabled = false`, cero impacto en PostgreSQL/Parquet/`config.json` reales, microemulador local Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`), Guía de Práctica multimodal (vídeos en 4 idiomas, inyección guiada que abre `/event-log` para `Code 9999` / `Code 9998` / `Clean Pass` y `/health` para fallos), SensorHub Admin en pantalla dividida, verificación automática, certificado PDF de 1 página y purga completa en `< 2 s` al salir.',
             },
             {
                 term: 'Luces y sonido del RPM (`webRelayConfig` — WebRelay-Quad)',
                 meaning: 'Control opcional de relés en red por carril (`enabled = false` por defecto) para módulos ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) mediante HTTP/XML (`stateFull.xml` / `state.xml`) en unidad primaria y unidad auxiliar opcional de contactos secos. Admite modo Automático (`AUTO`) (arma `R1=1, R2=1`, suprime `Code 9999` y opcionalmente `Code 9998`, pulsa `R3` luz roja gamma + sirena y/o `R4` luz azul de neutrones en alarmas reales y vuelve a `0,0,0,0` al detenerse), `PASS_THROUGH`, `MUTED` y controles manuales para administradores en `/health`, `/lane-view` y `/sensorhub/admin`.',
+            },
+            {
+                term: 'Proxy de borde RPM para operación paralela con CAS (`oscar-rpm-proxy`)',
+                meaning: 'Pila Docker aislada opcional (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) para operar OSCAR en paralelo con una estación central de alarmas (CAS) existente. Distribuye `1–50` flujos TCP Rapiscan RPM en tiempo real (`< 1 ms`) mediante puertos mapeados (`11601..11650`) o IP virtual transparente `:1600` en Ubuntu 24.04, reproduce tramas `SG1..SG3` / `SN1..SN2`, mantiene la CAS conectada durante reinicios/actualizaciones de OSCAR y propaga desconexiones reales del RPM en `<= 4,0 s`.',
             },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
@@ -516,7 +549,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Cerrar',
     },
     fr: {
-        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.7',
+        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.8',
         dialogSubtitle: 'Référence en langage clair pour les flux de console, les rapports multiformats et la terminologie des portiques.',
         tabs: {
             pages: 'Pages de la console',
@@ -695,11 +728,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Bac à sable de formation pratique et académie guidée (`oscar-sandbox`)',
-                meaning: 'Environnement éphémère isolé sur `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) avec `archive.enabled = false`, zéro écriture dans PostgreSQL/Parquet/`config.json` réels, micro-émulateur local Rapiscan + RTSP + OCR + UFF, Coach Formation multimodal, SensorHub Admin en vue partagée, auto-vérification, certificat PDF d’une page et purge complète en `< 2 s` à la fermeture.',
+                meaning: 'Environnement éphémère isolé sur `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) avec `archive.enabled = false`, zéro écriture dans PostgreSQL/Parquet/`config.json` réels, micro-émulateur local Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`), Coach Formation multimodal (vidéos en 4 langues, injection guidée ouvrant `/event-log` pour `Code 9999` / `Code 9998` / `Clean Pass` et `/health` pour les défauts), SensorHub Admin en vue partagée, auto-vérification, certificat PDF d’une page et purge complète en `< 2 s` à la fermeture.',
             },
             {
                 term: 'Feux et sirène du RPM (`webRelayConfig` — WebRelay-Quad)',
                 meaning: 'Commande réseau facultative par voie (`enabled = false` par défaut) pour modules ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) via HTTP/XML (`stateFull.xml` / `state.xml`) sur unité primaire et unité auxiliaire facultative à contacts secs. Prend en charge le mode Automatique (`AUTO`) (armement `R1=1, R2=1`, masquage `Code 9999` et en option `Code 9998`, impulsion `R3` feu rouge gamma + sirène et/ou `R4` feu bleu neutron sur alarme réelle, retour de sécurité `0,0,0,0` à l’arrêt), `PASS_THROUGH`, `MUTED` et les commandes manuelles administrateur dans `/health`, `/lane-view` et `/sensorhub/admin`.',
+            },
+            {
+                term: 'Proxy de périphérie RPM en parallèle avec une CAS (`oscar-rpm-proxy`)',
+                meaning: 'Pile Docker isolée facultative (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) pour exploiter OSCAR en parallèle d’une station centrale d’alarmes (CAS) existante. Diffuse `1–50` flux TCP Rapiscan RPM en temps réel (`< 1 ms`) en mode ports mappés (`11601..11650`) ou IP virtuelle transparente `:1600` sous Ubuntu 24.04, rejoue les trames `SG1..SG3` / `SN1..SN2`, maintient la CAS connectée lors des redémarrages/mises à niveau d’OSCAR et propage les déconnexions physiques du RPM en `<= 4,0 s`.',
             },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
@@ -717,7 +754,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Fermer',
     },
     el: {
-        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.7',
+        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.8',
         dialogSubtitle: 'Αναφορά σε απλή γλώσσα για τις ροές εργασίας κονσόλας, τις αναφορές πολλαπλών μορφών και την ορολογία πυλών ακτινοβολίας.',
         tabs: {
             pages: 'Σελίδες κονσόλας',
@@ -896,11 +933,15 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Πρακτικό περιβάλλον εκπαίδευσης & καθοδηγούμενη ακαδημία (`oscar-sandbox`)',
-                meaning: 'Απομονωμένο προσωρινό περιβάλλον εκπαίδευσης στη θύρα `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) με `archive.enabled = false`, μηδενική εγγραφή στην παραγωγική PostgreSQL/Parquet/`config.json`, τοπικό μικρο-εξομοιωτή Rapiscan + RTSP + OCR + UFF, πολυτροπικό Οδηγό Εκπαίδευσης, διπλή προβολή SensorHub Admin, αυτόματη επαλήθευση, PDF ολοκλήρωσης 1 σελίδας και πλήρη εκκαθάριση σε `< 2 s`.',
+                meaning: 'Απομονωμένο προσωρινό περιβάλλον εκπαίδευσης στη θύρα `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) με `archive.enabled = false`, μηδενική εγγραφή στην παραγωγική PostgreSQL/Parquet/`config.json`, τοπικό μικρο-εξομοιωτή Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`), πολυτροπικό Οδηγό Εκπαίδευσης (βίντεο 4 γλωσσών, έξυπνη έγχυση που ανοίγει το `/event-log` για `Code 9999` / `Code 9998` / `Clean Pass` και το `/health` για σφάλματα), διπλή προβολή SensorHub Admin, αυτόματη επαλήθευση, PDF ολοκλήρωσης 1 σελίδας και πλήρη εκκαθάριση σε `< 2 s`.',
             },
             {
                 term: 'Φώτα και ήχος RPM (`webRelayConfig` — WebRelay-Quad)',
                 meaning: 'Προαιρετικός δικτυακός έλεγχος ρελέ ανά λωρίδα (`enabled = false` από προεπιλογή) για μονάδες ControlByWeb WebRelay-Quad (`X-WR-4R3-E` / `X-410`) μέσω HTTP/XML (`stateFull.xml` / `state.xml`) σε κύρια και προαιρετική βοηθητική μονάδα ξηρών επαφών. Υποστηρίζει Αυτόματη λειτουργία (`AUTO`) (όπλιση `R1=1, R2=1`, καταστολή `Code 9999` και προαιρετικά `Code 9998`, παλμό `R3` κόκκινου φωτός γάμμα + σειρήνας ή/και `R4` μπλε φωτός νετρονίων σε πραγματικούς συναγερμούς και ασφαλή επαναφορά `0,0,0,0` κατά τη διακοπή), `PASS_THROUGH`, `MUTED` και ζωντανό χειροκίνητο έλεγχο διαχειριστή στις σελίδες `/health`, `/lane-view` και `/sensorhub/admin`.',
+            },
+            {
+                term: 'Διαμεσολαβητής άκρου RPM για παράλληλη λειτουργία με CAS (`oscar-rpm-proxy`)',
+                meaning: 'Προαιρετική απομονωμένη στοίβα Docker (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) για παράλληλη λειτουργία του OSCAR με υπάρχοντα Κεντρικό Σταθμό Συναγερμών (CAS). Διανέμει `1–50` ροές TCP Rapiscan RPM σε πραγματικό χρόνο (`< 1 ms`) μέσω χαρτογραφημένων θυρών (`11601..11650`) ή διαφανούς εικονικής IP `:1600` στο Ubuntu 24.04, αναπαράγει πλαίσια `SG1..SG3` / `SN1..SN2`, διατηρεί τον CAS συνδεδεμένο σε επανεκκινήσεις/αναβαθμίσεις του OSCAR και μεταδίδει φυσικές αποσυνδέσεις RPM σε `<= 4,0 s`.',
             },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',
@@ -1682,6 +1723,29 @@ export default function HelpDialog({
                             locale={activeLocale}
                             onOpenGuidedWalkthrough={onOpenGuidedWalkthrough}
                         />
+                        <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-system-update-card">
+                            <Stack spacing={1} alignItems="flex-start">
+                                <Typography variant="subtitle2" fontWeight={700}>
+                                    {(SYSTEM_UPDATE_SHORTCUT_COPY[activeLocale] || SYSTEM_UPDATE_SHORTCUT_COPY.en).title}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {(SYSTEM_UPDATE_SHORTCUT_COPY[activeLocale] || SYSTEM_UPDATE_SHORTCUT_COPY.en).desc}
+                                </Typography>
+                                <Button
+                                    component={Link}
+                                    href="/users?tab=update"
+                                    prefetch={false}
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<SystemUpdateAltRoundedIcon fontSize="small" aria-hidden="true" />}
+                                    onClick={onClose}
+                                    data-testid="help-open-system-update-btn"
+                                    sx={touchSafeButtonSx}
+                                >
+                                    {(SYSTEM_UPDATE_SHORTCUT_COPY[activeLocale] || SYSTEM_UPDATE_SHORTCUT_COPY.en).button}
+                                </Button>
+                            </Stack>
+                        </Paper>
                         <Paper variant="outlined" sx={{ p: 2 }} data-testid="help-support-bundle-card">
                             <Stack spacing={1} alignItems="flex-start">
                                 <Typography variant="subtitle2" fontWeight={700}>

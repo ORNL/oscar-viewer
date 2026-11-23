@@ -270,7 +270,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             </LanguageProvider>,
         );
 
-        cy.contains("OSCAR 3.11.7 Operator Quick Guide & Glossary").should("be.visible");
+        cy.contains("OSCAR 3.11.8 Operator Quick Guide & Glossary").should("be.visible");
         cy.contains('[role="tab"]', "Manual & Video Guides").click();
         cy.get('[data-testid="help-training-sandbox-card"]').should("be.visible");
         cy.get('[data-testid="help-sandbox-launch-btn"]').should("be.visible");
@@ -395,5 +395,126 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         expect(lanTarget.isRemoteTunnel).to.equal(false);
         expect(lanTarget.url).to.equal("https://oscar.ubuntu:8444");
         expect(lanTarget.badgeLabel).to.equal(":8444");
+    });
+
+    it("auto-navigates to /event-log on NORM Code 9999 injection, polls live completion, and supports Lab 3.5 loopback WebRelay", () => {
+        let activePollCount = 0;
+        cy.intercept("POST", "/sensorhub/oscar/sandbox/inject", (req) => {
+            req.reply({
+                statusCode: 200,
+                body: {
+                    ok: true,
+                    scenario: req.body.scenario,
+                    laneSlot: 1,
+                    message:
+                        req.body.scenario === "stage_webrelay_demo"
+                            ? "Staged DemoLane01 with live loopback WebRelay-Quad (Primary 127.0.0.1:10180)."
+                            : `Started '${req.body.scenario}'`,
+                },
+            });
+        }).as("injectCall");
+
+        cy.intercept("GET", "/sensorhub/oscar/sandbox/active", (req) => {
+            activePollCount += 1;
+            req.reply({
+                statusCode: 200,
+                body: {
+                    sandboxMode: true,
+                    watermark: SANDBOX_WATERMARK_TEXT,
+                    activeTrack: "operator",
+                    busyOccupancy: activePollCount < 2,
+                    verification: {
+                        configuredLaneCount: 1,
+                        onlineLaneCount: 1,
+                        lanesWithCameraCount: 1,
+                        lanesWithOcrCount: 1,
+                        operationalViewCount: 1,
+                        totalOccupancies: activePollCount < 2 ? 1 : 2,
+                        gammaAlarmCount: 2,
+                        neutronAlarmCount: 0,
+                        emlCode9999Count: activePollCount < 2 ? 0 : 1,
+                        extendedCode9998Count: 0,
+                        activeFaultOrTamper: false,
+                        operatorAdjudicatedCount: 0,
+                        adjudicatedWithEvidenceCount: 0,
+                        adjudicatedWithVehicleIdCount: 0,
+                        multiPassVehicleCount: 0,
+                        generatedReportCount: 0,
+                        offlineMapActive: false,
+                        policyPackActive: false,
+                        cargoUffEnabled: true,
+                        cargoUffIndexedCount: 2,
+                        webRelayConfiguredCount: 1,
+                        webRelayOnlineCount: 1,
+                    },
+                },
+            });
+        }).as("pollSandboxActive");
+
+        const navigatedRoutes: string[] = [];
+        const Harness = () => {
+            const [route, setRoute] = React.useState<string>("/");
+            const [st, setSt] = React.useState<SandboxActiveStatus>({
+                sandboxMode: true,
+                watermark: SANDBOX_WATERMARK_TEXT,
+                activeTrack: "operator",
+                verification: {
+                    configuredLaneCount: 1,
+                    onlineLaneCount: 1,
+                    lanesWithCameraCount: 1,
+                    lanesWithOcrCount: 1,
+                    operationalViewCount: 1,
+                    totalOccupancies: 1,
+                    gammaAlarmCount: 1,
+                    neutronAlarmCount: 0,
+                    emlCode9999Count: 0,
+                    extendedCode9998Count: 0,
+                    activeFaultOrTamper: false,
+                    operatorAdjudicatedCount: 0,
+                    adjudicatedWithEvidenceCount: 0,
+                    adjudicatedWithVehicleIdCount: 0,
+                    multiPassVehicleCount: 0,
+                    generatedReportCount: 0,
+                    offlineMapActive: false,
+                    policyPackActive: false,
+                    cargoUffEnabled: true,
+                    cargoUffIndexedCount: 2,
+                    webRelayConfiguredCount: 0,
+                    webRelayOnlineCount: 0,
+                },
+            });
+            return (
+                <LanguageProvider>
+                    <div>
+                        <div data-testid="current-route-readout">{route}</div>
+                        <TrainingCoachDock
+                            status={st}
+                            activePathname={route}
+                            onStatusUpdated={setSt}
+                            onRefreshRequested={() => {}}
+                            onNavigateRoute={(r) => {
+                                navigatedRoutes.push(r);
+                                setRoute(r);
+                            }}
+                            splitAdminOpen={false}
+                            onToggleSplitAdmin={() => {}}
+                            onMinimize={() => {}}
+                        />
+                    </div>
+                </LanguageProvider>
+            );
+        };
+
+        cy.mount(<Harness />);
+        // Selecting Lab 1.3 while on "/" automatically navigates to "/event-log"
+        cy.get('[data-testid="training-lab-chip-op-3"]').click();
+        cy.get('[data-testid="current-route-readout"]').should("have.text", "/event-log");
+
+        // Injecting norm_eml shows in-flight status then Code 9999 completion explanation and auto-verifies Lab 1.3
+        cy.get('[data-testid="training-inject-norm_eml"]').click();
+        cy.wait("@injectCall");
+        cy.contains("Simulating ~4s balanced 4-panel NORM cargo transit").should("be.visible");
+        cy.contains("Code 9999: EML Non-Threat", { timeout: 6000 }).should("be.visible");
+        cy.get('[data-testid="training-active-lab-status"]').should("contain.text", "Auto-Verified");
     });
 });

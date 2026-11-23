@@ -535,7 +535,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             <Divider/>
             <List>
                 {menuItems.map((item) => (
-                    <Link href={scopedHref(item.href)} passHref key={item.title} onClick={!isDesktop ? handleDrawerClose : null}>
+                    <Link href={scopedHref(item.href)} prefetch={false} passHref key={item.title} onClick={!isDesktop ? handleDrawerClose : null}>
                         <ListItem disablePadding sx={{display: 'block'}}>
                             <ListItemButton
                                 data-testid={item.testId}
@@ -563,7 +563,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             <Divider/>
             <List>
                 {settingsItems.map((item) => (
-                    <Link href={scopedHref(item.href)} passHref key={item.title} onClick={!isDesktop ? handleDrawerClose : null}>
+                    <Link href={scopedHref(item.href)} prefetch={false} passHref key={item.title} onClick={!isDesktop ? handleDrawerClose : null}>
                         <ListItem disablePadding sx={{display: 'block'}}>
                             <ListItemButton
                                 data-testid={item.testId}
@@ -718,6 +718,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                             {authenticatedUsername && (
                                 <Button
                                     component={Link}
+                                    prefetch={false}
                                     href={scopedHref('/users')}
                                     color="inherit"
                                     size="small"
@@ -1038,7 +1039,8 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             {coachOpen && (
                 <TrainingCoachDock
                     status={sandboxStatus}
-                    onStatusUpdated={setSandboxStatus}
+                    activePathname={pathname ?? "/"}
+                    onStatusUpdated={applyNextSandboxStatus}
                     onRefreshRequested={refreshSandboxStatus}
                     onNavigateRoute={(route) => router.push(scopedHref(route))}
                     splitAdminOpen={splitAdminOpen}

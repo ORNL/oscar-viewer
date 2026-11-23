@@ -56,6 +56,7 @@ import {
 import {
     extractLatestAdjudicationCode,
     hasEmlNonThreatMarker,
+    hasExtendedOccupancyGammaMarker,
 } from "@/lib/data/oscar/adjudication/EmlMetadata";
 import {
     buildUpSetCoOccurrenceFromEvents,
@@ -275,13 +276,17 @@ export default function EventTable({
     }));
     const [columnVisibilityModel, setColumnVisibilityModel] = useState<GridColumnVisibilityModel>(() => ({
         adjudicatedIds: viewAdjudicated,
-        adjudicationCode: false,
+        adjudicationCode: viewAdjudicated,
         vehicleId: Boolean(initialHydration?.criteria.vehicleSearch),
     }));
     const [syncedViewAdjudicated, setSyncedViewAdjudicated] = useState(viewAdjudicated);
     if (syncedViewAdjudicated !== viewAdjudicated) {
         setSyncedViewAdjudicated(viewAdjudicated);
-        setColumnVisibilityModel(previous => ({...previous, adjudicatedIds: viewAdjudicated}));
+        setColumnVisibilityModel(previous => ({
+            ...previous,
+            adjudicatedIds: viewAdjudicated,
+            adjudicationCode: viewAdjudicated,
+        }));
     }
     const [filterEpoch, setFilterEpoch] = useState(0);
     const [filter, setFilter] = useState<EventFilterGroup>(
@@ -1058,12 +1063,21 @@ export default function EventTable({
 
     useEffect(() => {
         if (stableLaneMap.size === 0) return;
-        const reconcileAfterReconnect = () => {
+        const reconcileAfterReconnect = (evt?: Event) => {
+            const resetForSandbox =
+                evt instanceof CustomEvent && Boolean(evt.detail?.resetForSandboxInjection);
             invalidatePrefetch();
+            if (resetForSandbox) {
+                restoredSnapshotRef.current = null;
+                setRestoredSnapshot(null);
+                if (currentPageRef.current !== 0) {
+                    setPaginationModel(previous => ({...previous, page: 0}));
+                }
+            }
             const cutoff = advanceSnapshotCutoff();
             setUnreadReconcileEpoch(previous => previous + 1);
             void refreshCounts(cutoff);
-            if (currentPageRef.current === 0) {
+            if (resetForSandbox || currentPageRef.current === 0) {
                 void fetchPage(0, cutoff);
             }
         };
@@ -2606,17 +2620,19 @@ export default function EventTable({
             renderHeader: () => renderCompactHeader(t("adjudicated")),
             valueFormatter: (value: any) => hasEmlNonThreatMarker(value)
                 ? t("emlNonThreat")
-                : (value?.length > 0 ? t("yes") : t("no")),
+                : hasExtendedOccupancyGammaMarker(value)
+                    ? "Code 9998"
+                    : (value?.length > 0 ? t("yes") : t("no")),
             renderCell: params => {
-                const isEml = hasEmlNonThreatMarker(params.value);
-                const isYes = !isEml && (params.value?.length ?? 0) > 0;
+                const isAuto = hasEmlNonThreatMarker(params.value) || hasExtendedOccupancyGammaMarker(params.value);
+                const isYes = !isAuto && (params.value?.length ?? 0) > 0;
                 return (
                     <Box
                         component="span"
                         sx={{
                             fontSize: "0.8rem",
-                            fontWeight: isEml || isYes ? 600 : 400,
-                            color: isEml ? "info.main" : isYes ? "success.main" : "text.secondary",
+                            fontWeight: isAuto || isYes ? 600 : 400,
+                            color: isAuto ? "info.main" : isYes ? "success.main" : "text.secondary",
                             whiteSpace: "nowrap",
                             overflow: "hidden",
                             textOverflow: "ellipsis",

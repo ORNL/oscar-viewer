@@ -238,7 +238,7 @@ describe("Troubleshooting Support Bundle diagnostics & HelpDialog export", () =>
         );
 
         const guide14 = getVideoGuideBySlug("14-airgapped-alarm-qr-transfer");
-        expect(guide14?.durationLabel).to.equal("17.5s");
+        expect(guide14?.durationLabel).to.equal("27s");
 
         // Verify Console Pages cards display actual platform icons, localized symbol descriptions, and Highlight buttons
         cy.get('[data-testid="help-page-symbol-note-health"]')

@@ -14,7 +14,8 @@ export type SandboxScenarioId =
     | "extended_occupancy"
     | "fault_gamma_high"
     | "fault_tamper"
-    | "clear_faults";
+    | "clear_faults"
+    | "stage_webrelay_demo";
 
 export interface SandboxLoopbackEndpoints {
     rapiscanHost: string;
@@ -29,6 +30,9 @@ export interface SandboxLoopbackEndpoints {
     containerId1: string;
     containerId2: string;
     plate1: string;
+    webRelayHost?: string;
+    webRelayPort1?: number;
+    webRelayPort2?: number;
     localUffSamplePath: string;
 }
 
@@ -59,6 +63,8 @@ export interface SandboxVerificationSnapshot {
     policyPackActive: boolean;
     cargoUffEnabled: boolean;
     cargoUffIndexedCount: number;
+    webRelayConfiguredCount?: number;
+    webRelayOnlineCount?: number;
 }
 
 export interface SandboxActiveStatus {
@@ -66,6 +72,7 @@ export interface SandboxActiveStatus {
     watermark?: string;
     activeTrack?: SandboxTrackId;
     stagingInProgress?: boolean;
+    busyOccupancy?: boolean;
     stageStatusMessage?: string;
     startedEpochSeconds?: number;
     expiresEpochSeconds?: number;
@@ -217,6 +224,7 @@ export function dispatchSandboxRefreshEvents(opts: {
     telemetry?: boolean;
     events?: boolean;
     lanes?: boolean;
+    resetForSandboxInjection?: boolean;
 }): void {
     if (typeof window === "undefined") return;
     if (opts.lanes) {
@@ -226,7 +234,11 @@ export function dispatchSandboxRefreshEvents(opts: {
         window.dispatchEvent(new CustomEvent(OSCAR_SANDBOX_TELEMETRY_EVENT));
     }
     if (opts.events) {
-        window.dispatchEvent(new CustomEvent(OSCAR_SANDBOX_EVENTS_EVENT));
+        window.dispatchEvent(
+            new CustomEvent(OSCAR_SANDBOX_EVENTS_EVENT, {
+                detail: { resetForSandboxInjection: Boolean(opts.resetForSandboxInjection) },
+            }),
+        );
     }
 }
 
