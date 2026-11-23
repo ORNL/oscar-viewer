@@ -267,7 +267,8 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             const lanesChanged =
                 prevVer.configuredLaneCount !== nextVer.configuredLaneCount ||
                 prevVer.onlineLaneCount !== nextVer.onlineLaneCount ||
-                prevVer.operationalViewCount !== nextVer.operationalViewCount;
+                prevVer.operationalViewCount !== nextVer.operationalViewCount ||
+                (prevVer.operationalViews ?? []).join(",") !== (nextVer.operationalViews ?? []).join(",");
             const telemetryChanged =
                 lanesChanged || prevVer.activeFaultOrTamper !== nextVer.activeFaultOrTamper;
             const eventsChanged =
@@ -686,6 +687,9 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                             ? () => activeViewKey
                                             : undefined
                                     }
+                                    onOpen={() => {
+                                        void dataSourceCtx?.refreshOperationalViews?.();
+                                    }}
                                     onChange={handleScopedViewChange}
                                     data-testid="navbar-scoped-view-select"
                                     sx={{

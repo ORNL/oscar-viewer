@@ -48,6 +48,7 @@ export interface SandboxVerificationSnapshot {
     lanesWithCameraCount: number;
     lanesWithOcrCount: number;
     operationalViewCount: number;
+    operationalViews?: string[];
     totalOccupancies: number;
     gammaAlarmCount: number;
     neutronAlarmCount: number;

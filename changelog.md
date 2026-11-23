@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## 3.11.10
 
+### Fixed
+
+- Fixed Scoped View dropdown (`DataSourceContext.tsx`, `Node.ts`, `Navbar.tsx`, `TrainingCoachDock.tsx`) retaining the cached initial `north-gate`-only Operational View catalog when switching from **Operator Track** to **Supervisor Track** (or adding/removing lanes in **Administrator Track**) inside the Hands-On Training Sandbox—`south-gate` now appears immediately without refreshing the browser.
+
 ### Changed
 
 - Standardized password input `minLength` (`14`) and localized labels/descriptions (`14+` characters across `en`, `es`, `fr`, `el`) on `/users` (`UsersAccessManager.tsx`) to match `OscarIdentityStore.validateNewPassword` and `oscar init`.
