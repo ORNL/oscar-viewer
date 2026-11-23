@@ -1,6 +1,13 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.10
+
+### Changed
+
+- Standardized password input `minLength` (`14`) and localized labels/descriptions (`14+` characters across `en`, `es`, `fr`, `el`) on `/users` (`UsersAccessManager.tsx`) to match `OscarIdentityStore.validateNewPassword` and `oscar init`.
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.11.10`), Video Guide `#31` summary asset names, and hardware-replacement recovery checklist references with **OSCAR 3.11.10**.
+
 ## 3.11.9
 
 ### Changed
