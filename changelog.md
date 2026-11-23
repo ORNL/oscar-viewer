@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Added Video Guides **#30** (`30-zero-login-github-system-update`, contextual on `/users`) and **#31** (`31-bare-metal-autoinstall-usb-creator`) with 4-language (`en`, `es`, `fr`, `el`) WebVTT closed-caption tracks (`31` bundled guides / `248` subtitle files total).
 - Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.11.9`), and hardware-replacement recovery checklist references with **OSCAR 3.11.9** (`oscar-3.11.9.zip` and standalone `oscar-3.11.9-autoinstall-usb-creator.zip`).
 
 ## 3.11.8
