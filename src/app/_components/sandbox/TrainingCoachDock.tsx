@@ -28,7 +28,17 @@ import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import SplitscreenRoundedIcon from "@mui/icons-material/SplitscreenRounded";
 import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import { useLanguage } from "@/app/contexts/LanguageContext";
-import { getVideoGuideBySlug } from "@/lib/data/oscar/VideoGuidesCatalog";
+import {
+    PLATFORM_ICONS,
+    PlatformIconBadge,
+    renderTextWithIconsAndCode,
+    triggerPlatformSpotlight,
+} from "@/app/_components/common/PlatformIcons";
+import {
+    getVideoGuideBySlug,
+    getVideoGuideCaptionTracks,
+    syncVideoElementCaptionLocale,
+} from "@/lib/data/oscar/VideoGuidesCatalog";
 import {
     buildSandboxSampleDownloadUrl,
     CompletedLabSubmission,
@@ -80,18 +90,9 @@ const EMPTY_VERIFICATION: SandboxVerificationSnapshot = {
 const STORAGE_KEY_MANUAL_LABS = "oscar.sandbox.manualCompletedLabs.v1";
 
 function renderInlineCode(text: string): React.ReactNode {
-    if (!text || !text.includes("`")) return text;
-    const parts = text.split(/(`[^`]+`)/g);
-    return parts.map((part, idx) => {
-        if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
-            return (
-                <code key={idx} className="oscar-coach-code">
-                    {part.slice(1, -1)}
-                </code>
-            );
-        }
-        return <React.Fragment key={idx}>{part}</React.Fragment>;
-    });
+    if (!text) return text;
+    if (!text.includes("`") && !text.includes("{{icon:")) return text;
+    return renderTextWithIconsAndCode(text);
 }
 
 export interface TrainingCoachDockProps {
@@ -254,6 +255,35 @@ export default function TrainingCoachDock({
     const activeTrackDef =
         TRAINING_TRACKS.find((t) => t.id === selectedTrack) ?? TRAINING_TRACKS[0];
     const videoGuide = getVideoGuideBySlug(activeLab.videoGuideSlug);
+    const coachVideoRef = React.useRef<HTMLVideoElement | null>(null);
+
+    React.useEffect(() => {
+        const videoEl = coachVideoRef.current;
+        if (!videoEl || !videoGuide) return;
+        const applySync = () => syncVideoElementCaptionLocale(videoEl, locale);
+        applySync();
+        const textTracks = videoEl.textTracks;
+        textTracks?.addEventListener?.("addtrack", applySync);
+        return () => {
+            textTracks?.removeEventListener?.("addtrack", applySync);
+        };
+    }, [locale, videoGuide]);
+
+    const resolvedSpotlights = React.useMemo(() => {
+        if (activeLab.spotlights && activeLab.spotlights.length > 0) {
+            return activeLab.spotlights;
+        }
+        if (activeLab.spotlightSelector) {
+            return [
+                {
+                    id: "primary",
+                    selector: activeLab.spotlightSelector,
+                    label: activeLab.spotlightLabel ?? ui.showMeWhereLabel,
+                },
+            ];
+        }
+        return [];
+    }, [activeLab.spotlightLabel, activeLab.spotlightSelector, activeLab.spotlights, ui.showMeWhereLabel]);
 
     const isLabVerified = (lab: TrainingLabDefinition): boolean =>
         !refresherMode && lab.isAutoVerified(verification);
@@ -463,19 +493,13 @@ export default function TrainingCoachDock({
 
     const handleSpotlight = (selector?: string) => {
         if (!selector || typeof document === "undefined") return;
-        const target = document.querySelector<HTMLElement>(selector);
-        if (!target) {
+        const found = triggerPlatformSpotlight(selector);
+        if (!found) {
             setFeedbackBanner({
                 severity: "info",
                 text: "Open the target page first so the highlighted control is visible on screen.",
             });
-            return;
         }
-        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-        target.setAttribute("data-oscar-coach-spotlight", "true");
-        setTimeout(() => {
-            target.removeAttribute("data-oscar-coach-spotlight");
-        }, 3_500);
     };
 
     const handleCopy = async (value: string) => {
@@ -874,9 +898,14 @@ export default function TrainingCoachDock({
                         />
                     </Stack>
 
-                    <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.28, mb: 0.75 }}>
-                        {renderInlineCode(activeLab.title)}
-                    </Typography>
+                    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
+                        {activeLab.pageIconKey && (
+                            <PlatformIconBadge iconKey={activeLab.pageIconKey} size="card" />
+                        )}
+                        <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.28 }}>
+                            {renderInlineCode(activeLab.title)}
+                        </Typography>
+                    </Stack>
 
                     <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
                         {activeLab.splitPaneAdmin ? (
@@ -925,18 +954,36 @@ export default function TrainingCoachDock({
                                 {ui.openPageLabel} ({activeLab.route})
                             </Button>
                         )}
-                        {activeLab.spotlightSelector && (
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                startIcon={<GpsFixedRoundedIcon fontSize="small" />}
-                                onClick={() => handleSpotlight(activeLab.spotlightSelector)}
-                                data-testid="training-spotlight-btn"
-                                sx={{ textTransform: "none" }}
-                            >
-                                {activeLab.spotlightLabel ?? ui.showMeWhereLabel}
-                            </Button>
-                        )}
+                        {resolvedSpotlights.map((sp, spIdx) => {
+                            const iconDef = sp.iconKey ? PLATFORM_ICONS[sp.iconKey] : undefined;
+                            const IconComp = iconDef?.Icon;
+                            const buttonLabel = iconDef?.highlightLabel[locale] ?? sp.label ?? ui.showMeWhereLabel;
+                            return (
+                                <Button
+                                    key={sp.id}
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={
+                                        IconComp ? (
+                                            <IconComp fontSize="small" aria-hidden="true" />
+                                        ) : (
+                                            <GpsFixedRoundedIcon fontSize="small" aria-hidden="true" />
+                                        )
+                                    }
+                                    endIcon={
+                                        IconComp ? (
+                                            <GpsFixedRoundedIcon sx={{ fontSize: "14px !important", opacity: 0.78 }} aria-hidden="true" />
+                                        ) : undefined
+                                    }
+                                    onClick={() => handleSpotlight(sp.selector)}
+                                    data-testid={spIdx === 0 ? "training-spotlight-btn" : `training-spotlight-btn-${sp.id}`}
+                                    data-spotlight-id={sp.id}
+                                    sx={{ textTransform: "none", fontSize: "0.76rem" }}
+                                >
+                                    {buttonLabel}
+                                </Button>
+                            );
+                        })}
                     </Stack>
                 </Box>
 
@@ -1073,6 +1120,7 @@ export default function TrainingCoachDock({
                                 {videoGuide.titles[locale] ?? videoGuide.titles.en}
                             </Typography>
                             <video
+                                ref={coachVideoRef}
                                 key={videoGuide.slug}
                                 className="oscar-coach-video"
                                 width={1920}
@@ -1083,13 +1131,16 @@ export default function TrainingCoachDock({
                                 data-testid="training-coach-video"
                             >
                                 <source src={videoGuide.mp4Url} type="video/mp4" />
-                                <track
-                                    kind="captions"
-                                    srcLang="en"
-                                    label="English"
-                                    src={videoGuide.vttUrl}
-                                    default
-                                />
+                                {getVideoGuideCaptionTracks(videoGuide).map((track) => (
+                                    <track
+                                        key={track.locale}
+                                        kind="captions"
+                                        srcLang={track.locale}
+                                        label={track.label}
+                                        src={track.src}
+                                        default={locale === track.locale}
+                                    />
+                                ))}
                             </video>
                         </div>
                     </details>

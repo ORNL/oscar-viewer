@@ -421,6 +421,18 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         setDrawerOpen(false);
     };
 
+    useEffect(() => {
+        const handleOpenDrawerEvent = () => {
+            if (!isDesktop) {
+                setDrawerOpen(true);
+            }
+        };
+        window.addEventListener('oscar:open-nav-drawer', handleOpenDrawerEvent);
+        return () => {
+            window.removeEventListener('oscar:open-nav-drawer', handleOpenDrawerEvent);
+        };
+    }, [isDesktop]);
+
     const [volumeValue, setVolumeValue] = useState(savedVolume);
 
     useEffect(() => {
@@ -440,36 +452,43 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             title: t('dashboard'),
             icon: <DashboardRoundedIcon/>,
             href: "/",
+            testId: "nav-item-dashboard",
         },
         {
             title: t('events'),
             icon: <WarningRoundedIcon/>,
             href: "/event-log",
+            testId: "nav-item-events",
         },
         {
             title: t('stateOfHealth'),
             icon: <MonitorHeartRoundedIcon/>,
             href: "/health/",
+            testId: "nav-item-health",
         },
         {
             title: t('map'),
             icon: <LocationOnRoundedIcon/>,
             href: "/map",
+            testId: "nav-item-map",
         },
         {
             title: t('national'),
             icon: <MediationIcon/>,
             href: "/national-view",
+            testId: "nav-item-national",
         },
         {
             title: t('reportGenerator'),
             icon: <InsertChart/>,
             href: "/report",
+            testId: "nav-item-report",
         },
         {
             title: t('alarmTransfer'),
             icon: <QrCodeScannerRoundedIcon/>,
             href: "/alarm-transfer",
+            testId: "nav-item-alarm-transfer",
         },
     ]
 
@@ -479,6 +498,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             title: t('usersAndAccess'),
             icon: <ManageAccountsRoundedIcon/>,
             href: "/users",
+            testId: "nav-item-users",
         },
         ...(currentSession?.isAdmin !== false
             ? [
@@ -486,11 +506,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     title: t('usbBackups'),
                     icon: <UsbRoundedIcon/>,
                     href: "/usb-backups",
+                    testId: "nav-item-usb-backups",
                 },
                 {
                     title: t('runtimeExtensions'),
                     icon: <ExtensionRoundedIcon/>,
                     href: "/extensions",
+                    testId: "nav-item-extensions",
                 },
             ]
             : []),
@@ -498,6 +520,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             title: t('servers'),
             icon: <CloudRoundedIcon/>,
             href: "/servers",
+            testId: "nav-item-servers",
         }
     ]
 
@@ -515,6 +538,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     <Link href={scopedHref(item.href)} passHref key={item.title} onClick={!isDesktop ? handleDrawerClose : null}>
                         <ListItem disablePadding sx={{display: 'block'}}>
                             <ListItemButton
+                                data-testid={item.testId}
                                 sx={{
                                     minHeight: 48,
                                     justifyContent: drawerOpen ? 'initial' : 'center',
@@ -542,6 +566,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     <Link href={scopedHref(item.href)} passHref key={item.title} onClick={!isDesktop ? handleDrawerClose : null}>
                         <ListItem disablePadding sx={{display: 'block'}}>
                             <ListItemButton
+                                data-testid={item.testId}
                                 sx={{
                                     minHeight: 48,
                                     justifyContent: drawerOpen ? 'initial' : 'center',
@@ -587,6 +612,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     <IconButton
                         color="inherit"
                         aria-label={t('openDrawer')}
+                        data-testid="navbar-drawer-toggle"
                         onClick={handleDrawerOpen}
                         edge="start"
                         sx={{
@@ -696,6 +722,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                     color="inherit"
                                     size="small"
                                     startIcon={<ManageAccountsRoundedIcon fontSize="small" />}
+                                    data-testid="navbar-user-account-btn"
                                     sx={{textTransform: 'none', maxWidth: {xs: 130, sm: 260}}}
                                 >
                                     <Typography variant="body2" noWrap sx={{overflow: 'hidden', textOverflow: 'ellipsis'}}>
@@ -761,6 +788,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                     id="settings-button"
                                     color="inherit"
                                     aria-label={t('openSettings')}
+                                    data-testid="navbar-settings-button"
                                     onClick={handleSettingsMenuOpen}
                                 >
                                     <Badge

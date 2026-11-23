@@ -843,6 +843,7 @@ export default function EventTable({
         pageQueryError,
         currentPageRef,
         getCachedBucketCounts,
+        invalidatePrefetch,
         fetchPlanCount,
         refreshCounts,
         fetchPage,
@@ -850,7 +851,7 @@ export default function EventTable({
         queryPlans: effectiveQueryPlans,
         pageQueryPlans: effectivePageQueryPlans,
         page: paginationModel.page,
-        pageSize: PAGE_SIZE,
+        pageSize: paginationModel.pageSize,
         pageLoadedTime,
         phenomenonTimeForCutoff,
         rowFilter: isRowUnread,
@@ -859,6 +860,7 @@ export default function EventTable({
         filterModeActive: effectiveUnreadOnly,
         disjointPriorityPlans: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
         prewarmBucketCounts: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
+        prefetchNextPage: true,
         cachedSnapshot: isEventLog ? restoredSnapshot : null,
         fetchPlanRows,
     });
@@ -997,6 +999,7 @@ export default function EventTable({
                         }
                     }
                     if (!rowPassesLocalFilters(event, lane)) return;
+                    invalidatePrefetch();
                     if (allFilteredCutoffRef.current && event.status !== "None" && !event.adjudicatedIds?.length) {
                         setPostSelectionKeys(previous => new Set(previous).add(eventSelectionKey(event)));
                     }
@@ -1035,6 +1038,7 @@ export default function EventTable({
         advanceSnapshotCutoff,
         currentPageRef,
         filter,
+        invalidatePrefetch,
         isAlarmTable,
         setRowCount,
         setRows,
@@ -1042,6 +1046,7 @@ export default function EventTable({
 
     useEffect(() => {
         if (!adjudicatedEventId || tableMode !== "alarmtable") return;
+        invalidatePrefetch();
         setRows(previous => previous.filter(row => row.id !== adjudicatedEventId));
         setRowCount(previous => Math.max(0, previous - 1));
         setUnreadReconcileEpoch(previous => previous + 1);
@@ -1049,11 +1054,12 @@ export default function EventTable({
         const cutoff = advanceSnapshotCutoff();
         void refreshCounts(cutoff);
         void fetchPage(currentPageRef.current, cutoff);
-    }, [adjudicatedEventId, tableMode, dispatch, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef, setRowCount, setRows]);
+    }, [adjudicatedEventId, tableMode, dispatch, advanceSnapshotCutoff, invalidatePrefetch, refreshCounts, fetchPage, currentPageRef, setRowCount, setRows]);
 
     useEffect(() => {
         if (stableLaneMap.size === 0) return;
         const reconcileAfterReconnect = () => {
+            invalidatePrefetch();
             const cutoff = advanceSnapshotCutoff();
             setUnreadReconcileEpoch(previous => previous + 1);
             void refreshCounts(cutoff);
@@ -1067,7 +1073,7 @@ export default function EventTable({
             window.removeEventListener("online", reconcileAfterReconnect);
             window.removeEventListener("oscar:sandbox-events-mutated", reconcileAfterReconnect);
         };
-    }, [stableLaneMap.size, advanceSnapshotCutoff, refreshCounts, fetchPage, currentPageRef]);
+    }, [stableLaneMap.size, advanceSnapshotCutoff, invalidatePrefetch, refreshCounts, fetchPage, currentPageRef]);
 
     const clearSelection = useCallback(() => {
         setSelectedKeys(new Set());
@@ -1581,6 +1587,9 @@ export default function EventTable({
             const wasUnread = isRowUnread(event);
             markEventsRead([event], resolveEventNodeId);
             if (wasUnread) {
+                if (effectiveUnreadOnly) {
+                    invalidatePrefetch();
+                }
                 setScopedUnreadSummary({
                     count: effectiveUnreadSummary.capped
                         ? effectiveUnreadSummary.count
@@ -2721,6 +2730,7 @@ export default function EventTable({
         .map(column => column.field);
 
     const retryEventQueries = () => {
+        invalidatePrefetch();
         restoredSnapshotRef.current = null;
         setRestoredSnapshot(null);
         const cutoff = advanceSnapshotCutoff();

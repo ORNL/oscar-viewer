@@ -590,9 +590,12 @@ export default function RuntimeExtensionsManager() {
                 sx={{ mb: 2 }}
             >
                 <Box sx={{ minInlineSize: 0 }}>
-                    <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
-                        {copy.pageTitle}
-                    </Typography>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                        <ExtensionRoundedIcon color="primary" aria-hidden="true" sx={{ fontSize: 34, flexShrink: 0 }} />
+                        <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
+                            {copy.pageTitle}
+                        </Typography>
+                    </Stack>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         {copy.pageSubtitle}
                     </Typography>

@@ -2,6 +2,21 @@ import { Locale } from '@/app/contexts/LanguageContext';
 
 export type VideoGuideTrackId = 'A' | 'B' | 'C';
 
+export interface VideoGuideCaptionTrack {
+    locale: Locale;
+    label: string;
+    src: string;
+}
+
+export const VIDEO_GUIDE_CAPTION_LOCALES: readonly Locale[] = ['en', 'es', 'fr', 'el'];
+
+export const VIDEO_GUIDE_CAPTION_LABELS: Record<Locale, string> = {
+    en: 'English',
+    es: 'Español',
+    fr: 'Français',
+    el: 'Ελληνικά',
+};
+
 export interface VideoGuideEntry {
     badge: string;
     slug: string;
@@ -10,9 +25,45 @@ export interface VideoGuideEntry {
     sizeLabel: string;
     mp4Url: string;
     vttUrl: string;
+    captionUrlsByLocale: Record<Locale, string>;
     srtUrl: string;
     titles: Record<Locale, string>;
     summaries: Record<Locale, string>;
+}
+
+export function getVideoGuideCaptionTracks(
+    guide: Pick<VideoGuideEntry, 'slug' | 'captionUrlsByLocale'>,
+): VideoGuideCaptionTrack[] {
+    return VIDEO_GUIDE_CAPTION_LOCALES.map((loc) => ({
+        locale: loc,
+        label: VIDEO_GUIDE_CAPTION_LABELS[loc],
+        src: guide.captionUrlsByLocale[loc],
+    }));
+}
+
+export function syncVideoElementCaptionLocale(
+    videoEl: HTMLVideoElement | null,
+    locale: Locale,
+): void {
+    if (!videoEl) return;
+    const targetLocale: Locale = VIDEO_GUIDE_CAPTION_LABELS[locale] ? locale : 'en';
+    const trackEls = videoEl.querySelectorAll('track');
+    trackEls.forEach((trackEl) => {
+        if (trackEl.kind && trackEl.kind !== 'captions' && trackEl.kind !== 'subtitles') return;
+        const lang = trackEl.srclang || trackEl.getAttribute('srclang') || '';
+        const isMatch = lang === targetLocale;
+        trackEl.default = isMatch;
+        if (trackEl.track) {
+            trackEl.track.mode = isMatch ? 'showing' : 'disabled';
+        }
+    });
+    if (videoEl.textTracks) {
+        for (let i = 0; i < videoEl.textTracks.length; i++) {
+            const track = videoEl.textTracks[i];
+            if (!track || (track.kind !== 'captions' && track.kind !== 'subtitles')) continue;
+            track.mode = track.language === targetLocale ? 'showing' : 'disabled';
+        }
+    }
 }
 
 export interface VideoGuideUiStrings {
@@ -46,6 +97,12 @@ const makeGuide = (
     sizeLabel,
     mp4Url: `/video-guides/videos/${slug}.mp4`,
     vttUrl: `/video-guides/captions/${slug}.vtt`,
+    captionUrlsByLocale: {
+        en: `/video-guides/captions/${slug}.vtt`,
+        es: `/video-guides/captions/es/${slug}.vtt`,
+        fr: `/video-guides/captions/fr/${slug}.vtt`,
+        el: `/video-guides/captions/el/${slug}.vtt`,
+    },
     srtUrl: `/video-guides/captions/${slug}.srt`,
     titles,
     summaries,
@@ -699,7 +756,7 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         watchButtonAriaLabel: (visibleLabel, guideTitle, contextTitle) =>
             contextTitle ? `${visibleLabel} — ${guideTitle} (${contextTitle})` : `${visibleLabel} — ${guideTitle}`,
         closeVideoLabel: 'Close video',
-        captionsNote: '1080p H.264 · synchronized English closed captions (.vtt) included; zero data loaded until played.',
+        captionsNote: '1080p H.264 · synchronized closed captions (.vtt) in 4 languages (English, Español, Français, Ελληνικά) included; zero data loaded until played.',
         localCatalogCardTitle: 'Built-In How-To Video Guides (`/video-guides/index.html`)',
         localCatalogCardDesc: '29 compressed 1080p workflow screen recordings (< 2 min each, ~36 MiB total) bundled directly inside OSCAR for offline and air-gapped workstations, with synchronized closed captions.',
         openLocalCatalogButtonLabel: 'Open Local Video Guide Page',
@@ -718,7 +775,7 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         watchButtonAriaLabel: (visibleLabel, guideTitle, contextTitle) =>
             contextTitle ? `${visibleLabel} — ${guideTitle} (${contextTitle})` : `${visibleLabel} — ${guideTitle}`,
         closeVideoLabel: 'Cerrar vídeo',
-        captionsNote: '1080p H.264 · incluye subtítulos sincronizados (.vtt en inglés); no descarga datos hasta reproducir.',
+        captionsNote: '1080p H.264 · incluye subtítulos sincronizados (.vtt) en 4 idiomas (English, Español, Français, Ελληνικά); no descarga datos hasta reproducir.',
         localCatalogCardTitle: 'Videoguías prácticas integradas (`/video-guides/index.html`)',
         localCatalogCardDesc: '29 grabaciones cortas en 1080p (< 2 min cada una, ~36 MiB en total) integradas localmente en OSCAR para estaciones sin conexión o aisladas, con subtítulos sincronizados.',
         openLocalCatalogButtonLabel: 'Abrir catálogo local de videoguías',
@@ -737,7 +794,7 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         watchButtonAriaLabel: (visibleLabel, guideTitle, contextTitle) =>
             contextTitle ? `${visibleLabel} — ${guideTitle} (${contextTitle})` : `${visibleLabel} — ${guideTitle}`,
         closeVideoLabel: 'Fermer la vidéo',
-        captionsNote: '1080p H.264 · sous-titres synchronisés (.vtt en anglais) inclus ; aucune donnée chargée avant lecture.',
+        captionsNote: '1080p H.264 · sous-titres synchronisés (.vtt) inclus en 4 langues (English, Español, Français, Ελληνικά) ; aucune donnée chargée avant lecture.',
         localCatalogCardTitle: 'Guides vidéo pratiques intégrés (`/video-guides/index.html`)',
         localCatalogCardDesc: '29 courtes captures 1080p (< 2 min chacune, ~36 Mio au total) embarquées localement dans OSCAR pour les postes hors ligne ou isolés, avec sous-titres synchronisés.',
         openLocalCatalogButtonLabel: 'Ouvrir la page locale des guides vidéo',
@@ -756,7 +813,7 @@ export const VIDEO_GUIDE_UI_STRINGS: Record<Locale, VideoGuideUiStrings> = {
         watchButtonAriaLabel: (visibleLabel, guideTitle, contextTitle) =>
             contextTitle ? `${visibleLabel} — ${guideTitle} (${contextTitle})` : `${visibleLabel} — ${guideTitle}`,
         closeVideoLabel: 'Κλείσιμο βίντεο',
-        captionsNote: '1080p H.264 · περιλαμβάνει συγχρονισμένους υπότιτλους (.vtt στα αγγλικά)· μηδενική φόρτωση δεδομένων πριν την αναπαραγωγή.',
+        captionsNote: '1080p H.264 · περιλαμβάνει συγχρονισμένους υπότιτλους (.vtt) σε 4 γλώσσες (English, Español, Français, Ελληνικά)· μηδενική φόρτωση δεδομένων πριν την αναπαραγωγή.',
         localCatalogCardTitle: 'Ενσωματωμένοι βιντεοοδηγοί εργασιών (`/video-guides/index.html`)',
         localCatalogCardDesc: '29 συμπιεσμένα βίντεο 1080p (< 2 λεπ. έκαστο, ~36 MiB συνολικά) ενσωματωμένα τοπικά στο OSCAR για σταθμούς εκτός δικτύου, με συγχρονισμένους υπότιτλους.',
         openLocalCatalogButtonLabel: 'Άνοιγμα τοπικής σελίδας βιντεοοδηγών',
