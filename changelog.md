@@ -1,6 +1,17 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.12
+
+### Fixed
+
+- Extended `buildEventBoundedPhenomenonTime` (`[start - 2s, end + 5s]`) across all unhydrated live observation ID lookup callers (`EventLookup.ts`, `SharedOccupancy.ts`, `BulkAdjudication.ts`, `EventPreview.tsx`, `AdjudicationDetail.tsx`) so live MQTT alarm lookups evaluate strictly against hot PostgreSQL storage (`0` Cold Parquet DuckDB sessions).
+
+### Changed
+
+- Simplified `EventTableRequests.ts` (`-122` net lines) by removing the redundant client-side `visitedPagesCacheRef` / `navigationDirectionRef` cache layer once `FederatedObsStore` offset pushdown and `OscarTieredObsStore` shallow-offset non-cold completeness (`offset = 15..270`) were resolved on the backend, relying cleanly on `disjointPriorityPlans` + `120 ms` settled rapid-click debounce + `AbortController` while retaining live MQTT `invalidatePrefetch()` suppression (`EventTable.tsx`).
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.11.12`), Video Guide `#31` summary asset names, and hardware-replacement recovery checklist references with **OSCAR 3.11.12**.
+
 ## 3.11.11
 
 ### Fixed
