@@ -1036,7 +1036,7 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         });
     });
 
-    it("serves visited pages instantly on repeated Previous clicks, prefetches page - 1 when stepping backward from a deep page, and preserves visible rows on error", () => {
+    it("collapses rapid 10x Previous bursts via settled debounce without a visited-page cache and preserves visible rows on error", () => {
         const rowCalls: Array<{offset: number; limit: number}> = [];
         let forcePermanentFailure = false;
 
@@ -1158,67 +1158,49 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         }
 
         cy.mount(<BackwardPaginationHarness />);
-        // Initial Page 0 transparently retries the transient 503 and renders + prefetches Page 1
         cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-0");
         cy.get('[data-testid="bw-err"]').should("have.text", "false");
         cy.wrap(null).should(() => {
             expect(rowCalls.map(c => c.offset)).to.deep.equal([0, 15]);
         });
 
-        // Step forward Page 0 -> 1 -> 2 -> 3
-        cy.get('[data-testid="bw-next"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-15");
-        cy.get('[data-testid="bw-next"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-30");
-        cy.get('[data-testid="bw-next"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-45");
-        cy.wrap(null).should(() => {
-            expect(rowCalls.some(c => c.offset === 60)).to.equal(true);
-        });
-
-        cy.then(() => {
-            rowCalls.length = 0;
-        });
-
-        // Repeatedly pressing Previous (Page 3 -> 2 -> 1) serves visited pages in 0ms with ZERO server row queries!
-        cy.get('[data-testid="bw-prev"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-30");
-        cy.get('[data-testid="bw-prev"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-15");
-        cy.then(() => {
-            expect(rowCalls).to.have.length(0);
-        });
-
-        // Jump to deep unvisited Page 10 (offset=150), then step Previous to Page 9 (offset=135) -> prefetches Page 8 (offset=120)!
+        // Jump to deep Page 10 (offset=150) and let it + Page 11 prefetch settle
         cy.get('[data-testid="bw-jump-10"]').click();
         cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-150");
+        cy.wrap(null).should(() => {
+            expect(rowCalls.some(c => c.offset === 165)).to.equal(true);
+        });
         cy.then(() => {
             rowCalls.length = 0;
         });
-        cy.get('[data-testid="bw-prev"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-135");
+
+        // Rapidly click Previous 9 times in a row (Page 10 -> Page 1):
+        // 120ms settled debounce cancels intermediate pages and fetches only landing Page 1 (offset=15) + forward prefetch Page 2 (offset=30)
+        cy.then(() => {
+            const btn = Cypress.$('[data-testid="bw-prev"]')[0] as HTMLButtonElement;
+            for (let k = 0; k < 9; k++) {
+                btn.click();
+            }
+        });
+        cy.get('[data-testid="bw-page"]').should("have.text", "1");
+        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-15");
         cy.wrap(null).should(() => {
-            expect(rowCalls.map(c => c.offset)).to.deep.equal([135, 120]);
+            expect(rowCalls.map(c => c.offset)).to.include(15);
+            // At most the first un-debounced click (135, aborted) + settled landing page (15) + forward prefetch (30)
+            expect(rowCalls.length).to.be.at.most(3);
         });
 
-        // Stepping Previous again (Page 9 -> Page 8) serves prefetched Page 8 (offset=120) and chains prefetch of Page 7 (offset=105)
-        cy.get('[data-testid="bw-prev"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-120");
-        cy.wrap(null).should(() => {
-            expect(rowCalls.map(c => c.offset)).to.deep.equal([135, 120, 105]);
-        });
+        // Stepping Next (Page 1 -> Page 2) consumes the prefetched offset=30 slice immediately
+        cy.get('[data-testid="bw-next"]').click();
+        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-30");
 
-        // Set permanent server failure: Page 7 still renders from chained prefetch (while Page 6 prefetch fails silently),
-        // and stepping Previous onto uncached Page 6 sets pageQueryError=true while preserving Page 7's 15 visible rows
+        // On server failure, stepping Previous to Page 1 sets pageQueryError=true while preserving Page 2's 15 visible rows
         cy.then(() => {
             forcePermanentFailure = true;
         });
         cy.get('[data-testid="bw-prev"]').click();
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-105");
-        cy.get('[data-testid="bw-err"]').should("have.text", "false");
-        cy.get('[data-testid="bw-prev"]').click();
         cy.get('[data-testid="bw-err"]').should("have.text", "true");
         cy.get('[data-testid="bw-count"]').should("have.text", "15");
-        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-105");
+        cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-30");
     });
 });
