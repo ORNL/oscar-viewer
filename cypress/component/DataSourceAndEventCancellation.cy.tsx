@@ -1203,4 +1203,127 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         cy.get('[data-testid="bw-count"]').should("have.text", "15");
         cy.get('[data-testid="bw-first"]').should("have.text", "Lane-Row-30");
     });
+
+    it("gates disjoint priority bucket-count prewarm on settled total count so selective filters never fan out premature bucket counts", () => {
+        const countQueries: string[] = [];
+        let releaseFilteredTotal: (() => void) | null = null;
+        let filteredTotalCount = 8;
+
+        cy.window().then((win) => {
+            cy.stub(win, "fetch").callsFake((input: RequestInfo | URL) => {
+                const url = String(input);
+                if (url.includes("/observations/count?")) {
+                    const parsed = new URL(url);
+                    const q = decodeURIComponent(parsed.searchParams.get("filter") ?? "");
+                    countQueries.push(q);
+                    if (q === "maxGamma>=50") {
+                        return new Promise<Response>((resolve) => {
+                            releaseFilteredTotal = () => resolve(new Response(
+                                JSON.stringify({count: filteredTotalCount}),
+                                {status: 200, headers: {"Content-Type": "application/json"}},
+                            ));
+                        });
+                    }
+                    if (q === "maxGamma>=25") {
+                        return Promise.resolve(new Response(
+                            JSON.stringify({count: 500}),
+                            {status: 200, headers: {"Content-Type": "application/json"}},
+                        ));
+                    }
+                    return Promise.resolve(new Response(
+                        JSON.stringify({count: q === "" ? 500 : 125}),
+                        {status: 200, headers: {"Content-Type": "application/json"}},
+                    ));
+                }
+                return Promise.resolve(new Response(JSON.stringify({items: []}), {
+                    status: 200,
+                    headers: {"Content-Type": "application/json"},
+                }));
+            });
+        });
+
+        const fakeNode: any = {
+            id: "node-settled",
+            name: "Local Node",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+        };
+
+        function SettledPrewarmHarness() {
+            const [baseFilter, setBaseFilter] = useState<string>("");
+            const queryPlans = useMemo<EventQueryPlan[]>(() => [{
+                key: `total-${baseFilter}`,
+                node: fakeNode,
+                datastreamIds: ["occ-1"],
+                filter: baseFilter,
+            }], [baseFilter]);
+            const pageQueryPlans = useMemo<EventQueryPlan[]>(() => [
+                "gammaAlarm=true AND neutronAlarm=true",
+                "gammaAlarm=true AND neutronAlarm=false",
+                "gammaAlarm=false AND neutronAlarm=true",
+                "gammaAlarm=false AND neutronAlarm=false",
+            ].map((bucket, idx) => ({
+                key: `bucket-${baseFilter}-${idx}`,
+                node: fakeNode,
+                datastreamIds: ["occ-1"],
+                filter: baseFilter ? `(${baseFilter}) AND (${bucket})` : bucket,
+            })), [baseFilter]);
+
+            const fetchPlanRows = useCallback(async () => [] as EventTableData[], []);
+            const {rowCount} = useAbortableEventQueries({
+                queryPlans,
+                pageQueryPlans,
+                page: 0,
+                pageSize: 15,
+                pageLoadedTime: "2026-11-24T12:00:00.000Z",
+                disjointPriorityPlans: true,
+                prewarmBucketCounts: true,
+                prefetchNextPage: true,
+                fetchPlanRows,
+            });
+
+            return (
+                <div>
+                    <span data-testid="settled-count">{String(rowCount)}</span>
+                    <button data-testid="apply-selective" onClick={() => setBaseFilter("maxGamma>=50")}>Selective</button>
+                    <button data-testid="apply-broad" onClick={() => setBaseFilter("maxGamma>=25")}>Broad</button>
+                </div>
+            );
+        }
+
+        cy.mount(<SettledPrewarmHarness />);
+        cy.get('[data-testid="settled-count"]').should("have.text", "500");
+        // Initial unfiltered load settles at 500 -> 1 total + 4 bucket prewarms = 5 count queries
+        cy.wrap(null).should(() => {
+            expect(countQueries).to.have.length(5);
+        });
+        cy.then(() => {
+            countQueries.length = 0;
+        });
+
+        // Apply selective filter (maxGamma>=50) whose total count is still in flight while stale rowCount is 500:
+        // even after 250ms (> 150ms prewarm delay), ZERO bucket prewarms may fire before total count settles!
+        cy.get('[data-testid="apply-selective"]').click();
+        cy.wait(250);
+        cy.then(() => {
+            expect(countQueries).to.deep.equal(["maxGamma>=50"]);
+            filteredTotalCount = 8;
+            releaseFilteredTotal?.();
+        });
+        // Settled count is 8 (<= pageSize 15), so STILL zero bucket prewarms fire!
+        cy.get('[data-testid="settled-count"]').should("have.text", "8");
+        cy.wait(220);
+        cy.then(() => {
+            expect(countQueries).to.deep.equal(["maxGamma>=50"]);
+            countQueries.length = 0;
+        });
+
+        // Apply broad filter (maxGamma>=25 -> 500 > pageSize 15): once total count settles, 4 bucket prewarms fire.
+        cy.get('[data-testid="apply-broad"]').click();
+        cy.get('[data-testid="settled-count"]').should("have.text", "500");
+        cy.wrap(null).should(() => {
+            expect(countQueries).to.have.length(5);
+            expect(countQueries[0]).to.equal("maxGamma>=25");
+        });
+    });
 });

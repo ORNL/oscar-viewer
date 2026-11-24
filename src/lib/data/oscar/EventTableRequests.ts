@@ -441,6 +441,9 @@ export function useAbortableEventQueries({
             rowCountRef.current = total;
             setRowCount(total);
             setCountQueryError(false);
+            if (prewarmBucketCounts || prefetchNextPage) {
+                setPrefetchEpoch(previous => previous + 1);
+            }
         } catch (error) {
             if (
                 controller.signal.aborted
@@ -455,7 +458,7 @@ export function useAbortableEventQueries({
                 countAbortRef.current = null;
             }
         }
-    }, [clearNextPagePrefetch, queryPlans, fetchPlanCount]);
+    }, [clearNextPagePrefetch, queryPlans, fetchPlanCount, prewarmBucketCounts, prefetchNextPage]);
 
     const fetchPage = useCallback(async (targetPage: number, cutoffOverride?: string, minExtraRows = 0) => {
         clearPendingPageDebounce();
@@ -923,6 +926,7 @@ export function useAbortableEventQueries({
             || !disjointPriorityPlans
             || filterModeActive
             || pageQueryPlans.length <= 1
+            || !countSettledRef.current
             || rowCount <= pageSize
             || typeof window === "undefined"
             || (snap !== null && snap.pageLoadedTime === pageLoadedTime && !snap.bucketCounts)
