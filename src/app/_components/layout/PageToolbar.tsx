@@ -54,7 +54,7 @@ import {
     setPageLaneContext,
 } from "@/lib/state/PageLayoutSlice";
 import AddWidgetDialog from "./AddWidgetDialog";
-import {dashboardHref, LANE_VIEW_ROUTE, pageForRoute, pageTitle} from "@/lib/layout/MainPages";
+import {dashboardHref, LANE_VIEW_ROUTE, pageForRoute, pageTitle, viewFirst} from "@/lib/layout/MainPages";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import PageSettingsDialog from "./PageSettingsDialog";
 import ImportExportDialog from "./ImportExportDialog";
@@ -98,7 +98,7 @@ export default function PageToolbar({pageId, leading}: PageToolbarProps) {
         ? undefined
         : (fittingLaneView ? dashboardHref(fittingLaneView) : LANE_VIEW_ROUTE);
     useEffect(() => {
-        if (laneViewSwap) router.replace(scopedHref(laneViewSwap));
+        if (laneViewSwap) router.replace(viewFirst(scopedHref(laneViewSwap)));
     }, [laneViewSwap, router, scopedHref]);
 
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);

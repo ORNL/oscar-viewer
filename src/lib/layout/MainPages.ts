@@ -181,6 +181,22 @@ export function dashboardHref(page: Pick<PageConfig, 'id' | 'slug'>): string {
         : `/dashboard/?id=${encodeURIComponent(page.id)}`;
 }
 
+/**
+ * Moves an operational-view `view` parameter to the front of a dashboard URL:
+ * `/dashboard/?name=map&view=east-gate` becomes `/dashboard/?view=east-gate&name=map`.
+ * `withOperationalView` appends `view` after the existing query. A scoped workstation URL should
+ * read `?view=<key>` on a dashboard as it does on ORNL's own routes, for bookmarks and for
+ * `tools/test-live-deployment-regression.sh`, which checks that `/view/<key>` lands on `?view=<key>`.
+ */
+export function viewFirst(href: string): string {
+    const url = new URL(href, "https://oscar.local");
+    const view = url.searchParams.get("view");
+    if (view === null || url.search.startsWith("?view=")) return href;
+    url.searchParams.delete("view");
+    const rest = url.searchParams.toString();
+    return `${url.pathname}?view=${encodeURIComponent(view)}${rest ? `&${rest}` : ""}${url.hash}`;
+}
+
 export function navTestId(page: Pick<PageConfig, 'id' | 'slug'>): string {
     return mainPageSpec(page.id)?.navTestId ?? `nav-page-${page.slug ?? page.id}`;
 }

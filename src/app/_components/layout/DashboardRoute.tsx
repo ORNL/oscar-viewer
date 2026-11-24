@@ -13,7 +13,7 @@ import PageHost from "@/app/_components/layout/PageHost";
 import PageToolbar from "@/app/_components/layout/PageToolbar";
 import {selectPages} from "@/lib/state/PageLayoutSlice";
 import {PageConfig} from "@/lib/layout/PageConfigTypes";
-import {dashboardHref, findPageBySlug} from "@/lib/layout/MainPages";
+import {dashboardHref, findPageBySlug, viewFirst} from "@/lib/layout/MainPages";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 
 /**
@@ -42,7 +42,7 @@ function DashboardRouteInner() {
     const canonical = page && page.slug && page.slug !== name ? dashboardHref(page) : undefined;
 
     useEffect(() => {
-        if (canonical) router.replace(scopedHref(canonical));
+        if (canonical) router.replace(viewFirst(scopedHref(canonical)));
     }, [canonical, router, scopedHref]);
 
     // PageHost shows "Page not found" for an unknown name.

@@ -28,7 +28,7 @@ import {useAppDispatch} from "@/lib/state/Hooks";
 import {LayoutItem, PageConfig, RGLBreakpoint} from "@/lib/layout/PageConfigTypes";
 import {addPage, selectPages} from "@/lib/state/PageLayoutSlice";
 import {buildPageFromTemplate, PAGE_TEMPLATE_IDS, templateTitleKey} from "@/lib/layout/DefaultPages";
-import {claimMainRoute, dashboardHref, pageTitle, uniqueSlugFor} from "@/lib/layout/MainPages";
+import {claimMainRoute, dashboardHref, pageTitle, uniqueSlugFor, viewFirst} from "@/lib/layout/MainPages";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {PAGE_ICONS} from "./WidgetRegistry";
 import {useLanguage} from "@/app/contexts/LanguageContext";
@@ -89,7 +89,7 @@ export default function AddPageDialog({open, onClose}: AddPageDialogProps) {
         setName('');
         setTemplateId('blank');
         onClose();
-        router.push(scopedHref(dashboardHref(page)));
+        router.push(viewFirst(scopedHref(dashboardHref(page))));
     };
 
     return (

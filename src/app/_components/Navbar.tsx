@@ -60,7 +60,7 @@ import {useTheme} from "@mui/material/styles";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import {selectNavPages, selectPages} from "@/lib/state/PageLayoutSlice";
 import {selectCurrentLane} from "@/lib/state/LaneViewSlice";
-import {dashboardHref, LANE_VIEW_ROUTE, navTestId, normalizeRoute, pageForRoute, pageTitle} from "@/lib/layout/MainPages";
+import {dashboardHref, LANE_VIEW_ROUTE, navTestId, normalizeRoute, pageForRoute, pageTitle, viewFirst} from "@/lib/layout/MainPages";
 import {PageConfig} from "@/lib/layout/PageConfigTypes";
 import {getPageIcon} from "@/app/_components/layout/WidgetRegistry";
 import AddPageDialog from "@/app/_components/layout/AddPageDialog";
@@ -253,7 +253,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const routePage = awaitingLaneType ? undefined : pageForRoute(allPages, pathname, currentLaneIsRs350);
     const routeRedirectHref = routePage ? dashboardHref(routePage) : undefined;
     React.useEffect(() => {
-        if (routeRedirectHref) router.replace(scopedHref(routeRedirectHref));
+        if (routeRedirectHref) router.replace(viewFirst(scopedHref(routeRedirectHref)));
     }, [routeRedirectHref, router, scopedHref]);
     const mainPageRedirect = awaitingLaneType || Boolean(routeRedirectHref);
 
@@ -520,7 +520,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
             {/* Dashboards: every widget dashboard, built-in and the user's own, then Add. */}
             <List data-testid="custom-pages-nav">
                 {navPages.map((page: PageConfig) => (
-                    <Link href={scopedHref(dashboardHref(page))} prefetch={false} passHref key={page.id} onClick={!isDesktop ? handleDrawerClose : null}>
+                    <Link href={viewFirst(scopedHref(dashboardHref(page)))} prefetch={false} passHref key={page.id} onClick={!isDesktop ? handleDrawerClose : null}>
                         <ListItem disablePadding sx={{display: 'block'}}>
                             <ListItemButton
                                 data-testid={navTestId(page)}

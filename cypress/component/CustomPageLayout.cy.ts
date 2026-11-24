@@ -23,6 +23,7 @@ import {
     pageForRoute,
     pageTitle,
     slugify,
+    viewFirst,
 } from "../../src/lib/layout/MainPages";
 
 const MAIN_IDS = MAIN_PAGES.map((m) => m.id);
@@ -63,6 +64,15 @@ describe("custom widget pages on ORNL 3.11", () => {
         expect(pageForRoute(pages, "/users")).to.equal(undefined);
         expect(pageForRoute(pages, "/dashboard/")).to.equal(undefined);
         expect(dashboardHref(pages[2])).to.equal("/dashboard/?name=state-of-health");
+    });
+
+    it("keeps a scoped workstation view first in dashboard URLs, as on ORNL's routes", () => {
+        expect(viewFirst("/dashboard/?name=dashboard&view=east-gate")).to.equal("/dashboard/?view=east-gate&name=dashboard");
+        expect(viewFirst("/dashboard/?view=east-gate&name=map")).to.equal("/dashboard/?view=east-gate&name=map");
+        expect(viewFirst("/dashboard/?name=map")).to.equal("/dashboard/?name=map");
+        expect(viewFirst("/lane-view?view=east-gate")).to.equal("/lane-view?view=east-gate");
+        expect(viewFirst("/dashboard/?name=%CF%87%CE%AC%CF%81%CF%84%CE%B7%CF%82&view=gate-2#top"))
+            .to.equal("/dashboard/?view=gate-2&name=%CF%87%CE%AC%CF%81%CF%84%CE%B7%CF%82#top");
     });
 
     it("deletes a built-in for good; its route goes back to ORNL until a page from its layout claims it", () => {
