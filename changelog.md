@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.13
+
+### Fixed
+
+- Gated `prewarmBucketCounts` on `countSettledRef.current` in `EventTableRequests.ts` (and incremented `prefetchEpoch` when `refreshCounts()` settles) so applying a selective Event Log filter never fans out premature per-bucket `/observations/count` queries using the prior unfiltered `rowCount` (`1.8M` rows) before the active filter's total count has resolved, eliminating background DuckDB `cold-cql-count` contention when operators immediately toggle `Priority` ↔ `Newest first`.
+
+### Changed
+
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.11.13`), Video Guide `#31` summary asset names, and hardware-replacement recovery checklist references with **OSCAR 3.11.13**.
+
 ## 3.11.12
 
 ### Fixed
