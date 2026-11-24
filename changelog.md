@@ -1,6 +1,20 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.14
+
+### Fixed
+
+- Updated `UsersAccessManager.tsx` so issuing a second temporary-password enrollment invite while the onboarding banner is already open updates the rendered one-time QR code and link to the newest invite immediately.
+- Added `30 s` detector-silence liveness verification in `useLaneHealth.ts` (`deriveDeviceLiveness`) across portal (`gammaCounts` / `neutronCounts`) and mobile (`LiveDriverLocationOutput` / Kromek D5 radiometric status) heartbeat streams while preserving `"unknown"` (`Waiting`) on zero-observation streams and compensating for workstation/server NTP clock drift (`> 2 s`) via HTTP `Date` response headers.
+- Switched `WebIdAnalysis.tsx` to `resultTime`-bounded CQL `occupancyObsId` lookups (with post-occupancy secondary-inspection fallback and `exactFilterSucceeded` short-circuiting so `0`-WebID occupancies never fall through to 2,500-row stream scans).
+- Disabled `hls.js` Web Worker transmuxing (`enableWorker: false`) in `HLSVideoComponent.tsx` for deterministic static-export CSP playback and added `[5 s, 15 s, 30 s, 60 s]` automatic retry backoff after terminal HLS playback errors.
+
+### Changed
+
+- Added `AGENTS.md`, `CLAUDE.md`, and `.github/PULL_REQUEST_TEMPLATE.md` documenting canonical operator routes, safety-critical global `AlarmAudio` invariants, bounded ConSys/DuckDB concurrency rules, and `v3.12.0` blueprints (`MobileDetectorSystem` UI and opt-in `/dashboards`).
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.11.14`), Video Guide `#31` summary asset names, and hardware-replacement recovery checklist references with **OSCAR 3.11.14**.
+
 ## 3.11.13
 
 ### Fixed
