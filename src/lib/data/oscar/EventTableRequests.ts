@@ -72,51 +72,21 @@ export function isAbortRequestError(error: unknown): boolean {
     return typeof error === "object" && "name" in error && (error as {name?: unknown}).name === "AbortError";
 }
 
-const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504]);
-const TRANSIENT_HTTP_RETRY_DELAYS_MS = [350, 900] as const;
-
-function waitWithAbort(delayMs: number, signal?: AbortSignal): Promise<void> {
-    if (delayMs <= 0) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-            reject(new DOMException("Aborted", "AbortError"));
-            return;
-        }
-        const timer = setTimeout(() => {
-            signal?.removeEventListener("abort", onAbort);
-            resolve();
-        }, delayMs);
-        const onAbort = () => {
-            clearTimeout(timer);
-            reject(new DOMException("Aborted", "AbortError"));
-        };
-        signal?.addEventListener("abort", onAbort, {once: true});
-    });
-}
-
 export async function fetchCollectionDataWithSignal(collection: any, signal?: AbortSignal): Promise<any[]> {
     if (!signal || typeof collection?.url !== "string" || typeof collection?.filter?.toQueryString !== "function") {
         return collection.fetchData();
     }
     const queryString = `${collection.filter.toQueryString()}&offset=${collection.pageOffset}&limit=${collection.pageSize}`;
     const fullUrl = `${collection.url}?${queryString}`;
-    let response: Response | null = null;
-    for (let attempt = 0; attempt <= TRANSIENT_HTTP_RETRY_DELAYS_MS.length; attempt++) {
-        response = await fetch(fullUrl, {
-            method: "GET",
-            credentials: "include",
-            headers: collection.headers ?? {},
-            signal,
-        });
-        if (response.ok || !TRANSIENT_HTTP_STATUSES.has(response.status) || attempt >= TRANSIENT_HTTP_RETRY_DELAYS_MS.length) {
-            break;
-        }
-        await waitWithAbort(TRANSIENT_HTTP_RETRY_DELAYS_MS[attempt], signal);
-    }
-    if (!response || !response.ok) {
-        const status = response?.status ?? 503;
-        const err = new Error(`Got ${status} response from ${fullUrl}`) as Error & {response?: Response};
-        if (response) err.response = response;
+    const response = await fetch(fullUrl, {
+        method: "GET",
+        credentials: "include",
+        headers: collection.headers ?? {},
+        signal,
+    });
+    if (!response.ok) {
+        const err = new Error(`Got ${response.status} response from ${fullUrl}`) as Error & {response?: Response};
+        err.response = response;
         throw err;
     }
     const payload = collection.responseFormat === "arraybuffer"
@@ -145,16 +115,8 @@ export async function fetchObservationPlanCount(
             signal: options?.signal,
             ...(options?.lowPriority ? ({priority: "low"} as RequestInit) : {}),
         };
-        const countUrl = `${plan.node.getConnectedSystemsEndpoint(false)}/observations/count?${params}`;
-        let response: Response | null = null;
-        for (let attempt = 0; attempt <= TRANSIENT_HTTP_RETRY_DELAYS_MS.length; attempt++) {
-            response = await fetch(countUrl, requestInit);
-            if (response.ok || !TRANSIENT_HTTP_STATUSES.has(response.status) || attempt >= TRANSIENT_HTTP_RETRY_DELAYS_MS.length) {
-                break;
-            }
-            await waitWithAbort(TRANSIENT_HTTP_RETRY_DELAYS_MS[attempt], options?.signal);
-        }
-        if (!response || !response.ok) throw new Error(`HTTP ${response?.status ?? 503}`);
+        const response = await fetch(`${plan.node.getConnectedSystemsEndpoint(false)}/observations/count?${params}`, requestInit);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return Number((await response.json()).count) || 0;
     } catch (error) {
         if (options?.signal?.aborted || isAbortRequestError(error)) {
@@ -217,7 +179,7 @@ export interface UseAbortableEventQueriesArgs {
     ) => Promise<EventTableData[]>;
 }
 
-const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 300;
+const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 120;
 const BUCKET_COUNTS_PREWARM_DELAY_MS = 0;
 const MAX_VISITED_PAGE_CACHE_ENTRIES = 64;
 

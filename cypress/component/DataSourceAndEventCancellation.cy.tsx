@@ -1036,9 +1036,8 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         });
     });
 
-    it("serves visited pages instantly on repeated Previous clicks, prefetches page - 1 when stepping backward from a deep page, and retries transient 503s", () => {
+    it("serves visited pages instantly on repeated Previous clicks, prefetches page - 1 when stepping backward from a deep page, and preserves visible rows on error", () => {
         const rowCalls: Array<{offset: number; limit: number}> = [];
-        let transient503Remaining = 1;
         let forcePermanentFailure = false;
 
         cy.window().then((win) => {
@@ -1049,10 +1048,6 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
                         status: 200,
                         headers: {"Content-Type": "application/json"},
                     }));
-                }
-                if (transient503Remaining > 0) {
-                    transient503Remaining -= 1;
-                    return Promise.resolve(new Response("DuckDB busy", {status: 503}));
                 }
                 if (forcePermanentFailure) {
                     return Promise.resolve(new Response("Unavailable", {status: 500}));

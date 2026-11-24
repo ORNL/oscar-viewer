@@ -38,7 +38,6 @@ import {
     stageCargoUffForAdjudication,
     UffSearchMatch,
 } from "@/lib/data/oscar/CargoUffApi";
-import {buildEventBoundedPhenomenonTime} from "@/lib/data/oscar/EventLookup";
 
 const CargoUffViewerDialog = dynamic(
     () => import("@/app/_components/uff/CargoUffViewerDialog"),
@@ -918,9 +917,7 @@ export default function AdjudicationDetail(props: {
             }
 
             if (!tempAdjData.occupancyObsId) {
-                const phenomenonTime = buildEventBoundedPhenomenonTime(props.event.startTime, props.event.endTime);
                 let query = await ds.searchObservations(new ObservationFilter({
-                    ...(phenomenonTime ? {phenomenonTime} : {}),
                     filter: `startTime='${props.event.startTime}' AND endTime='${props.event.endTime}'`
                 }), 1);
 
@@ -1045,9 +1042,7 @@ export default function AdjudicationDetail(props: {
         const ds = currLaneEntry.datastreams.find((candidate: any) => candidate.properties.id == props.event.dataStreamId);
         if (!ds) return '';
         try {
-            const phenomenonTime = buildEventBoundedPhenomenonTime(props.event.startTime, props.event.endTime);
             const query = await ds.searchObservations(new ObservationFilter({
-                ...(phenomenonTime ? {phenomenonTime} : {}),
                 filter: `startTime='${props.event.startTime}' AND endTime='${props.event.endTime}'`,
             }), 1);
             const occupancyObservation = await query.nextPage();

@@ -981,13 +981,7 @@ export default function EventTable({
                     event.setDataStreamId(occupancyStream.properties.id);
                     event.setRPMSystemId(occupancyStream.properties["system@id"]);
                     advanceSnapshotCutoff(event.endTime);
-                    const passesLocal = rowPassesLocalFilters(event, lane);
-                    if (
-                        Boolean(notificationServiceRef.current?.isReady())
-                        || (currentPageRef.current === 0 && passesLocal)
-                    ) {
-                        resolveIdentityAndNotify(event, lane);
-                    }
+                    resolveIdentityAndNotify(event, lane);
                     const isLiveAlarm = isAlarmTable
                         && event.status !== "None"
                         && !event.adjudicatedIds?.length
@@ -1009,10 +1003,9 @@ export default function EventTable({
                             ));
                         }
                     }
-                    if (!passesLocal) return;
-                    // Historical pages (page >= 1) and their adjacent prefetches/visited-page cache
-                    // are anchored to the immutable snapshot cutoff (pageLoadedTime); do not abort
-                    // in-flight historical prefetches or wipe visited pages on live occupancy arrival.
+                    if (!rowPassesLocalFilters(event, lane)) return;
+                    // Historical pages (page >= 1) use the immutable pageLoadedTime snapshot cutoff;
+                    // do not abort in-flight historical prefetches or wipe visited pages on live MQTT arrivals.
                     if (allFilteredCutoffRef.current && event.status !== "None" && !event.adjudicatedIds?.length) {
                         setPostSelectionKeys(previous => new Set(previous).add(eventSelectionKey(event)));
                     }

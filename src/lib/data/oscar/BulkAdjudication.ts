@@ -1,6 +1,5 @@
 import ObservationFilter from "osh-js/source/core/consysapi/observation/ObservationFilter";
 import ControlStream from "osh-js/source/core/consysapi/controlstream/ControlStream";
-import {buildEventBoundedPhenomenonTime} from "@/lib/data/oscar/EventLookup";
 import {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
 import {EventTableData} from "@/lib/data/oscar/TableHelpers";
 import {AdjudicationCode} from "@/lib/data/oscar/adjudication/models/AdjudicationConstants";
@@ -131,9 +130,7 @@ export async function adjudicateOneEvent(
 
         let observationId = event.occupancyObsId;
         if (!observationId) {
-            const phenomenonTime = buildEventBoundedPhenomenonTime(event.startTime, event.endTime);
             const query = await dataStream.searchObservations(new ObservationFilter({
-                ...(phenomenonTime ? {phenomenonTime} : {}),
                 filter: `startTime='${event.startTime}' AND endTime='${event.endTime}'`,
             }), 1);
             const observations: any[] = await query.nextPage();
