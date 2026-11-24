@@ -1093,6 +1093,13 @@ export default function UsersAccessManager() {
     const handleIssueQrInvite = async (u: AdminUserSummary) => {
         try {
             const res = await adminIssueUserInvite(u.username, 168);
+            // A new invite revokes the user's earlier ones, including the one behind the
+            // temporary-password banner's QR button, so point that button at the new invite.
+            setOneTimeTempPassword((prev) =>
+                prev?.card && prev.username === u.username
+                    ? { ...prev, card: { ...prev.card, inviteToken: res.inviteToken, inviteExpiresAt: res.inviteExpiresAt } }
+                    : prev,
+            );
             setOnboardingPackCards([
                 {
                     user: res.user,
@@ -1187,7 +1194,7 @@ export default function UsersAccessManager() {
         const hostname = typeof window !== 'undefined' ? window.location.hostname : 'oscar.local';
         const lines = [
             '========================================================================',
-            `OSCAR 3.11.13 — NON-IT INSTALL, BACKUP & HARDWARE REPLACEMENT CHECKLIST`,
+            `OSCAR 3.11.14 — NON-IT INSTALL, BACKUP & HARDWARE REPLACEMENT CHECKLIST`,
             `Generated: ${new Date().toISOString()} | Node: ${hostname}`,
             '========================================================================',
             '',
@@ -1206,7 +1213,7 @@ export default function UsersAccessManager() {
             '     * Octelium Zero Trust remote-access tunnel config & token (remote-access/)',
             '',
             '3. FULL HARDWARE REPLACEMENT (IF SERVER FAILS):',
-            '   Step A: Extract oscar-3.11.13.zip on the replacement Ubuntu 24.04 or Windows 11 PC.',
+            '   Step A: Extract oscar-3.11.14.zip on the replacement Ubuntu 24.04 or Windows 11 PC.',
             '   Step B: Attach your backup drive and place secrets/backup-key.txt in place.',
             '   Step C: Run:',
             '           Linux:   sudo bash oscar.sh restore --backup <BACKUP_ID> --confirm <BACKUP_ID>',
@@ -2297,7 +2304,7 @@ export default function UsersAccessManager() {
                                                 3. Drop-In Hardware Replacement
                                             </Typography>
                                             <Typography variant="body2" color="text.secondary">
-                                                If a server PC fails, extract <code>oscar-3.11.13.zip</code> on replacement hardware, supply <code>backup-key.txt</code>, and run <code>oscar restore</code>. All users, Passkeys, alarms, and the public Octelium tunnel come back online automatically.
+                                                If a server PC fails, extract <code>oscar-3.11.14.zip</code> on replacement hardware, supply <code>backup-key.txt</code>, and run <code>oscar restore</code>. All users, Passkeys, alarms, and the public Octelium tunnel come back online automatically.
                                             </Typography>
                                         </CardContent>
                                     </Card>
