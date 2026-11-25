@@ -46,7 +46,7 @@ export function ensureTrailingSlashRoute(path: string): string {
         return path;
     }
     try {
-        const url = new URL(path, "https://oscar.local");
+        const url = new URL(path, "https://example.invalid");
         if (url.pathname !== "/" && !url.pathname.endsWith("/")) {
             const lastSegment = url.pathname.substring(url.pathname.lastIndexOf("/") + 1);
             if (!/\.[A-Za-z0-9]{1,8}$/.test(lastSegment)) {
