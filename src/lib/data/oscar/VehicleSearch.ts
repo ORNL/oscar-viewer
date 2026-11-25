@@ -177,7 +177,7 @@ export interface SearchVehiclePassesOptions {
 }
 
 const ISO_6346_NORMALIZED_RE = /^[A-Z]{3}[UJZR][0-9]{7}$/;
-const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
+const DEFAULT_SEARCH_TIMEOUT_MS = 90_000;
 export const DEFAULT_VEHICLE_SEARCH_LIMIT_PER_NODE = 200;
 export const LEGACY_FALLBACK_VEHICLE_SEARCH_LIMIT = 100;
 export const MAX_HYDRATED_PROFILE_PASSES = 16;
