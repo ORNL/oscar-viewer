@@ -41,6 +41,24 @@ const DataSourceContext = createContext<IDataSourceContext | undefined>(undefine
 
 export {DataSourceContext};
 
+export function ensureTrailingSlashRoute(path: string): string {
+    if (!path || !path.startsWith("/") || path.startsWith("//")) {
+        return path;
+    }
+    try {
+        const url = new URL(path, "https://oscar.local");
+        if (url.pathname !== "/" && !url.pathname.endsWith("/")) {
+            const lastSegment = url.pathname.substring(url.pathname.lastIndexOf("/") + 1);
+            if (!/\.[A-Za-z0-9]{1,8}$/.test(lastSegment)) {
+                url.pathname = `${url.pathname}/`;
+            }
+        }
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+        return path;
+    }
+}
+
 export function sameLaneMapSnapshot<T>(
     left: ReadonlyMap<string, T> | null | undefined,
     right: ReadonlyMap<string, T>,
@@ -419,7 +437,7 @@ export default function DataSourceProvider({children}: { children: ReactNode }) 
 
     const scopedHref = useCallback(
         (path: string) => withOperationalView(
-            path,
+            ensureTrailingSlashRoute(path),
             viewSelection.error ? "__invalid__" : effectiveViewResolution.effectiveKey,
         ),
         [viewSelection.error, effectiveViewResolution.effectiveKey],

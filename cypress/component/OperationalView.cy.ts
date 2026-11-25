@@ -8,6 +8,7 @@ import {
     systemMatchesOperationalView,
     withOperationalView,
 } from "../../src/lib/data/oscar/OperationalView";
+import {ensureTrailingSlashRoute} from "../../src/app/contexts/DataSourceContext";
 import {Node} from "../../src/lib/data/osh/Node";
 import {shouldClearUnavailablePreview} from "../../src/lib/data/oscar/PreviewAvailability";
 import {resolveReportScope} from "../../src/lib/data/oscar/ReportScope";
@@ -55,6 +56,15 @@ describe("operational view scoping", () => {
             .to.equal("/event-details?eventId=42&view=north-gate");
         expect(withOperationalView("/event-log", "")).to.equal("/event-log?view=");
         expect(withOperationalView("/event-log", null)).to.equal("/event-log");
+    });
+
+    it("normalizes internal exported route paths with trailing slashes for Next.js static RSC navigation", () => {
+        expect(ensureTrailingSlashRoute("/")).to.equal("/");
+        expect(ensureTrailingSlashRoute("/event-log")).to.equal("/event-log/");
+        expect(ensureTrailingSlashRoute("/national-view")).to.equal("/national-view/");
+        expect(ensureTrailingSlashRoute("/servers?auth=bearer")).to.equal("/servers/?auth=bearer");
+        expect(ensureTrailingSlashRoute("/dashboards/?id=ops")).to.equal("/dashboards/?id=ops");
+        expect(ensureTrailingSlashRoute("/manual-screenshots/01-overview.png")).to.equal("/manual-screenshots/01-overview.png");
     });
 
     it("clears a persisted preview only after its lane is known to be unavailable", () => {

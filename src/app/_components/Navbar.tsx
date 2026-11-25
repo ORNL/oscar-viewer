@@ -70,7 +70,7 @@ import {setEventPreview, setSelectedRowId} from "@/lib/state/EventPreviewSlice";
 import {selectDashboardUnreadAlarmCount, setSelectedEvent} from "@/lib/state/EventDataSlice";
 import {setEventData} from "@/lib/state/EventDetailsSlice";
 import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
-import {DataSourceContext} from "@/app/contexts/DataSourceContext";
+import {DataSourceContext, ensureTrailingSlashRoute} from "@/app/contexts/DataSourceContext";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
 import {
     ALL_LANES_SELECT_VALUE,
@@ -202,7 +202,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const availableViews = dataSourceCtx?.availableViews ?? [];
     const totalCatalogLaneCount = dataSourceCtx?.totalCatalogLaneCount ?? 0;
     const setActiveView = dataSourceCtx?.setActiveView;
-    const scopedHref = dataSourceCtx?.scopedHref ?? ((p: string) => p);
+    const scopedHref = dataSourceCtx?.scopedHref ?? ensureTrailingSlashRoute;
     const currentSession = dataSourceCtx?.currentSession ?? null;
     const scopedViewLabelId = React.useId();
     const scopedViewDropdown = React.useMemo(
@@ -472,7 +472,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('events'),
             icon: <WarningRoundedIcon/>,
-            href: "/event-log",
+            href: "/event-log/",
             testId: "nav-item-events",
         },
         {
@@ -484,25 +484,25 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('map'),
             icon: <LocationOnRoundedIcon/>,
-            href: "/map",
+            href: "/map/",
             testId: "nav-item-map",
         },
         {
             title: t('national'),
             icon: <MediationIcon/>,
-            href: "/national-view",
+            href: "/national-view/",
             testId: "nav-item-national",
         },
         {
             title: t('reportGenerator'),
             icon: <InsertChart/>,
-            href: "/report",
+            href: "/report/",
             testId: "nav-item-report",
         },
         {
             title: t('alarmTransfer'),
             icon: <QrCodeScannerRoundedIcon/>,
-            href: "/alarm-transfer",
+            href: "/alarm-transfer/",
             testId: "nav-item-alarm-transfer",
         },
     ]
@@ -512,7 +512,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('usersAndAccess'),
             icon: <ManageAccountsRoundedIcon/>,
-            href: "/users",
+            href: "/users/",
             testId: "nav-item-users",
         },
         ...(currentSession?.isAdmin !== false
@@ -520,13 +520,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                 {
                     title: t('usbBackups'),
                     icon: <UsbRoundedIcon/>,
-                    href: "/usb-backups",
+                    href: "/usb-backups/",
                     testId: "nav-item-usb-backups",
                 },
                 {
                     title: t('runtimeExtensions'),
                     icon: <ExtensionRoundedIcon/>,
-                    href: "/extensions",
+                    href: "/extensions/",
                     testId: "nav-item-extensions",
                 },
             ]
@@ -534,7 +534,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('servers'),
             icon: <CloudRoundedIcon/>,
-            href: "/servers",
+            href: "/servers/",
             testId: "nav-item-servers",
         }
     ]
