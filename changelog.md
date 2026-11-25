@@ -1,6 +1,12 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.11.15
+
+### Changed
+
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.11.15`), Video Guide `#31` summary asset names, `AGENTS.md` baseline references, and hardware-replacement recovery checklist references with **OSCAR 3.11.15**.
+
 ## 3.11.14
 
 ### Fixed

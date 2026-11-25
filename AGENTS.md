@@ -32,12 +32,12 @@ Both human contributors and AI coding agents (`Codex`, `Claude Code`, `Gemini` /
 ## 2. Planned `v3.12.0` Feature Blueprints
 
 ### A. Mobile Detector System UI (`ORNL/oscar-viewer#49`)
-Collaborate on shared branch `feat/v3.12.0-mobile-detector-system` rebased onto `main` (`v3.11.14`+):
+Collaborate on shared branch `feat/v3.12.0-mobile-detector-system` rebased onto `main` (`v3.11.15`+):
 - Keep the hardened `main` implementations of [`HLSVideoComponent.tsx`](src/app/_components/video/HLSVideoComponent.tsx) (`enableWorker: false` + `[5s, 15s, 30s, 60s]` backoff) and [`WebIdAnalysis.tsx`](src/app/_components/adjudication/WebIdAnalysis.tsx) (`resultTime`-bounded CQL `occupancyObsId` lookup).
 - Reuse [`SharedConnectionPool`](src/lib/data/oscar/SharedConnectionPool.ts) for mobile GPS / spectrum streams, bound historical breadcrumb queries by explicit `phenomenonTime` / `resultTime` window + `limit`, and add `en`/`es`/`fr`/`el` locale keys + Cypress component specs.
 
 ### B. Opt-In Custom Widget Dashboards (`ORNL/oscar-viewer#50`)
-Collaborate on shared branch `feat/v3.12.0-custom-dashboards` rebased onto `main` (`v3.11.14`+):
+Collaborate on shared branch `feat/v3.12.0-custom-dashboards` rebased onto `main` (`v3.11.15`+):
 - **Additive Opt-In Route (`/dashboards`):** Preserve all 8 canonical routes (`/`, `/map`, `/event-log`, `/lane-view`, `/report-view`, `/health`, `/servers`, `/users`) untouched as the default operator experience, and expose Custom Dashboards as an additive opt-in workspace (`/dashboards`) in [`Navbar.tsx`](src/app/_components/Navbar.tsx) (wrapping links in `scopedHref`).
 - **Keep `AlarmAudio` Global Only:** Do not mount `<AlarmAudio />` inside widget components; if a visual alarm-banner widget is offered, render visual state only while global audio stays in [`Providers.tsx`](src/app/Providers.tsx).
 - **Widget Guardrails:** Enforce maximum simultaneous live-video (`<= 4`) and live-chart (`<= 6`) widgets per custom dashboard so operators cannot accidentally exhaust browser WebSockets or DuckDB sessions, and namespace `redux-persist` storage keys cleanly.
