@@ -9,11 +9,23 @@ import {ThemeProvider} from "@mui/material";
 import {Provider} from "react-redux";
 import {configureStore} from "@reduxjs/toolkit";
 
-import {LanguageProvider} from "../../src/app/contexts/LanguageContext";
+import {LanguageProvider, Locale, useLanguage} from "../../src/app/contexts/LanguageContext";
 import {DataSourceContext} from "../../src/app/contexts/DataSourceContext";
 import {getTheme} from "../../src/app/style/theme";
+import HelpDialog from "../../src/app/_components/HelpDialog";
 import AddWidgetDialog from "../../src/app/_components/layout/AddWidgetDialog";
 import ChartLane from "../../src/app/_components/lane-view/ChartLane";
+import {
+    getLocalizedTrainingLab,
+    TRAINING_LABS,
+} from "../../src/lib/data/oscar/TrainingCurriculum";
+import {SandboxVerificationSnapshot} from "../../src/lib/data/oscar/TrainingSandboxApi";
+import {
+    getContextualVideoGuidesForPath,
+    getVideoGuideBySlug,
+    VIDEO_GUIDE_CAPTION_LOCALES,
+    VIDEO_GUIDES_CATALOG,
+} from "../../src/lib/data/oscar/VideoGuidesCatalog";
 import {readConfigFile} from "../../src/lib/layout/ConfigIO";
 import {
     rehydratePageLayoutState,
@@ -436,5 +448,162 @@ describe("opt-in custom dashboards: validation, caps, layout scoping, and scale-
         cy.get("#chart-view-gamma-widget-chart-beta").should("have.length", 1);
         cy.get("#chart-view-neutron-widget-chart-alpha").should("have.length", 1);
         cy.get("#chart-view-neutron-widget-chart-beta").should("have.length", 1);
+    });
+
+    it("wires Video Guides #32 & #33, Help glossary terms, and TrainingCurriculum labs across en, es, fr, and el", () => {
+        expect(VIDEO_GUIDES_CATALOG.length).to.equal(33);
+
+        const guide32 = getVideoGuideBySlug("32-custom-widget-dashboards");
+        const guide33 = getVideoGuideBySlug("33-mobile-radiation-detectors");
+        expect(guide32?.badge).to.equal("32");
+        expect(guide33?.badge).to.equal("33");
+
+        const dashboardsContextual = getContextualVideoGuidesForPath("/dashboards").map((g) => g.slug);
+        const mapContextual = getContextualVideoGuidesForPath("/map").map((g) => g.slug);
+        const laneViewContextual = getContextualVideoGuidesForPath("/lane-view").map((g) => g.slug);
+        expect(dashboardsContextual).to.include("32-custom-widget-dashboards");
+        expect(mapContextual).to.include("33-mobile-radiation-detectors");
+        expect(laneViewContextual).to.include("33-mobile-radiation-detectors");
+
+        const opDashLab = TRAINING_LABS.find((l) => l.id === "op-custom-dashboards");
+        const admMobileLab = TRAINING_LABS.find((l) => l.id === "adm-mobile-detectors");
+        expect(opDashLab).to.not.equal(undefined);
+        expect(admMobileLab).to.not.equal(undefined);
+
+        expect(opDashLab!.trackId).to.equal("operator");
+        expect(opDashLab!.route).to.equal("/dashboards");
+        expect(opDashLab!.videoGuideSlug).to.equal("32-custom-widget-dashboards");
+        expect(opDashLab!.screenshotFile).to.equal("56-custom-dashboards-workspace.png");
+        expect(opDashLab!.spotlights?.some((s) => s.selector.includes("starter-template-multi-lane-wallboard"))).to.equal(true);
+        expect(opDashLab!.spotlights?.some((s) => s.selector.includes("custom-dashboard-host"))).to.equal(true);
+
+        expect(admMobileLab!.trackId).to.equal("administrator");
+        expect(admMobileLab!.route).to.equal("/lane-view");
+        expect(admMobileLab!.splitPaneAdmin).to.equal(true);
+        expect(admMobileLab!.videoGuideSlug).to.equal("33-mobile-radiation-detectors");
+        expect(admMobileLab!.screenshotFile).to.equal("57-mobile-detector-map-and-lane-view.png");
+        const snippetValues = (admMobileLab!.copySnippets ?? []).map((c) => c.value);
+        expect(snippetValues).to.include("127.0.0.1");
+        expect(snippetValues).to.include("10110");
+
+        for (const loc of VIDEO_GUIDE_CAPTION_LOCALES) {
+            expect(guide32!.titles[loc].trim().length, `guide32 title (${loc})`).to.be.greaterThan(10);
+            expect(guide32!.summaries[loc].trim().length, `guide32 summary (${loc})`).to.be.greaterThan(20);
+            expect(guide33!.titles[loc].trim().length, `guide33 title (${loc})`).to.be.greaterThan(10);
+            expect(guide33!.summaries[loc].trim().length, `guide33 summary (${loc})`).to.be.greaterThan(20);
+
+            const locDashLab = getLocalizedTrainingLab(opDashLab!, loc);
+            const locMobileLab = getLocalizedTrainingLab(admMobileLab!, loc);
+            expect(locDashLab.title.trim().length, `op-custom-dashboards title (${loc})`).to.be.greaterThan(10);
+            expect(locDashLab.steps.length, `op-custom-dashboards steps (${loc})`).to.be.at.least(3);
+            expect(locMobileLab.title.trim().length, `adm-mobile-detectors title (${loc})`).to.be.greaterThan(10);
+            expect(locMobileLab.steps.length, `adm-mobile-detectors steps (${loc})`).to.be.at.least(3);
+        }
+        // Greek script verification
+        expect(guide32!.titles.el).to.match(/[\u0370-\u03ff]/);
+        expect(guide33!.titles.el).to.match(/[\u0370-\u03ff]/);
+        expect(getLocalizedTrainingLab(opDashLab!, "el").title).to.match(/[\u0370-\u03ff]/);
+        expect(getLocalizedTrainingLab(admMobileLab!, "el").title).to.match(/[\u0370-\u03ff]/);
+
+        // Verify auto-verification predicates
+        const baseSnap: SandboxVerificationSnapshot = {
+            configuredLaneCount: 0,
+            onlineLaneCount: 0,
+            lanesWithCameraCount: 0,
+            lanesWithOcrCount: 0,
+            operationalViewCount: 0,
+            totalOccupancies: 0,
+            gammaAlarmCount: 0,
+            neutronAlarmCount: 0,
+            emlCode9999Count: 0,
+            extendedCode9998Count: 0,
+            activeFaultOrTamper: false,
+            operatorAdjudicatedCount: 0,
+            adjudicatedWithEvidenceCount: 0,
+            adjudicatedWithVehicleIdCount: 0,
+            multiPassVehicleCount: 0,
+            generatedReportCount: 0,
+            offlineMapActive: false,
+            policyPackActive: false,
+            cargoUffEnabled: false,
+            cargoUffIndexedCount: 0,
+            mobileDetectorConfigured: false,
+        };
+
+        localStorage.clear();
+        expect(opDashLab!.isAutoVerified(baseSnap)).to.equal(false);
+        localStorage.setItem("oscar.pageLayouts.v1", JSON.stringify({pages: []}));
+        expect(opDashLab!.isAutoVerified(baseSnap)).to.equal(false);
+        localStorage.setItem(
+            "oscar.pageLayouts.v1",
+            JSON.stringify({pages: [{id: "page-wallboard-1", title: "Wallboard"}]}),
+        );
+        expect(opDashLab!.isAutoVerified(baseSnap)).to.equal(true);
+
+        expect(admMobileLab!.isAutoVerified(baseSnap)).to.equal(false);
+        expect(admMobileLab!.isAutoVerified({...baseSnap, mobileDetectorConfigured: true})).to.equal(true);
+
+        // Mount HelpDialog on /dashboards and verify Glossary + contextual video guide #32 across all 4 locales
+        cy.intercept("GET", "/sensorhub/oscar/sandbox/host", {
+            statusCode: 200,
+            body: {
+                agentActive: false,
+                sandboxRunning: false,
+                httpsPort: 8444,
+                ttlMinutes: 120,
+                linuxStartCommand: "sudo bash oscar.sh sandbox start --port 8444",
+                linuxStopCommand: "sudo bash oscar.sh sandbox stop",
+                linuxEnableBridgeCommand: "sudo bash oscar.sh sandbox enable-ui-bridge",
+                windowsStartCommand: ".\\oscar.bat sandbox start --port 8444",
+                windowsStopCommand: ".\\oscar.bat sandbox stop",
+                windowsEnableBridgeCommand: ".\\oscar.bat sandbox enable-ui-bridge",
+            },
+        });
+
+        const HelpLocaleHarness = () => {
+            const {setLanguage} = useLanguage();
+            return (
+                <div>
+                    {(["en", "es", "fr", "el"] as Locale[]).map((loc) => (
+                        <button
+                            key={loc}
+                            type="button"
+                            data-testid={`set-help-locale-${loc}`}
+                            onClick={() => setLanguage(loc)}
+                        >
+                            {loc}
+                        </button>
+                    ))}
+                    <HelpDialog open onClose={() => {}} activePathname="/dashboards" skipBrowserDownload/>
+                </div>
+            );
+        };
+
+        cy.mount(
+            <ThemeProvider theme={getTheme("light")}>
+                <LanguageProvider>
+                    <HelpLocaleHarness/>
+                </LanguageProvider>
+            </ThemeProvider>,
+        );
+
+        cy.get('[data-testid="help-contextual-guide-32"]').should("be.visible");
+        cy.get('[role="tab"]').eq(2).click();
+        cy.contains("Custom Dashboards (/dashboards)").should("be.visible");
+        cy.contains("Mobile Detector System").should("be.visible");
+        cy.get('[data-testid="help-glossary-21-guide-32"]').should("be.visible");
+        cy.get('[data-testid="help-glossary-22-guide-33"]').should("be.visible");
+
+        cy.get('[data-testid="set-help-locale-es"]').click({force: true});
+        cy.contains("Paneles personalizados").should("be.visible");
+        cy.contains("Sistema de detector móvil").should("be.visible");
+
+        cy.get('[data-testid="set-help-locale-fr"]').click({force: true});
+        cy.contains("Tableaux de bord personnalisés").should("be.visible");
+        cy.contains("Système de détecteur mobile").should("be.visible");
+
+        cy.get('[data-testid="set-help-locale-el"]').click({force: true});
+        cy.contains("Προσαρμοσμένοι πίνακες").should("be.visible");
+        cy.contains("Σύστημα κινητού ανιχνευτή").should("be.visible");
     });
 });

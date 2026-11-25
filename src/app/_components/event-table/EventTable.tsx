@@ -75,6 +75,7 @@ import {convertToMap} from "@/app/utils/Utils";
 import {OCCUPANCY_PILLAR_DEF} from "@/lib/data/Constants";
 import {getObservations} from "@/app/utils/ChartUtils";
 import {useAppDispatch} from "@/lib/state/Hooks";
+import {selectNodes} from "@/lib/state/OSHSlice";
 import {
     selectSelectedRowId,
     setEventPreview,
@@ -245,6 +246,7 @@ export default function EventTable({
     const adjudicatedEventId = useSelector(selectAdjudicatedEventId);
     const dashboardAcknowledgeNonce = useSelector(selectDashboardAcknowledgeNonce);
     const globalUnreadOnly = useSelector(selectDashboardUnreadOnly);
+    const configuredNodes = useSelector(selectNodes);
     const [widgetUnreadOnly, setWidgetUnreadOnly] = useState(false);
     const unreadOnly = isWidgetMode ? widgetUnreadOnly : globalUnreadOnly;
     const effectiveUnreadOnly = isAlarmTable && unreadOnly;
@@ -444,7 +446,25 @@ export default function EventTable({
     }>>(new Set());
     const failedBulkRef = useRef<EventTableData[]>([]);
 
-    const nodeOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name))).sort(), [stableLaneMap]);
+    const federatedNodesForSearch = useMemo(() => {
+        if (configuredNodes.length === 0 || stableLaneMap.size === 0) return undefined;
+        const configuredIds = new Set(configuredNodes.map(node => node?.id).filter(Boolean));
+        const laneMapMatchesStore = Array.from(stableLaneMap.values()).some(
+            lane => Boolean(lane?.parentNode?.id && configuredIds.has(lane.parentNode.id)),
+        );
+        return laneMapMatchesStore ? configuredNodes : undefined;
+    }, [configuredNodes, stableLaneMap]);
+
+    const nodeOptions = useMemo(
+        () =>
+            Array.from(
+                new Set([
+                    ...Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name),
+                    ...(federatedNodesForSearch ?? []).map(node => node?.name).filter((name): name is string => Boolean(name)),
+                ]),
+            ).sort(),
+        [federatedNodesForSearch, stableLaneMap],
+    );
     const laneOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.laneName))).sort(), [stableLaneMap]);
 
     const customCodeNodes = useMemo(() => {
@@ -1284,6 +1304,7 @@ export default function EventTable({
                     vehicleId: effectiveVehicleId,
                     matchMode: effectiveMatchMode,
                     laneMap: stableLaneMap,
+                    nodes: federatedNodesForSearch,
                     activeViewKey,
                     startTimeIso,
                     signal: controller.signal,
@@ -1304,7 +1325,7 @@ export default function EventTable({
         })();
 
         return () => controller.abort();
-    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, isEventLog, primaryEventLogNode, stableLaneMap]);
+    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, federatedNodesForSearch, isEventLog, primaryEventLogNode, stableLaneMap]);
 
     const vehicleFilteredRows = useMemo<EventTableData[]>(() => {
         if (!isVehicleSearchMode || !vehicleSearchResult) return [];
@@ -3479,6 +3500,7 @@ export default function EventTable({
                     vehicleId={comparisonDialogState.vehicleId}
                     matchMode={comparisonDialogState.matchMode}
                     laneMap={stableLaneMap}
+                    nodes={federatedNodesForSearch}
                     activeViewKey={activeViewKey}
                     startTimeIso={comparisonDialogState.initialResult ? activeVehicleStartTimeIso : null}
                     initialResult={comparisonDialogState.initialResult ?? null}

@@ -19,10 +19,12 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         setTrainingSandboxRuntimeActiveForTests(false);
     });
 
-    it("maps all 13 curriculum labs across 3 role tracks to valid 31-guide catalog entries", () => {
-        expect(VIDEO_GUIDES_CATALOG.length).to.equal(31);
+    it("maps all 15 curriculum labs across 3 role tracks to valid 33-guide catalog entries", () => {
+        expect(VIDEO_GUIDES_CATALOG.length).to.equal(33);
         expect(getVideoGuideBySlug("30-zero-login-github-system-update")?.badge).to.equal("30");
         expect(getVideoGuideBySlug("31-bare-metal-autoinstall-usb-creator")?.badge).to.equal("31");
+        expect(getVideoGuideBySlug("32-custom-widget-dashboards")?.badge).to.equal("32");
+        expect(getVideoGuideBySlug("33-mobile-radiation-detectors")?.badge).to.equal("33");
         const guide28 = getVideoGuideBySlug("28-hands-on-training-sandbox");
         expect(guide28).to.not.equal(undefined);
         expect(guide28?.badge).to.equal("28");
@@ -35,7 +37,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             "supervisor",
             "administrator",
         ]);
-        expect(TRAINING_LABS.length).to.equal(13);
+        expect(TRAINING_LABS.length).to.equal(15);
         for (const lab of TRAINING_LABS) {
             const matchedGuide = getVideoGuideBySlug(lab.videoGuideSlug);
             expect(matchedGuide, `Video guide for ${lab.id}`).to.not.equal(undefined);
@@ -392,10 +394,10 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
                 remoteDomain: "hub.example.org",
                 remoteSandboxUrl: "https://north-gate-sandbox.hub.example.org",
             },
-            "oscar.ubuntu",
+            "portal-host.internal",
         );
         expect(lanTarget.isRemoteTunnel).to.equal(false);
-        expect(lanTarget.url).to.equal("https://oscar.ubuntu:8444");
+        expect(lanTarget.url).to.equal("https://portal-host.internal:8444");
         expect(lanTarget.badgeLabel).to.equal(":8444");
     });
 

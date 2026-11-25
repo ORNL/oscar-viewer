@@ -24,6 +24,14 @@ export interface TrainingSpotlightTarget {
     iconKey?: PlatformIconKey;
 }
 
+export interface TrainingLabLocalizedCopy {
+    title: string;
+    screenshotCaption: string;
+    whyItMatters: string;
+    steps: string[];
+    objectiveSummary: string;
+}
+
 export interface TrainingLabDefinition {
     id: string;
     trackId: SandboxTrackId;
@@ -38,6 +46,7 @@ export interface TrainingLabDefinition {
     durationEstimate: string;
     whyItMatters: string;
     steps: string[];
+    translations?: Record<Locale, TrainingLabLocalizedCopy>;
     injectActions?: TrainingInjectAction[];
     sampleFiles?: { fileName: string; buttonLabel: string }[];
     copySnippets?: { label: string; value: string }[];
@@ -46,6 +55,58 @@ export interface TrainingLabDefinition {
     spotlightLabel?: string;
     objectiveSummary: string;
     isAutoVerified: (snap: SandboxVerificationSnapshot) => boolean;
+}
+
+function countPagesInParsedLayout(parsed: unknown): number {
+    if (!parsed) return 0;
+    if (Array.isArray(parsed)) {
+        return parsed.filter((item) => item && typeof item === "object").length;
+    }
+    if (typeof parsed === "object") {
+        const obj = parsed as Record<string, unknown>;
+        if (Array.isArray(obj.pages)) {
+            const count = obj.pages.filter((p) => p && typeof p === "object").length;
+            if (count >= 1) return count;
+        }
+        if (obj.profiles && typeof obj.profiles === "object") {
+            for (const profilePages of Object.values(obj.profiles as Record<string, unknown>)) {
+                if (Array.isArray(profilePages)) {
+                    const count = profilePages.filter((p) => p && typeof p === "object").length;
+                    if (count >= 1) return count;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+export function hasSavedCustomDashboardLayout(): boolean {
+    if (typeof window === "undefined") return false;
+    try {
+        const storage = window.localStorage;
+        if (!storage) return false;
+        for (let i = 0; i < storage.length; i += 1) {
+            const key = storage.key(i);
+            if (!key || !key.startsWith("oscar.pageLayouts")) continue;
+            const raw = storage.getItem(key);
+            if (!raw || !raw.trim()) continue;
+            if (countPagesInParsedLayout(JSON.parse(raw)) >= 1) {
+                return true;
+            }
+        }
+        const persistedRoot = storage.getItem("persist:root");
+        if (persistedRoot) {
+            const rootObj = JSON.parse(persistedRoot) as Record<string, unknown>;
+            const rawSlice = rootObj?.pageLayoutSlice;
+            const sliceObj = typeof rawSlice === "string" ? JSON.parse(rawSlice) : rawSlice;
+            if (countPagesInParsedLayout(sliceObj) >= 1) {
+                return true;
+            }
+        }
+    } catch {
+        return false;
+    }
+    return false;
 }
 
 export interface TrainingTrackDefinition {
@@ -332,10 +393,10 @@ export const TRAINING_TRACKS: readonly TrainingTrackDefinition[] = [
             el: "Ενότητα 3 — Διαχειριστής συστήματος (από το μηδέν)",
         },
         subtitle: {
-            en: "Starts with 0 configured lanes while loopback Rapiscan (`127.0.0.1:10099`) and RTSP (`127.0.0.1:8554/tutorial-cam`) run locally so you can practice SensorHub Admin lane setup, CSV import, RBAC/Passkeys, and Runtime Extensions.",
-            es: "Inicia con 0 carriles mientras el emulador Rapiscan (`127.0.0.1:10099`) y RTSP (`127.0.0.1:8554/tutorial-cam`) corren localmente para practicar alta manual, CSV, Passkeys y Extensiones.",
-            fr: "Démarre avec 0 voie configurée tandis que Rapiscan (`127.0.0.1:10099`) et RTSP (`127.0.0.1:8554/tutorial-cam`) tournent localement pour pratiquer la configuration Admin, l’import CSV, les Passkeys et les Extensions.",
-            el: "Ξεκινά με 0 λωρίδες ενώ οι τοπικοί εξομοιωτές Rapiscan (`127.0.0.1:10099`) και RTSP (`127.0.0.1:8554/tutorial-cam`) λειτουργούν για εξάσκηση στο SensorHub Admin, CSV, Passkeys & Επεκτάσεις.",
+            en: "Starts with 0 configured lanes while loopback Rapiscan (`127.0.0.1:10099`), RS-350 (`127.0.0.1:10110`), and RTSP (`127.0.0.1:8554/tutorial-cam`) run locally so you can practice SensorHub Admin lane & mobile detector setup, CSV import, RBAC/Passkeys, and Runtime Extensions.",
+            es: "Inicia con 0 carriles mientras los emuladores Rapiscan (`127.0.0.1:10099`), RS-350 (`127.0.0.1:10110`) y RTSP (`127.0.0.1:8554/tutorial-cam`) corren localmente para practicar alta manual, detectores móviles, CSV, Passkeys y Extensiones.",
+            fr: "Démarre avec 0 voie configurée tandis que Rapiscan (`127.0.0.1:10099`), RS-350 (`127.0.0.1:10110`) et RTSP (`127.0.0.1:8554/tutorial-cam`) tournent localement pour pratiquer la configuration Admin, les détecteurs mobiles, l’import CSV, les Passkeys et les Extensions.",
+            el: "Ξεκινά με 0 λωρίδες ενώ οι τοπικοί εξομοιωτές Rapiscan (`127.0.0.1:10099`), RS-350 (`127.0.0.1:10110`) και RTSP (`127.0.0.1:8554/tutorial-cam`) λειτουργούν για εξάσκηση στο SensorHub Admin, στους κινητούς ανιχνευτές, CSV, Passkeys & Επεκτάσεις.",
         },
     },
 ];
@@ -564,6 +625,97 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         spotlightLabel: "Highlight Events Icon",
         objectiveSummary: "Sandbox Cargo NII index active with practice `.uff` packages (`cargoUffEnabled && cargoUffIndexedCount >= 1`).",
         isAutoVerified: (v) => v.cargoUffEnabled && v.cargoUffIndexedCount >= 1,
+    },
+    {
+        id: "op-custom-dashboards",
+        trackId: "operator",
+        badge: "1.6",
+        route: "/dashboards",
+        pageIconKey: "dashboard",
+        videoGuideSlug: "32-custom-widget-dashboards",
+        screenshotFile: "56-custom-dashboards-workspace.png",
+        screenshotCaption: "Custom Dashboards (/dashboards) workspace with starter template gallery, 12-column widget grid, per-page stream caps, and JSON export/import.",
+        title: "Build, Customize & Share Custom Widget Dashboards",
+        durationEstimate: "4 min",
+        whyItMatters:
+            "Operators can assemble personal or view-scoped wallboards in Custom Dashboards (`/dashboards`) without altering the built-in Gatehouse Dashboard {{icon:dashboard}}, while automatic guardrails (`<= 4` live video streams and `<= 6` live charts per page) protect browser stability across 50-lane portals.",
+        steps: [
+            "Open Custom Dashboards (`/dashboards` from the left navigation drawer) and pick a starter template such as `Multi-Lane Wallboard` or `Alarm & Map Overview`.",
+            "Click `Edit Layout`, open `Add Widget`, and add or configure a widget while observing the per-page `<= 4` live-video (`4/4`) and `<= 6` live-chart (`6/6`) guardrails.",
+            "Click `Done` to lock the layout (auto-saved per operator and Operational View) and open `Import / Export` to export a validated JSON layout (`<= 512 KiB`) for shift sharing.",
+        ],
+        translations: {
+            en: {
+                title: "Build, Customize & Share Custom Widget Dashboards",
+                screenshotCaption: "Custom Dashboards (/dashboards) workspace with starter template gallery, 12-column widget grid, per-page stream caps, and JSON export/import.",
+                whyItMatters:
+                    "Operators can assemble personal or view-scoped wallboards in Custom Dashboards (`/dashboards`) without altering the built-in Gatehouse Dashboard {{icon:dashboard}}, while automatic guardrails (`<= 4` live video streams and `<= 6` live charts per page) protect browser stability across 50-lane portals.",
+                steps: [
+                    "Open Custom Dashboards (`/dashboards` from the left navigation drawer) and pick a starter template such as `Multi-Lane Wallboard` or `Alarm & Map Overview`.",
+                    "Click `Edit Layout`, open `Add Widget`, and add or configure a widget while observing the per-page `<= 4` live-video (`4/4`) and `<= 6` live-chart (`6/6`) guardrails.",
+                    "Click `Done` to lock the layout (auto-saved per operator and Operational View) and open `Import / Export` to export a validated JSON layout (`<= 512 KiB`) for shift sharing.",
+                ],
+                objectiveSummary: "Save at least 1 custom dashboard page in `/dashboards` (`oscar.pageLayouts*` / persisted layout `>= 1` page).",
+            },
+            es: {
+                title: "Crear, personalizar y compartir paneles de widgets a medida",
+                screenshotCaption: "Espacio de trabajo de Paneles personalizados (/dashboards) con galería de plantillas, cuadrícula de 12 columnas, límites de flujos en vivo y exportación/importación JSON.",
+                whyItMatters:
+                    "Los operadores pueden armar murales por usuario y Vista operativa en Paneles personalizados (`/dashboards`) sin alterar el Panel principal {{icon:dashboard}}, mientras los límites automáticos (`<= 4` vídeos y `<= 6` gráficos en vivo por página) protegen el rendimiento en portales de 50 carriles.",
+                steps: [
+                    "Abra Paneles personalizados (`/dashboards` en el menú lateral izquierdo) y elija una plantilla rápida como `Multi-Lane Wallboard` o `Alarm & Map Overview`.",
+                    "Active `Editar diseño`, abra `Añadir widget` y agregue o configure un widget observando los límites de `<= 4` vídeos en vivo (`4/4`) y `<= 6` gráficos en vivo (`6/6`).",
+                    "Pulse `Listo` para guardar el diseño y abra `Importar / Exportar` para descargar el archivo JSON validado (`<= 512 KiB`).",
+                ],
+                objectiveSummary: "Guardar al menos 1 página de panel personalizado en `/dashboards`.",
+            },
+            fr: {
+                title: "Créer, personnaliser et partager des tableaux de bord à widgets sur mesure",
+                screenshotCaption: "Espace Tableaux de bord personnalisés (/dashboards) avec galerie de modèles, grille à 12 colonnes, plafonds de flux en direct et export/import JSON.",
+                whyItMatters:
+                    "Les opérateurs composent des murs d’écran dédiés par compte et Vue opérationnelle dans Tableaux de bord personnalisés (`/dashboards`) sans modifier le Tableau de bord principal {{icon:dashboard}}, avec des plafonds automatiques (`<= 4` vidéos et `<= 6` graphiques en direct par page) garantissant la stabilité sur 50 voies.",
+                steps: [
+                    "Ouvrez Tableaux de bord personnalisés (`/dashboards` dans le menu latéral gauche) et choisissez un modèle tel que `Multi-Lane Wallboard` ou `Alarm & Map Overview`.",
+                    "Cliquez sur `Modifier la disposition`, ouvrez `Ajouter un widget` et configurez un widget tout en vérifiant les plafonds `<= 4` vidéos (`4/4`) et `<= 6` graphiques (`6/6`).",
+                    "Verrouillez la mise en page enregistrée automatiquement et ouvrez `Importer / Exporter` pour exporter le fichier JSON validé (`<= 512 KiB`).",
+                ],
+                objectiveSummary: "Enregistrer au moins 1 page de tableau de bord personnalisé dans `/dashboards`.",
+            },
+            el: {
+                title: "Δημιουργία, προσαρμογή & κοινή χρήση προσαρμοσμένων πινάκων widgets",
+                screenshotCaption: "Χώρος εργασίας Προσαρμοσμένων πινάκων (/dashboards) με συλλογή προτύπων, πλέγμα 12 στηλών, όρια ζωντανών ροών και εξαγωγή/εισαγωγή JSON.",
+                whyItMatters:
+                    "Οι χειριστές συνθέτουν εξειδικευμένους πίνακες ανά λογαριασμό και Λειτουργική προβολή στους Προσαρμοσμένους πίνακες (`/dashboards`) χωρίς αλλοίωση του κύριου Πίνακα ελέγχου {{icon:dashboard}}, ενώ τα όρια (`<= 4` ζωντανά βίντεο και `<= 6` ζωντανά γραφήματα ανά σελίδα) διασφαλίζουν σταθερότητα σε εγκαταστάσεις 50 λωρίδων.",
+                steps: [
+                    "Ανοίξτε τους Προσαρμοσμένους πίνακες (`/dashboards` από το αριστερό μενού) και επιλέξτε πρότυπο όπως `Multi-Lane Wallboard` ή `Alarm & Map Overview`.",
+                    "Ενεργοποιήστε την επεξεργασία διάταξης, ανοίξτε την προσθήκη widget και ρυθμίστε ένα widget ελέγχοντας τα όρια `<= 4` ζωντανών βίντεο (`4/4`) και `<= 6` ζωντανών γραφημάτων (`6/6`).",
+                    "Αποθηκεύστε τη διάταξη και ανοίξτε `Import / Export` για εξαγωγή επικυρωμένου αρχείου JSON (`<= 512 KiB`).",
+                ],
+                objectiveSummary: "Αποθήκευση τουλάχιστον 1 σελίδας προσαρμοσμένου πίνακα στο `/dashboards`.",
+            },
+        },
+        spotlights: [
+            {
+                id: "custom-dashboards-nav",
+                selector: '[data-testid="nav-item-custom-dashboards"], [data-testid="custom-dashboards-page"]',
+                label: "Highlight Custom Dashboards",
+                iconKey: "dashboard",
+            },
+            {
+                id: "starter-templates",
+                selector: '[data-testid="starter-template-multi-lane-wallboard"], [data-testid="starter-template-alarm-map-overview"], [data-testid="dashboards-templates-button"]',
+                label: "Highlight Starter Templates",
+            },
+            {
+                id: "dashboard-host",
+                selector: '[data-testid="custom-dashboard-host"], [data-testid="dashboards-import-export-button"]',
+                label: "Highlight Widget Grid & Export",
+            },
+        ],
+        spotlightSelector: '[data-testid="starter-template-multi-lane-wallboard"], [data-testid="custom-dashboard-host"], [data-testid="custom-dashboards-page"]',
+        spotlightLabel: "Highlight Custom Dashboards Workspace",
+        objectiveSummary: "Save at least 1 custom dashboard page in `/dashboards` (`oscar.pageLayouts*` / persisted layout `>= 1` page).",
+        isAutoVerified: () => hasSavedCustomDashboardLayout(),
     },
 
     // ==================== TRACK 2: SUPERVISOR & ANALYST ====================
@@ -907,4 +1059,124 @@ export const TRAINING_LABS: readonly TrainingLabDefinition[] = [
         objectiveSummary: "Connect a lane to the loopback WebRelay-Quad (`127.0.0.1:10180`) and verify online coil telemetry (`webRelayOnlineCount >= 1`).",
         isAutoVerified: (v) => (v.webRelayOnlineCount ?? 0) >= 1,
     },
+    {
+        id: "adm-mobile-detectors",
+        trackId: "administrator",
+        badge: "3.6",
+        route: "/lane-view",
+        pageIconKey: "split-admin",
+        splitPaneAdmin: true,
+        videoGuideSlug: "33-mobile-radiation-detectors",
+        screenshotFile: "57-mobile-detector-map-and-lane-view.png",
+        screenshotCaption: "Mobile Detector System live GPS breadcrumb trail and Cs-137 hotspot marker on Map (/map) paired with 1,024-channel gamma spectrum in Lane View (/lane-view).",
+        title: "Configure & Monitor Mobile Radiation Detectors (`RS-350` & `Kromek D5`)",
+        durationEstimate: "5 min",
+        whyItMatters:
+            "Roving backpack and handheld patrols (`RS-350 Backpack` and `Kromek D5`) operate as dedicated `Mobile Detector System` lanes without portal cameras or Extended Occupancy faults, streaming live GPS trails onto Map {{icon:map}} and 1,024-channel spectra into `/lane-view`.",
+        steps: [
+            "Click 'Open Split-Pane SensorHub Admin' {{icon:split-admin}} above, right-click the Systems pane -> Add Module -> `Mobile Detector System` (Name `PatrolRS350`, UID `patrol-rs350`, Auto-Start checked), and choose `RS-350 Backpack` (`RS-350`) with Host `127.0.0.1` and Port `10110` (the built-in `:8444` loopback walker simulator).",
+            "Click Apply Changes and Start the module so `PatrolRS350` connects to `127.0.0.1:10110` and streams 1 Hz STX/ETX ANSI N42.42 frames.",
+            "Click `Return to Viewer Page`, open Map {{icon:map}} (`/map`) to watch the live GPS trail and periodic `Cs-137` hotspot alarms, then inspect the 1,024-channel gamma spectrum (`662 keV` photopeak) and dose rate in `/lane-view`.",
+        ],
+        translations: {
+            en: {
+                title: "Configure & Monitor Mobile Radiation Detectors (`RS-350` & `Kromek D5`)",
+                screenshotCaption: "Mobile Detector System live GPS breadcrumb trail and Cs-137 hotspot marker on Map (/map) paired with 1,024-channel gamma spectrum in Lane View (/lane-view).",
+                whyItMatters:
+                    "Roving backpack and handheld patrols (`RS-350 Backpack` and `Kromek D5`) operate as dedicated `Mobile Detector System` lanes without portal cameras or Extended Occupancy faults, streaming live GPS trails onto Map {{icon:map}} and 1,024-channel spectra into `/lane-view`.",
+                steps: [
+                    "Click 'Open Split-Pane SensorHub Admin' {{icon:split-admin}} above, right-click the Systems pane -> Add Module -> `Mobile Detector System` (Name `PatrolRS350`, UID `patrol-rs350`, Auto-Start checked), and choose `RS-350 Backpack` (`RS-350`) with Host `127.0.0.1` and Port `10110` (the built-in `:8444` loopback walker simulator).",
+                    "Click Apply Changes and Start the module so `PatrolRS350` connects to `127.0.0.1:10110` and streams 1 Hz STX/ETX ANSI N42.42 frames.",
+                    "Click `Return to Viewer Page`, open Map {{icon:map}} (`/map`) to watch the live GPS trail and periodic `Cs-137` hotspot alarms, then inspect the 1,024-channel gamma spectrum (`662 keV` photopeak) and dose rate in `/lane-view`.",
+                ],
+                objectiveSummary: "Create and start a `MobileDetectorSystem` connected to loopback `127.0.0.1:10110` (`mobileDetectorConfigured === true`).",
+            },
+            es: {
+                title: "Configurar y supervisar detectores móviles de radiación (`RS-350` y `Kromek D5`)",
+                screenshotCaption: "Traza GPS en vivo y marcador puntual de Cs-137 en Mapa (/map) junto al espectro gamma de 1.024 canales en Vista de carril (/lane-view).",
+                whyItMatters:
+                    "Las unidades móviles (`RS-350 Backpack` y `Kromek D5`) operan como módulos `Mobile Detector System` sin cámaras de pórtico ni fallos de ocupación prolongada, transmitiendo rutas GPS en vivo en Mapa {{icon:map}} y espectros de 1.024 canales en `/lane-view`.",
+                steps: [
+                    "Abra SensorHub Admin en vista dividida {{icon:split-admin}}, haga clic derecho en Systems -> Add Module -> `Mobile Detector System` (`PatrolRS350`, UID `patrol-rs350`, Auto-Start activado) y elija `RS-350 Backpack` con Host `127.0.0.1` y Puerto `10110`.",
+                    "Pulse Apply Changes e inicie (Start) el módulo para recibir tramas ANSI N42.42 a 1 Hz desde el simulador local de `:8444`.",
+                    "Vuelva al visor, abra Mapa {{icon:map}} (`/map`) para seguir el recorrido GPS y las alarmas de `Cs-137`, e inspeccione el espectro de 1.024 canales en `/lane-view`.",
+                ],
+                objectiveSummary: "Crear e iniciar un `MobileDetectorSystem` conectado a `127.0.0.1:10110` (`mobileDetectorConfigured === true`).",
+            },
+            fr: {
+                title: "Configurer et superviser les détecteurs mobiles de rayonnement (`RS-350` et `Kromek D5`)",
+                screenshotCaption: "Trace GPS en direct et marqueur de point chaud Cs-137 sur Carte (/map) associés au spectre gamma à 1 024 canaux dans Vue de voie (/lane-view).",
+                whyItMatters:
+                    "Les patrouilles mobiles (`RS-350 Backpack` et `Kromek D5`) fonctionnent via `Mobile Detector System` sans caméras de portique ni défauts d’occupation prolongée, en diffusant leurs traces GPS sur Carte {{icon:map}} et leurs spectres à 1 024 canaux dans `/lane-view`.",
+                steps: [
+                    "Ouvrez SensorHub Admin en vue partagée {{icon:split-admin}}, faites un clic droit dans Systems -> Add Module -> `Mobile Detector System` (`PatrolRS350`, UID `patrol-rs350`, Auto-Start coché) et sélectionnez `RS-350 Backpack` avec Hôte `127.0.0.1` et Port `10110`.",
+                    "Cliquez sur Apply Changes puis démarrez (Start) le module afin de recevoir les trames ANSI N42.42 à 1 Hz du simulateur intégré à `:8444`.",
+                    "Revenez dans OSCAR Viewer, ouvrez Carte {{icon:map}} (`/map`) pour observer la trace GPS et les alarmes `Cs-137`, puis inspectez le spectre à 1 024 canaux dans `/lane-view`.",
+                ],
+                objectiveSummary: "Créer et démarrer un `MobileDetectorSystem` relié à `127.0.0.1:10110` (`mobileDetectorConfigured === true`).",
+            },
+            el: {
+                title: "Διαμόρφωση & παρακολούθηση κινητών ανιχνευτών ακτινοβολίας (`RS-350` & `Kromek D5`)",
+                screenshotCaption: "Ζωντανό ίχνος GPS και δείκτης συναγερμού Cs-137 στον Χάρτη (/map) σε συνδυασμό με φάσμα γάμμα 1.024 καναλιών στην Προβολή λωρίδας (/lane-view).",
+                whyItMatters:
+                    "Οι κινητές περίπολοι (`RS-350 Backpack` και `Kromek D5`) λειτουργούν ως εξειδικευμένα συστήματα `Mobile Detector System` χωρίς κάμερες πύλης ή σφάλματα παρατεταμένης διέλευσης, μεταδίδοντας ζωντανά ίχνη GPS στον Χάρτη {{icon:map}} και φάσματα 1.024 καναλιών στην `/lane-view`.",
+                steps: [
+                    "Ανοίξτε το SensorHub Admin σε διπλή προβολή {{icon:split-admin}}, κάντε δεξί κλικ στο Systems -> Add Module -> `Mobile Detector System` (`PatrolRS350`, UID `patrol-rs350`, Auto-Start ενεργό) και επιλέξτε `RS-350 Backpack` με Host `127.0.0.1` και Θύρα `10110`.",
+                    "Πατήστε Apply Changes και εκκινήστε (Start) τη μονάδα ώστε να λαμβάνει πλαίσια ANSI N42.42 1 Hz από τον ενσωματωμένο εξομοιωτή της θύρας `:8444`.",
+                    "Επιστρέψτε στο OSCAR Viewer, ανοίξτε τον Χάρτη {{icon:map}} (`/map`) για παρακολούθηση του ίχνους GPS και των συναγερμών `Cs-137` και επιθεωρήστε το φάσμα 1.024 καναλιών στην `/lane-view`.",
+                ],
+                objectiveSummary: "Δημιουργία και εκκίνηση `MobileDetectorSystem` συνδεδεμένου στο `127.0.0.1:10110` (`mobileDetectorConfigured === true`).",
+            },
+        },
+        copySnippets: [
+            { label: "Copy RS-350 Host", value: "127.0.0.1" },
+            { label: "Copy RS-350 Port", value: "10110" },
+        ],
+        spotlights: [
+            {
+                id: "split-admin",
+                selector: '[data-testid="training-toggle-split-admin"], [data-testid="training-refresher-admin-link"]',
+                label: "Highlight Split-Pane Admin Button",
+                iconKey: "split-admin",
+            },
+            {
+                id: "map",
+                selector: '[data-testid="nav-item-map"]',
+                label: "Highlight Map Icon",
+                iconKey: "map",
+            },
+            {
+                id: "health",
+                selector: '[data-testid="nav-item-health"]',
+                label: "Highlight Status of Health Icon",
+                iconKey: "health",
+            },
+        ],
+        spotlightSelector: '[data-testid="training-toggle-split-admin"], [data-testid="training-refresher-admin-link"]',
+        spotlightLabel: "Highlight Split-Pane Admin Button",
+        objectiveSummary: "Create and start a `MobileDetectorSystem` connected to loopback `127.0.0.1:10110` (`mobileDetectorConfigured === true`).",
+        isAutoVerified: (snap) => Boolean(snap.mobileDetectorConfigured),
+    },
 ];
+
+export function getLocalizedTrainingLab(
+    lab: TrainingLabDefinition,
+    locale: Locale,
+): TrainingLabDefinition {
+    const localized = lab.translations?.[locale];
+    if (!localized) {
+        return lab;
+    }
+    return {
+        ...lab,
+        title: localized.title,
+        screenshotCaption: localized.screenshotCaption,
+        whyItMatters: localized.whyItMatters,
+        steps: localized.steps,
+        objectiveSummary: localized.objectiveSummary,
+    };
+}
+
+export function getTrainingLabsForLocale(locale: Locale): TrainingLabDefinition[] {
+    return TRAINING_LABS.map((lab) => getLocalizedTrainingLab(lab, locale));
+}

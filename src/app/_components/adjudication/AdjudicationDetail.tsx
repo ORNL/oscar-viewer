@@ -79,6 +79,7 @@ import WebIdAnalysisResult from "@/lib/data/oscar/adjudication/WebId";
 import {useSelector} from "react-redux";
 import {RootState} from "@/lib/state/Store";
 import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
+import {selectNodes} from "@/lib/state/OSHSlice";
 import {randomUUID} from "osh-js/source/core/utils/Utils";
 import { useBreakpoint } from "@/app/providers";
 import N42Detail from "@/app/_components/n42/N42Detail";
@@ -170,10 +171,19 @@ export default function AdjudicationDetail(props: {
     const {laneMapRef, activeViewKey, currentSession} = useContext(DataSourceContext);
     const isReadOnlyViewer = Boolean(currentSession?.isReadOnly);
     const laneMap = useSelector((state: RootState) => selectLaneMap(state));
+    const configuredNodes = useSelector(selectNodes);
     const laneUid = laneMap.get(props.event?.laneId)?.laneSystem?.properties?.properties?.uid;
     const effectiveLaneMap = laneMapRef?.current && laneMapRef.current.size > 0
         ? laneMapRef.current
         : laneMap;
+    const federatedNodesForSearch = useMemo(() => {
+        if (configuredNodes.length === 0 || !effectiveLaneMap || effectiveLaneMap.size === 0) return undefined;
+        const configuredIds = new Set(configuredNodes.map(node => node?.id).filter(Boolean));
+        const laneMapMatchesStore = Array.from(effectiveLaneMap.values()).some(
+            lane => Boolean(lane?.parentNode?.id && configuredIds.has(lane.parentNode.id)),
+        );
+        return laneMapMatchesStore ? configuredNodes : undefined;
+    }, [configuredNodes, effectiveLaneMap]);
 
     const adjudication = props.event ? new AdjudicationData(new Date().toISOString(), props.event.occupancyCount, props.event.occupancyObsId) : null;
     const [adjData, setAdjData] = useState<AdjudicationData>(adjudication);
@@ -345,6 +355,7 @@ export default function AdjudicationDetail(props: {
         const controller = new AbortController();
         void searchVehiclePassesAcrossNodes({
             laneMap: effectiveLaneMap,
+            nodes: federatedNodesForSearch,
             vehicleId: effectiveCorrelationVehicleId,
             matchMode: "equals",
             activeViewKey,
@@ -367,6 +378,7 @@ export default function AdjudicationDetail(props: {
         activeViewKey,
         effectiveCorrelationVehicleId,
         effectiveLaneMap,
+        federatedNodesForSearch,
         props.ocrFetchImpl,
         relatedVehicleStartTimeIso,
     ]);
@@ -2191,6 +2203,7 @@ export default function AdjudicationDetail(props: {
                     vehicleId={effectiveCorrelationVehicleId}
                     matchMode="equals"
                     laneMap={effectiveLaneMap}
+                    nodes={federatedNodesForSearch}
                     activeViewKey={activeViewKey}
                     startTimeIso={relatedVehicleStartTimeIso}
                     initialResult={relatedVehicleResult}

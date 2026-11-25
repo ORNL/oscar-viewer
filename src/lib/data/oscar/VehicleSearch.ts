@@ -800,7 +800,7 @@ async function querySingleNodeVehiclePasses(
             mode: "cors",
             cache: "no-store",
             headers: {
-                ...dir.node.getBasicAuthHeader(),
+                ...(typeof dir.node.getBasicAuthHeader === "function" ? dir.node.getBasicAuthHeader() : {}),
                 Accept: "application/json",
             },
             signal: timeoutController.signal,
@@ -914,12 +914,26 @@ export async function searchVehiclePassesAcrossNodes(
     const primaryNodeId = directories.find(d => d.node.isDefaultNode)?.node.id ?? directories[0]?.node.id ?? "";
 
     const outcomes = await Promise.allSettled(
-        directories.map(dir => {
-            const scopedLaneUids = options.activeViewKey
-                ? (dir.laneSystemUids.size > 0
+        directories.map(async dir => {
+            let scopedLaneUids: string[] = [];
+            if (options.activeViewKey) {
+                scopedLaneUids = dir.laneSystemUids.size > 0
                     ? Array.from(dir.laneSystemUids)
-                    : Array.from(dir.byLaneUid.keys()))
-                : [];
+                    : Array.from(dir.byLaneUid.keys());
+                if (scopedLaneUids.length === 0) {
+                    const fetchCat = (dir.node as {fetchOperationalViewCatalog?: (force?: boolean) => Promise<{options?: Array<{key?: string; laneUids?: string[]}>}>}).fetchOperationalViewCatalog;
+                    if (typeof fetchCat === "function") {
+                        const cat = await fetchCat.call(dir.node, false).catch(() => null);
+                        const matchOpt = cat?.options?.find(opt => opt?.key === options.activeViewKey);
+                        scopedLaneUids = Array.isArray(matchOpt?.laneUids)
+                            ? matchOpt!.laneUids.filter(Boolean)
+                            : [];
+                    }
+                    if (scopedLaneUids.length === 0) {
+                        return {passes: [] as VehiclePassItem[], truncated: false, effectiveLimit: limitPerNode};
+                    }
+                }
+            }
             return querySingleNodeVehiclePasses(dir, {
                 rawVehicleId,
                 normalizedVehicleId,

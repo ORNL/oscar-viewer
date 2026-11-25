@@ -33,6 +33,8 @@ export interface SandboxLoopbackEndpoints {
     webRelayHost?: string;
     webRelayPort1?: number;
     webRelayPort2?: number;
+    rs350Host?: string;
+    rs350Port?: number;
     localUffSamplePath: string;
 }
 
@@ -66,6 +68,9 @@ export interface SandboxVerificationSnapshot {
     cargoUffIndexedCount: number;
     webRelayConfiguredCount?: number;
     webRelayOnlineCount?: number;
+    mobileDetectorCount?: number;
+    onlineMobileDetectorCount?: number;
+    mobileDetectorConfigured?: boolean;
 }
 
 export interface SandboxActiveStatus {
