@@ -794,7 +794,7 @@ async function querySingleNodeVehiclePasses(
     options.signal?.addEventListener("abort", onParentAbort, {once: true});
 
     try {
-        const resp = await options.fetchImpl(url, {
+        const executeGet = () => options.fetchImpl(url, {
             method: "GET",
             credentials: "include",
             mode: "cors",
@@ -805,6 +805,20 @@ async function querySingleNodeVehiclePasses(
             },
             signal: timeoutController.signal,
         });
+
+        let resp = await executeGet();
+        if (resp.status >= 500 && resp.status < 600 && !timeoutController.signal.aborted) {
+            await new Promise<void>(resolve => {
+                const retryTimer = setTimeout(resolve, 500);
+                timeoutController.signal.addEventListener("abort", () => {
+                    clearTimeout(retryTimer);
+                    resolve();
+                }, {once: true});
+            });
+            if (!timeoutController.signal.aborted) {
+                resp = await executeGet();
+            }
+        }
 
         if (resp.status === 404 || resp.status === 405) {
             return await fallbackLegacyConSysVehicleSearch(
