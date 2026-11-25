@@ -13,7 +13,6 @@ import LaneStatus from "../_components/dashboard/LaneStatus";
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {useSelector} from "react-redux";
-import {EventType} from "osh-js/source/core/event/EventType";
 import {RootState} from "@/lib/state/Store";
 import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
 import {
@@ -21,7 +20,6 @@ import {
     selectDashboardUnreadAlarmCount,
     selectDashboardUnreadCountCapped,
     selectDashboardUnreadOnly,
-    setAlarmTrigger,
     toggleDashboardUnreadOnly,
 } from "@/lib/state/EventDataSlice";
 import {
@@ -31,17 +29,17 @@ import {
 import {useAppDispatch} from "@/lib/state/Hooks";
 import EventTable from "@/app/_components/event-table/EventTable";
 import {
-    acquireSharedConnection,
     findRealtimeDataSourceForStream,
     LaneDSColl,
     LaneMapEntry,
-    type SharedConnectionLease,
 } from "@/lib/data/oscar/LaneCollection";
-import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
 import {
     isGammaDataStream,
+    isMobileDetectorLane,
     isNeutronDataStream,
+    isOccupancyDataStream,
 } from "@/lib/data/oscar/Utilities";
+import {useGlobalAlarmStreamMonitor} from "@/app/hooks/useGlobalAlarmStreamMonitor";
 import {
     type DashboardWidgetId,
     type DashboardWidgetVisibility,
@@ -124,6 +122,7 @@ export default function DashboardPage() {
             nextLaneCollections.set(laneid, {lane, collection: laneDSColl});
 
             if (!cached || cached.lane !== lane) {
+                const mobileLane = isMobileDetectorLane(lane);
                 lane.datastreams.forEach((ds) => {
                     const rtDS = findRealtimeDataSourceForStream(lane, ds);
 
@@ -140,6 +139,9 @@ export default function DashboardPage() {
 
                     if(isNeutronDataStream(ds))
                         laneDSColl.addDS('neutronRT', rtDS);
+
+                    if (mobileLane && isOccupancyDataStream(ds))
+                        laneDSColl.addDS('occRT', rtDS);
                 });
             }
         }
@@ -152,46 +154,9 @@ export default function DashboardPage() {
         datasourceSetup();
     }, [datasourceSetup]);
 
-    // Keep realtime alarm audio notifications active at the Dashboard level even
-    // when the operator hides the Lane Status widget.
-    useEffect(() => {
-        let active = true;
-        const subscriptions: Array<{
-            source: any;
-            handler: (message: any) => void;
-            lease: SharedConnectionLease;
-        }> = [];
-        const uniqueSources = new Set<any>();
-
-        dataSourcesByLane.forEach((collection) => {
-            [...collection.gammaRT, ...collection.neutronRT].forEach((source) => {
-                if (!source || uniqueSources.has(source))
-                    return;
-                uniqueSources.add(source);
-                const handler = (message: any) => {
-                    if (active && message?.values?.[0]?.data?.alarmState === "Alarm")
-                        dispatch(setAlarmTrigger(true));
-                };
-                source.subscribe(handler, [EventType.DATA]);
-                const lease = acquireSharedConnection(source);
-                subscriptions.push({source, handler, lease});
-                void lease.ready.catch((error) => {
-                    if (active)
-                        console.warn("Unable to connect dashboard alarm notification stream", error);
-                });
-            });
-        });
-
-        return () => {
-            active = false;
-            subscriptions.forEach(({source, handler, lease}) => {
-                removeRealtimeEventSubscription(source, handler);
-                void lease.release().catch((error) => {
-                    console.warn("Unable to disconnect dashboard alarm notification stream", error);
-                });
-            });
-        };
-    }, [dataSourcesByLane, dispatch]);
+    // Ensure audible radiation alarms trigger even when DashboardPage is mounted standalone in tests;
+    // deduplicated automatically when GlobalAlarmStreamMonitor is already active in Navbar.
+    useGlobalAlarmStreamMonitor();
 
     const QuickView = useMemo(() => dynamic(
         () => import('@/app/_components/dashboard/QuickView'),

@@ -9,8 +9,8 @@ import ConnectedSystemsApi from "osh-js/source/core/consysapi/ConnectedSystemsAp
 import {
     ADJ_DEF,
     ALARM_DEF, ASPECT_DAILY_FILE_DEF, CONFIG_DEF,
-    CONNECTION_DEF, D5_RAD_STATUS_DEF, DAILY_FILE_DEF, DOSE_DEF, DURATION_DEF, END_DEF, GAMMA_COUNT_DEF, HLS_VIDEO_DEF,
-    LINEARSPEC_DEF, LOCATION_VECTOR_DEF, NATIONAL_DEF,
+    CONNECTION_DEF, D5_RAD_STATUS_DEF, D5_RADIOMETRICS_REPORT_DEF, D5_SPECTRUM_BINS_DEF, DAILY_FILE_DEF, DOSE_DEF, DURATION_DEF, END_DEF, GAMMA_COUNT_DEF, HLS_VIDEO_DEF,
+    LINEARSPEC_DEF, LOCATION_VECTOR_DEF, MOBILE_DETECTOR_SYSTEM_DEF, NATIONAL_DEF,
     NEUTRON_COUNT_DEF,
     OCCUPANCY_PILLAR_DEF, OCCUPANCY_STATUS_DEF, OCR_DEF, OGC_CONNECTION_DEF, RAPISCAN_DAILY_FILE_DEF, RASTER_IMAGE_DEF, N42_DEF, REPORT_DEF, SENSOR_LOCATION_DEF,
     SITE_DIAGRAM_DEF, SPEED_DEF, START_DEF,
@@ -74,7 +74,135 @@ export function isMobileGpsDataStream(datastream: typeof DataStream): boolean {
 
 /** Kromek D5 1 Hz radiometric status report (live alarm-active booleans). */
 export function isD5RadiometricStatusDataStream(datastream: typeof DataStream): boolean {
-    return includesDefinition(getObservedDefinitions(datastream), D5_RAD_STATUS_DEF);
+    const outputName = String(datastream?.properties?.outputName ?? "").toLowerCase();
+    return outputName === "kromekserialradiometricstatusreport"
+        || includesDefinition(getObservedDefinitions(datastream), D5_RAD_STATUS_DEF);
+}
+
+/** Kromek D5 1 Hz 4,096-channel spectrum report (KromekDetectorRadiometricsV1Report). */
+export function isD5SpectrumDataStream(datastream: typeof DataStream): boolean {
+    const definitions = getObservedDefinitions(datastream);
+    const outputName = String(datastream?.properties?.outputName ?? "").toLowerCase();
+    return outputName === "kromekdetectorradiometricsv1report"
+        || includesDefinition(definitions, D5_RADIOMETRICS_REPORT_DEF)
+        || includesDefinition(definitions, D5_SPECTRUM_BINS_DEF);
+}
+
+function getSystemDefinition(system: any): string {
+    const candidate =
+        system?.properties?.properties?.featureType
+        ?? system?.properties?.featureType
+        ?? system?.properties?.properties?.definition
+        ?? system?.properties?.definition
+        ?? system?.definition;
+    return typeof candidate === "string" ? candidate.trim() : "";
+}
+
+function getSystemUidValue(system: any): string {
+    const uid = system?.properties?.properties?.uid ?? system?.properties?.uid ?? system?.uid;
+    return typeof uid === "string" ? uid.trim() : "";
+}
+
+function getSystemNameValue(system: any): string {
+    const name = system?.properties?.properties?.name ?? system?.properties?.name ?? system?.name;
+    return typeof name === "string" ? name.trim() : "";
+}
+
+function getSystemKeywords(system: any): string[] {
+    const raw = system?.properties?.keywords ?? system?.properties?.properties?.keywords ?? system?.keywords;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((item: unknown): item is string => typeof item === "string").map((item) => item.trim());
+}
+
+export interface LaneSystemInspectionTarget {
+    laneSystem?: any;
+    systems?: any[];
+    datastreams?: any[];
+    isRS350Backpack?: boolean;
+}
+
+/**
+ * Identifies whether a lane entry represents a mobile detector (RS-350 backpack, Kromek D5 walker)
+ * rather than a fixed portal lane:
+ * 1. Explicit MobileDetectorSystem definition ("http://sensorml.com/ont/swe/system/MobileDetectorLane")
+ *    or mobile keyword always identifies a mobile detector lane.
+ * 2. Otherwise, a lane with a "location" GPS datastream is treated as mobile ONLY when it has zero
+ *    camera subsystems/video streams, zero portal WebRelay/threshold keywords, and zero portal
+ *    gross-count/tamper streams — ensuring fixed RS-350 or D5 portals are never misclassified as walkers.
+ */
+export function isMobileDetectorLane(lane: LaneSystemInspectionTarget | null | undefined): boolean {
+    if (!lane) return false;
+    const allSystems = [lane.laneSystem, ...(lane.systems ?? [])].filter(Boolean);
+    const allStreams = lane.datastreams ?? [];
+
+    for (const sys of allSystems) {
+        if (getSystemDefinition(sys) === MOBILE_DETECTOR_SYSTEM_DEF) {
+            return true;
+        }
+        const keywords = getSystemKeywords(sys);
+        if (keywords.some((kw) => kw.toLowerCase() === "oscar:mobile-detector:true")) {
+            return true;
+        }
+    }
+
+    const hasMobileGps = allStreams.some((ds) => isMobileGpsDataStream(ds));
+    if (!hasMobileGps) {
+        return false;
+    }
+
+    const hasCameraSubsystem = allSystems.some((sys) => {
+        const uid = getSystemUidValue(sys).toLowerCase();
+        const name = getSystemNameValue(sys).toLowerCase();
+        return uid.includes(":ffmpeg:") || name.includes("camera");
+    });
+    if (hasCameraSubsystem) {
+        return false;
+    }
+
+    const hasPortalKeywords = allSystems.some((sys) =>
+        getSystemKeywords(sys).some((kw) => {
+            const lower = kw.toLowerCase();
+            return lower.startsWith("oscar:extended-occupancy-threshold-min:")
+                || lower === "oscar:webrelay-enabled:true";
+        }),
+    );
+    if (hasPortalKeywords) {
+        return false;
+    }
+
+    const hasPortalStreams = allStreams.some(
+        (ds) =>
+            isVideoDataStream(ds)
+            || isGammaDataStream(ds)
+            || isNeutronDataStream(ds)
+            || isTamperDataStream(ds),
+    );
+    return !hasPortalStreams;
+}
+
+/** True when a lane is backed by a Kromek D5 spectroscopic detector. */
+export function isKromekD5Lane(lane: LaneSystemInspectionTarget | null | undefined): boolean {
+    if (!lane) return false;
+    const allSystems = [lane.laneSystem, ...(lane.systems ?? [])].filter(Boolean);
+    if (allSystems.some((sys) => getSystemUidValue(sys).toLowerCase().includes("kromek:d5"))) {
+        return true;
+    }
+    return (lane.datastreams ?? []).some(
+        (ds) => isD5RadiometricStatusDataStream(ds) || isD5SpectrumDataStream(ds),
+    );
+}
+
+/** True when a lane is backed by a spectroscopic detector (RS-350 or Kromek D5) without Rapiscan/Aspect gross-count streams. */
+export function isSpectroscopicDetectorLane(lane: LaneSystemInspectionTarget | null | undefined): boolean {
+    if (!lane) return false;
+    if (lane.isRS350Backpack || isKromekD5Lane(lane)) {
+        return true;
+    }
+    const allSystems = [lane.laneSystem, ...(lane.systems ?? [])].filter(Boolean);
+    if (allSystems.some((sys) => getSystemUidValue(sys).toLowerCase().includes("rsi:rs350"))) {
+        return true;
+    }
+    return (lane.datastreams ?? []).some((ds) => isForegroundDataStream(ds) || isBackgroundDataStream(ds));
 }
 
 export function isVideoDataStream(datastream: typeof DataStream): boolean {

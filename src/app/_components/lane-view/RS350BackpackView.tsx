@@ -9,24 +9,27 @@ import {
     LaneMapEntry,
 } from "@/lib/data/oscar/LaneCollection";
 import VideoMedia from "@/app/_components/lane-view/VideoMedia";
-import ObservationFilter from "osh-js/source/core/consysapi/observation/ObservationFilter";
+import {getUniqueVideoControlStreams} from "@/app/_components/lane-view/VideoStreamUtils";
+import {MobileDetectorSummaryCard} from "@/app/_components/lane-view/MobileDetectorView";
 import N42Chart from "@/app/_components/n42/N42Chart";
-import StatusTable from "@/app/_components/lane-view/StatusTable";
-import {isBackgroundDataStream, isForegroundDataStream, isGammaDataStream, isRs350DataStream} from "@/lib/data/oscar/Utilities";
+import {
+    isBackgroundDataStream,
+    isForegroundDataStream,
+    isMobileDetectorLane,
+} from "@/lib/data/oscar/Utilities";
 import ConSysApi from "osh-js/source/core/datasource/consysapi/ConSysApi.datasource";
 import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import EventTable from "@/app/_components/event-table/EventTable";
-import BackButton from "@/app/_components/BackButton";
-import LaneStatus from "@/app/_components/dashboard/LaneStatus";
 import {useLanguage} from '@/app/contexts/LanguageContext';
 
 interface RS350BackpackViewProps {
     entry: LaneMapEntry;
     currentLane: string;
-    laneMap: any
+    laneMap: any;
+    instanceId?: string;
 }
 
-export default function RS350BackpackView({ entry, currentLane, laneMap }: RS350BackpackViewProps) {
+export default function RS350BackpackView({ entry, currentLane, laneMap, instanceId }: RS350BackpackViewProps) {
     const {t} = useLanguage();
     const laneMapRef = useContext(DataSourceContext).laneMapRef;
     const [foregroundDatasources, setForegroundDatasources] = useState<typeof ConSysApi>();
@@ -106,6 +109,9 @@ export default function RS350BackpackView({ entry, currentLane, laneMap }: RS350
     }, [collectDataSources, laneMapRef]);
 
 
+    const chartSuffix = instanceId ? `-${instanceId}` : "";
+    const showVideo = !isMobileDetectorLane(entry) && getUniqueVideoControlStreams(entry).length > 0;
+
     return (
         <>
             <Grid container spacing={2} sx={{ width: "100%", mt: 1 }}>
@@ -121,7 +127,7 @@ export default function RS350BackpackView({ entry, currentLane, laneMap }: RS350
                                             title={t('foregroundLinearSpectrum')}
                                             yCurve={t('counts')}
                                             yValue={"linearSpectrum"}
-                                            chartId={"chart-linear-fg-ls"}
+                                            chartId={`chart-linear-fg-ls${chartSuffix}`}
                                         />
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
@@ -131,7 +137,7 @@ export default function RS350BackpackView({ entry, currentLane, laneMap }: RS350
                                             title={t('foregroundCompressedSpectrum')}
                                             yCurve={t('counts')}
                                             yValue={"compressedSpectrum"}
-                                            chartId={"chart-linear-fg-cs"}
+                                            chartId={`chart-linear-fg-cs${chartSuffix}`}
                                         />
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
@@ -141,7 +147,7 @@ export default function RS350BackpackView({ entry, currentLane, laneMap }: RS350
                                             title={t('backgroundLinearSpectrum')}
                                             yCurve={t('counts')}
                                             yValue={"linearSpectrum"}
-                                            chartId={"chart-linear-bkg-ls"}
+                                            chartId={`chart-linear-bkg-ls${chartSuffix}`}
                                         />
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
@@ -151,13 +157,17 @@ export default function RS350BackpackView({ entry, currentLane, laneMap }: RS350
                                             title={t('backgroundCompressedSpectrum')}
                                             yCurve={t('counts')}
                                             yValue={"compressedSpectrum"}
-                                            chartId={"chart-linear-bkg-cs"}
+                                            chartId={`chart-linear-bkg-cs${chartSuffix}`}
                                         />
                                     </Grid>
                                 </Grid>
                             </Grid>
                             <Grid item xs={12} md={6}>
-                                <VideoMedia currentLane={currentLane} />
+                                {showVideo ? (
+                                    <VideoMedia currentLane={currentLane} />
+                                ) : (
+                                    <MobileDetectorSummaryCard entry={entry} currentLane={currentLane} />
+                                )}
                             </Grid>
                         </Grid>
                     </Paper>

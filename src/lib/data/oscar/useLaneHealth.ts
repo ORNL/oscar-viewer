@@ -9,12 +9,17 @@ import {RootState} from "@/lib/state/Store";
 import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
 import type {LaneMapEntry} from "@/lib/data/oscar/LaneCollection";
 import {
+    isBackgroundDataStream,
     isConnectionDataStream,
     isD5RadiometricStatusDataStream,
+    isD5SpectrumDataStream,
+    isForegroundDataStream,
     isGammaDataStream,
+    isMobileDetectorLane,
     isMobileGpsDataStream,
     isNeutronDataStream,
     isOccupancyStatusDataStream,
+    isSpectroscopicDetectorLane,
     isTamperDataStream,
     isVideoDataStream,
 } from "@/lib/data/oscar/Utilities";
@@ -40,6 +45,8 @@ export interface FaultHealth {
     tamper: TelemetryState;
 }
 
+export type FaultKey = keyof FaultHealth;
+
 export interface LaneHealth {
     laneName: string;
     nodeName: string;
@@ -57,6 +64,17 @@ export interface LaneHealth {
     deviceSilent?: boolean;
     /** Newest observation time (node clock, ms) across the lane's device heartbeat streams. */
     lastDeviceDataAt?: number | null;
+    /**
+     * Mobile detector lane (RS-350 backpack or Kromek D5 walker). Portal hardware fault streams
+     * and extended occupancy thresholds are not monitored on mobile detectors.
+     */
+    mobile?: boolean;
+    /**
+     * Subset of portal fault keys published by this lane when backed by a fixed spectroscopic
+     * detector (e.g. fixed RS-350 or Kromek D5 without Rapiscan/Aspect gross-count fault streams).
+     * Undefined on standard portal lanes, where all four fault keys are monitored.
+     */
+    monitoredFaults?: FaultKey[];
 }
 
 export interface LaneHealthRow extends LaneHealth {
@@ -128,7 +146,6 @@ export const HEALTH_QUERY_BATCH_SIZE = 10;
 export const HEALTH_QUERY_CONCURRENCY = 2;
 export const HEALTH_QUERY_TIMEOUT_MS = 10_000;
 
-type FaultKey = keyof FaultHealth;
 const FAULT_KEYS: FaultKey[] = ["gammaHigh", "gammaLow", "neutronHigh", "tamper"];
 const GAMMA_STATES = new Set(["Alarm", "Background", "Scan", "Fault - Gamma High", "Fault - Gamma Low"]);
 const NEUTRON_STATES = new Set(["Alarm", "Background", "Scan", "Fault - Neutron High", "Fault - Neutron Low"]);
@@ -281,7 +298,15 @@ function streamKind(stream: any): StreamKind | null {
     if (isTamperDataStream(stream)) return "tamper";
     if (isGammaDataStream(stream)) return "gamma";
     if (isNeutronDataStream(stream)) return "neutron";
-    if (isMobileGpsDataStream(stream) || isD5RadiometricStatusDataStream(stream)) return "heartbeat";
+    if (
+        isMobileGpsDataStream(stream)
+        || isD5RadiometricStatusDataStream(stream)
+        || isD5SpectrumDataStream(stream)
+        || isForegroundDataStream(stream)
+        || isBackgroundDataStream(stream)
+    ) {
+        return "heartbeat";
+    }
     return null;
 }
 
@@ -345,15 +370,50 @@ function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
     const cameraSystemIds = new Set(cameraSystems.keys());
     const rpmStream = lane.datastreams.find((stream: any) =>
         !cameraSystemIds.has(streamSystemId(stream)) &&
-        (isConnectionDataStream(stream) || isGammaDataStream(stream) ||
-            isNeutronDataStream(stream) || isTamperDataStream(stream))
+        (
+            isConnectionDataStream(stream)
+            || isGammaDataStream(stream)
+            || isNeutronDataStream(stream)
+            || isTamperDataStream(stream)
+            || isForegroundDataStream(stream)
+            || isBackgroundDataStream(stream)
+            || isD5RadiometricStatusDataStream(stream)
+            || isD5SpectrumDataStream(stream)
+            || isMobileGpsDataStream(stream)
+        )
     );
     const rpmSystem = lane.systems.find((system: any) => systemId(system) === streamSystemId(rpmStream));
     const configuredThreshold = extractLaneThresholdMinutes(lane);
     const webRelayConfigured = extractLaneWebRelayConfigured(lane);
+    const mobile = isMobileDetectorLane(lane);
+    const spectroscopicFixed = !mobile && isSpectroscopicDetectorLane(lane);
+
+    let monitoredFaults: FaultKey[] | undefined;
+    let initialFaults = faultDefaults();
+    if (spectroscopicFixed) {
+        const supported: FaultKey[] = [];
+        if (lane.datastreams.some((stream: any) => isGammaDataStream(stream))) {
+            supported.push("gammaHigh", "gammaLow");
+        }
+        if (lane.datastreams.some((stream: any) => isNeutronDataStream(stream))) {
+            supported.push("neutronHigh");
+        }
+        if (lane.datastreams.some((stream: any) => isTamperDataStream(stream))) {
+            supported.push("tamper");
+        }
+        monitoredFaults = supported;
+        initialFaults = {
+            gammaHigh: supported.includes("gammaHigh") ? "unknown" : "clear",
+            gammaLow: supported.includes("gammaLow") ? "unknown" : "clear",
+            neutronHigh: supported.includes("neutronHigh") ? "unknown" : "clear",
+            tamper: supported.includes("tamper") ? "unknown" : "clear",
+        };
+    }
 
     return {
         laneName,
+        ...(mobile ? {mobile: true} : {}),
+        ...(monitoredFaults !== undefined ? {monitoredFaults} : {}),
         nodeName: lane.parentNode?.name ?? "",
         rpm: {
             id: systemId(rpmSystem) || streamSystemId(rpmStream) || `${laneName}-rpm`,
@@ -363,7 +423,7 @@ function buildLaneHealth(laneName: string, lane: LaneMapEntry): LaneHealth {
         cameras: Array.from(cameraSystems.values())
             .sort((a, b) => a.label.localeCompare(b.label, undefined, {numeric: true})),
         ...(webRelayConfigured ? {webRelayConfigured: true} : {}),
-        faults: faultDefaults(),
+        faults: initialFaults,
         occupancyState: "unknown",
         occupancyStartedAt: null,
         ...(configuredThreshold !== undefined ? {extendedOccupancyThresholdMinutes: configuredThreshold} : {}),
@@ -394,7 +454,9 @@ export function deriveLaneHealthRows(
         );
         const thresholdMilliseconds = laneThresholdMinutes * 60 * 1000;
         const occupancyDuration = lane.occupancyStartedAt == null ? 0 : Math.max(0, now - lane.occupancyStartedAt);
-        const extendedOccupancy: TelemetryState = lane.occupancyState === "unknown"
+        const extendedOccupancy: TelemetryState = lane.mobile
+            ? "clear"
+            : lane.occupancyState === "unknown"
             ? "unknown"
             : lane.occupancyState === "clear"
                 ? "clear"
@@ -403,13 +465,15 @@ export function deriveLaneHealthRows(
                     : lane.occupancyStartedAt == null
                         ? "unknown"
                         : occupancyDuration > thresholdMilliseconds ? "active" : "clear";
-        const hasFault = Object.values(lane.faults).includes("active") || extendedOccupancy === "active";
+        const activeFaultKeys = lane.mobile ? [] : (lane.monitoredFaults ?? FAULT_KEYS);
+        const portalFaults = activeFaultKeys.map((key) => lane.faults[key]);
+        const hasFault = portalFaults.includes("active") || extendedOccupancy === "active";
         const hasOfflineComponent = lane.rpm.state === "offline"
             || lane.cameras.some((camera) => camera.state === "offline")
             || (lane.webRelays ?? []).some((relay) => relay.state === "offline");
         const hasUnknownTelemetry = lane.rpm.state === "unknown"
             || lane.cameras.some((camera) => camera.state === "unknown")
-            || Object.values(lane.faults).includes("unknown")
+            || portalFaults.includes("unknown")
             || extendedOccupancy === "unknown";
         return {
             ...lane,
@@ -438,7 +502,7 @@ export function nextExtendedOccupancyDeadline(
     now: number,
 ): number | null {
     return lanes.reduce<number | null>((earliest, lane) => {
-        if (lane.occupancyState !== "occupied" || lane.occupancyStartedAt == null)
+        if (lane.mobile || lane.occupancyState !== "occupied" || lane.occupancyStartedAt == null)
             return earliest;
         const laneThresholdMinutes = clampThresholdMinutes(
             lane.extendedOccupancyThresholdMinutes ?? thresholdMinutes,

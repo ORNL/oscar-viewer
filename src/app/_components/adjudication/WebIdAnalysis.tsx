@@ -236,11 +236,12 @@ export default function WebIdAnalysis(props: {
         // routine occupancies that have zero WebID analyses.
         if (targetOccupancyObsId) {
             const exactCql = `occupancyObsId='${String(targetOccupancyObsId).replace(/'/g, "''")}'`;
+            const encodedExactCql = encodeURIComponent(exactCql);
             try {
                 if (windowStartIso && windowEndIso) {
                     const primary = await readQueryPages(new ObservationFilter({
                         resultTime: `${windowStartIso}/${windowEndIso}`,
-                        filter: exactCql,
+                        filter: encodedExactCql,
                     }), MAX_SCAN_PAGES);
                     accumulated = primary.items;
                     capped = primary.capped;
@@ -248,14 +249,14 @@ export default function WebIdAnalysis(props: {
                     if (accumulated.length === 0 && Date.now() > windowEndMs) {
                         const late = await readQueryPages(new ObservationFilter({
                             resultTime: `${windowEndIso}/${new Date(Date.now() + 5 * 60_000).toISOString()}`,
-                            filter: exactCql,
+                            filter: encodedExactCql,
                         }), MAX_SCAN_PAGES);
                         accumulated = late.items;
                         capped = late.capped;
                     }
                 } else {
                     const exact = await readQueryPages(new ObservationFilter({
-                        filter: exactCql,
+                        filter: encodedExactCql,
                     }), MAX_SCAN_PAGES);
                     accumulated = exact.items;
                     capped = exact.capped;

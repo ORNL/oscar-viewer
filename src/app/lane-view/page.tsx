@@ -23,6 +23,8 @@ import React, {useCallback, useContext, useEffect, useState} from "react";
 import {
     isDailyFileDataStream,
     isGammaDataStream,
+    isKromekD5Lane,
+    isMobileDetectorLane,
     isNeutronDataStream,
     isTamperDataStream,
     isThresholdDataStream
@@ -34,6 +36,7 @@ import ConSysApi from "osh-js/source/core/datasource/consysapi/ConSysApi.datasou
 import StatusTable from "../_components/lane-view/StatusTable";
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import RS350BackpackView from "../_components/lane-view/RS350BackpackView";
+import KromekD5LaneView from "../_components/lane-view/MobileDetectorView";
 import DailyFileMessage from "@/app/_components/lane-view/DailyFileMessage";
 
 
@@ -164,6 +167,9 @@ export default function LaneViewPage() {
         void collectDataSources();
     }, [collectDataSources]);
 
+    const isMobileLane = Boolean(entry && isMobileDetectorLane(entry));
+    const isD5Lane = Boolean(entry && isKromekD5Lane(entry));
+
     return (
         <Grid container spacing={2} width={"100%"}>
 
@@ -177,7 +183,7 @@ export default function LaneViewPage() {
                         {t('laneIdValue', {lane: currentLane})}
                     </Typography>
                 </Grid>
-                {laneWebRelay?.enabled && (
+                {!isMobileLane && laneWebRelay?.enabled && (
                     <Grid item>
                         <Chip
                             size="small"
@@ -190,7 +196,7 @@ export default function LaneViewPage() {
                         />
                     </Grid>
                 )}
-                {isAdmin && currentLane && (
+                {!isMobileLane && isAdmin && currentLane && (
                     <Grid item>
                         <Button
                             type="button"
@@ -212,6 +218,15 @@ export default function LaneViewPage() {
                 </Grid>
             ) : entry?.isRS350Backpack ? (
                 <RS350BackpackView entry={entry} currentLane={currentLane} laneMap={laneMap}/>
+            ) : isD5Lane && entry ? (
+                <>
+                    {dataSourcesByLane && dataSourcesByLane.dailyFileRT.length > 0 && (
+                        <Grid item xs={12}>
+                            <DailyFileMessage dataSourcesByLane={dataSourcesByLane}/>
+                        </Grid>
+                    )}
+                    <KromekD5LaneView entry={entry} currentLane={currentLane} laneMap={laneMap}/>
+                </>
             ) : (
                 <>
                     <Grid item xs={12}>

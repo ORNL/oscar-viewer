@@ -102,7 +102,12 @@ export function toLeafletSiteDiagramBounds(siteBoundingBox: SiteBoundingBox): Si
 }
 
 export function toLaneMapLocation(result: unknown): LaneMapLocation | null {
-    const location = (result as {location?: {lat?: unknown; lon?: unknown; alt?: unknown}})?.location;
+    // Fixed lanes publish {location}; RS-350 and Kromek D5 GPS outputs publish {sensorLocation}.
+    const record = result as {
+        location?: {lat?: unknown; lon?: unknown; alt?: unknown};
+        sensorLocation?: {lat?: unknown; lon?: unknown; alt?: unknown};
+    } | null | undefined;
+    const location = record?.location ?? record?.sensorLocation;
     const lat = location?.lat;
     const lon = location?.lon;
     const alt = location?.alt ?? 0;
@@ -228,4 +233,98 @@ export function buildLaneExtentSignature(
         .sort((a, b) => a.laneName.localeCompare(b.laneName))
         .map(({laneName, location}) => `${laneName}:${location.lat.toFixed(6)},${location.lon.toFixed(6)}`)
         .join("|");
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Mobile detectors (RS-350 backpack, Kromek D5 walker)
+ * ---------------------------------------------------------------------------------------- */
+
+/** Duration a walker marker remains red after a live alarm occupancy. */
+export const MOBILE_ALARM_FLASH_MS = 30_000;
+/** Walkers silent for longer than this threshold are drawn offline. */
+export const MOBILE_SILENCE_THRESHOLD_MS = 15_000;
+/** Portal lanes whose ~1 Hz gamma/neutron counts stop arriving for this duration are drawn offline. */
+export const LANE_SILENCE_THRESHOLD_MS = 15_000;
+/** Re-evaluation cadence for walker silence and alarm flashes. */
+export const MOBILE_SWEEP_MS = 5_000;
+/** Refresh cadence for the unadjudicated mobile alarm layer. */
+export const MOBILE_ALARM_REFRESH_MS = 30_000;
+/** Bounded page size for batched mobile alarm observation queries (<= 500). */
+export const MOBILE_ALARM_QUERY_LIMIT = 200;
+/** Server-side CQL for alarms awaiting operator adjudication. */
+export const UNADJUDICATED_ALARM_FILTER = "(gammaAlarm=true OR neutronAlarm=true) AND adjudicatedIdsCount=0";
+
+export type WalkerState = "normal" | "alarm" | "offline";
+
+const WALKER_COLORS: Record<WalkerState, string> = {
+    normal: "#1565c0",
+    alarm: "#d32f2f",
+    offline: "#9e9e9e",
+};
+export const MOBILE_ALARM_COLOR = WALKER_COLORS.alarm;
+
+/**
+ * Alarm outranks offline: an unacknowledged radiation alarm is never visually downgraded
+ * if walker telemetry goes quiet. Silence is measured from browser arrival time of the
+ * latest heartbeat/fix so node-to-browser clock skew cannot falsify it.
+ */
+export function walkerState(
+    lastFixArrivalMs: number | null | undefined,
+    alarmUntilMs: number | null | undefined,
+    reportedOffline: boolean,
+    now: number,
+): WalkerState {
+    if (alarmUntilMs != null && alarmUntilMs > now) return "alarm";
+    if (reportedOffline) return "offline";
+    if (lastFixArrivalMs == null || now - lastFixArrivalMs > MOBILE_SILENCE_THRESHOLD_MS) return "offline";
+    return "normal";
+}
+
+export function escapeHtml(value: string): string {
+    return String(value).replace(/[&<>"']/g, (c) => (
+        {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]!
+    ));
+}
+
+/** Ringed walker glyph; title carries "no data since" when offline. */
+export function walkerIconHtml(state: WalkerState, title: string): string {
+    const color = WALKER_COLORS[state];
+    return `<div data-walker-state="${escapeHtml(state)}" title="${escapeHtml(title)}" style="width:30px;height:30px;border-radius:50%;background:#ffffff;border:3px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;${state === "offline" ? "opacity:.8;" : ""}">`
+        + `<svg viewBox="0 0 24 24" width="20" height="20" fill="${color}"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/></svg>`
+        + `</div>`;
+}
+
+/** XSS-safe popup markup for a mobile alarm marker; navigation binds via data-nav-href listener. */
+export function buildMobileAlarmPopupHtml(params: {
+    laneName: string;
+    kind: string;
+    when: string;
+    href: string;
+    viewEventLabel: string;
+}): string {
+    const safeLane = escapeHtml(params.laneName);
+    const safeKind = escapeHtml(params.kind);
+    const safeWhen = escapeHtml(params.when);
+    const safeHref = escapeHtml(params.href);
+    const safeButton = escapeHtml(params.viewEventLabel);
+    return `<div class='point-popup'><strong>${safeLane}</strong> — ${safeKind}`
+        + `<br/><span style="font-size:0.85em">${safeWhen}</span><hr/>`
+        + `<button data-nav-href="${safeHref}" class="popup-button" type="button">${safeButton}</button></div>`;
+}
+
+/** Position stamped on a mobile alarm occupancy by the RS-350/D5 occupancy process, if valid. */
+export function mobileAlarmPosition(result: any): LaneMapLocation | null {
+    const lat = result?.latitude;
+    const lon = result?.longitude;
+    if (typeof lat !== "number" || typeof lon !== "number") return null;
+    if (lat === 0 && lon === 0) return null;
+    if (!isValidGeographicCoordinate(lat, lon)) return null;
+    return {lat, lon, alt: 0};
+}
+
+/** Local midnight today, used as the default start of the mobile alarm layer window. */
+export function startOfLocalDayIso(now: Date = new Date()): string {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    return day.toISOString();
 }
