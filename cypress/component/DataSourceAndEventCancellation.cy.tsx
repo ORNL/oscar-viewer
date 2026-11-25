@@ -8,6 +8,7 @@ import {statusTableEventFromObservation} from "../../src/app/_components/lane-vi
 import {
     EventQueryPlan,
     fetchCollectionDataWithSignal,
+    fetchObservationPlanCount,
     isAbortRequestError,
     useAbortableEventQueries,
 } from "../../src/lib/data/oscar/EventTableRequests";
@@ -1324,6 +1325,196 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         cy.wrap(null).should(() => {
             expect(countQueries).to.have.length(5);
             expect(countQueries[0]).to.equal("maxGamma>=25");
+        });
+    });
+
+    it("reuses settled and in-flight total counts across Priority <-> Newest first sort toggles and aborts superseded filter keys immediately", () => {
+        const countCalls: Array<{filter: string; signal?: AbortSignal | null}> = [];
+        const abortedFilters: string[] = [];
+        const resolvers = new Map<string, (count: number) => void>();
+
+        cy.window().then((win) => {
+            cy.stub(win, "fetch").callsFake((input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                if (url.includes("/observations/count?")) {
+                    const parsed = new URL(url);
+                    const q = decodeURIComponent(parsed.searchParams.get("filter") ?? "");
+                    countCalls.push({filter: q, signal: init?.signal});
+                    return new Promise<Response>((resolve, reject) => {
+                        init?.signal?.addEventListener("abort", () => {
+                            abortedFilters.push(q);
+                            reject(new DOMException("Aborted", "AbortError"));
+                        });
+                        resolvers.set(q, (count: number) => {
+                            resolve(new Response(
+                                JSON.stringify({count}),
+                                {status: 200, headers: {"Content-Type": "application/json"}},
+                            ));
+                        });
+                    });
+                }
+                return Promise.resolve(new Response(JSON.stringify({items: []}), {
+                    status: 200,
+                    headers: {"Content-Type": "application/json"},
+                }));
+            });
+        });
+
+        const fakeNode: any = {
+            id: "node-sort-coalesce",
+            name: "Local Node",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+        };
+
+        function SortToggleHarness() {
+            const [baseFilter, setBaseFilter] = useState("maxGamma>=50");
+            const [sortByTimeOnly, setSortByTimeOnly] = useState(false);
+
+            const queryPlans = useMemo<EventQueryPlan[]>(() => [{
+                key: `total-${baseFilter}`,
+                node: fakeNode,
+                datastreamIds: ["occ-sort-1"],
+                filter: baseFilter,
+            }], [baseFilter]);
+
+            const pageQueryPlans = useMemo<EventQueryPlan[]>(() => {
+                if (sortByTimeOnly) {
+                    return [{
+                        key: `time-${baseFilter}`,
+                        node: fakeNode,
+                        datastreamIds: ["occ-sort-1"],
+                        filter: baseFilter,
+                    }];
+                }
+                return [
+                    "gammaAlarm=true AND neutronAlarm=true",
+                    "gammaAlarm=true AND neutronAlarm=false",
+                    "gammaAlarm=false AND neutronAlarm=true",
+                    "gammaAlarm=false AND neutronAlarm=false",
+                ].map((bucket, idx) => ({
+                    key: `prio-${baseFilter}-${idx}`,
+                    node: fakeNode,
+                    datastreamIds: ["occ-sort-1"],
+                    filter: `(${baseFilter}) AND (${bucket})`,
+                }));
+            }, [baseFilter, sortByTimeOnly]);
+
+            const fetchPlanRows = useCallback(async () => [] as EventTableData[], []);
+            const {rowCount} = useAbortableEventQueries({
+                queryPlans,
+                pageQueryPlans,
+                page: 0,
+                pageSize: 15,
+                pageLoadedTime: "2026-11-25T12:00:00.000Z",
+                disjointPriorityPlans: !sortByTimeOnly,
+                prewarmBucketCounts: false,
+                prefetchNextPage: false,
+                fetchPlanRows,
+            });
+
+            return (
+                <div>
+                    <span data-testid="coalesced-count">{String(rowCount)}</span>
+                    <button data-testid="toggle-sort" onClick={() => setSortByTimeOnly(prev => !prev)}>Toggle Sort</button>
+                    <button data-testid="change-filter" onClick={() => setBaseFilter("maxGamma>=100")}>Change Filter</button>
+                </div>
+            );
+        }
+
+        cy.mount(<SortToggleHarness />);
+        cy.wrap(null).should(() => {
+            expect(countCalls.map(c => c.filter)).to.deep.equal(["maxGamma>=50"]);
+        });
+
+        // Toggle Priority -> Newest first WHILE maxGamma>=50 count is still in flight:
+        // must coalesce onto the in-flight promise (zero aborts, zero duplicate count requests).
+        cy.get('[data-testid="toggle-sort"]').click();
+        cy.wait(50);
+        cy.then(() => {
+            expect(abortedFilters).to.deep.equal([]);
+            expect(countCalls.map(c => c.filter)).to.deep.equal(["maxGamma>=50"]);
+            resolvers.get("maxGamma>=50")?.(12);
+        });
+        cy.get('[data-testid="coalesced-count"]').should("have.text", "12");
+
+        // Toggle Newest first -> Priority AFTER count settled: reuses settled count with zero extra count calls.
+        cy.get('[data-testid="toggle-sort"]').click();
+        cy.wait(50);
+        cy.then(() => {
+            expect(countCalls.map(c => c.filter)).to.deep.equal(["maxGamma>=50"]);
+        });
+
+        // Change filter to maxGamma>=100 -> immediately aborts any in-flight superseded count when replaced.
+        cy.get('[data-testid="change-filter"]').click();
+        cy.wrap(null).should(() => {
+            expect(countCalls.map(c => c.filter)).to.deep.equal(["maxGamma>=50", "maxGamma>=100"]);
+        });
+    });
+
+    it("coalesces simultaneous identical fetchObservationPlanCount calls onto a single upstream request", () => {
+        let fetchCount = 0;
+        let upstreamAborted = false;
+        let resolveUpstream: ((res: Response) => void) | null = null;
+
+        cy.window().then((win) => {
+            cy.stub(win, "fetch").callsFake((_input: RequestInfo | URL, init?: RequestInit) => {
+                fetchCount += 1;
+                init?.signal?.addEventListener("abort", () => {
+                    upstreamAborted = true;
+                });
+                return new Promise<Response>((resolve) => {
+                    resolveUpstream = resolve;
+                });
+            });
+        });
+
+        const fakeNode: any = {
+            id: "node-dedupe",
+            name: "Local Node",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+        };
+        const plan: EventQueryPlan = {
+            key: "unread-plan",
+            node: fakeNode,
+            datastreamIds: ["occ-dedupe-1"],
+            filter: "((gammaAlarm=true OR neutronAlarm=true) AND adjudicatedIdsCount=0) AND (endTime>'2026-11-15T02:12:32.834Z')",
+        };
+
+        cy.then(async () => {
+            const c1 = new AbortController();
+            const c2 = new AbortController();
+            const p1 = fetchObservationPlanCount(plan, "2026-11-25T14:13:04.612Z", true, {
+                signal: c1.signal,
+                lowPriority: true,
+                phenomenonTime: "2026-11-15T02:11:32.834Z/..",
+            });
+            const p2 = fetchObservationPlanCount(plan, "2026-11-25T14:13:04.612Z", true, {
+                signal: c2.signal,
+                lowPriority: true,
+                phenomenonTime: "2026-11-15T02:11:32.834Z/..",
+            });
+            expect(fetchCount).to.equal(1);
+
+            // Aborting caller 1 while caller 2 is still waiting must NOT abort the shared upstream fetch.
+            c1.abort();
+            let p1Aborted = false;
+            try {
+                await p1;
+            } catch (err) {
+                p1Aborted = isAbortRequestError(err);
+            }
+            expect(p1Aborted).to.equal(true);
+            expect(upstreamAborted).to.equal(false);
+
+            resolveUpstream?.(new Response(JSON.stringify({count: 7}), {
+                status: 200,
+                headers: {"Content-Type": "application/json"},
+            }));
+            const count2 = await p2;
+            expect(count2).to.equal(7);
+            expect(fetchCount).to.equal(1);
         });
     });
 });
