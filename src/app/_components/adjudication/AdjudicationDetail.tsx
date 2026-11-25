@@ -178,7 +178,7 @@ export default function AdjudicationDetail(props: {
         : laneMap;
     const federatedNodesForSearch = useMemo(() => {
         if (configuredNodes.length === 0 || !effectiveLaneMap || effectiveLaneMap.size === 0) return undefined;
-        const configuredIds = new Set(configuredNodes.map(node => node?.id).filter(Boolean));
+        const configuredIds = new Set(configuredNodes.map((node: INode) => node?.id).filter(Boolean));
         const laneMapMatchesStore = Array.from(effectiveLaneMap.values()).some(
             lane => Boolean(lane?.parentNode?.id && configuredIds.has(lane.parentNode.id)),
         );

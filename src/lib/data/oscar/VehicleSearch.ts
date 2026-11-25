@@ -937,8 +937,9 @@ export async function searchVehiclePassesAcrossNodes(
                 if (scopedLaneUids.length === 0) {
                     const fetchCat = (dir.node as {fetchOperationalViewCatalog?: (force?: boolean) => Promise<{options?: Array<{key?: string; laneUids?: string[]}>}>}).fetchOperationalViewCatalog;
                     if (typeof fetchCat === "function") {
-                        const cat = await fetchCat.call(dir.node, false).catch(() => null);
-                        const matchOpt = cat?.options?.find(opt => opt?.key === options.activeViewKey);
+                        const cat: {options?: Array<{key?: string; laneUids?: string[]}>} | null =
+                            await fetchCat.call(dir.node, false).catch((): null => null);
+                        const matchOpt = cat?.options?.find((opt: {key?: string; laneUids?: string[]}) => opt?.key === options.activeViewKey);
                         scopedLaneUids = Array.isArray(matchOpt?.laneUids)
                             ? matchOpt!.laneUids.filter(Boolean)
                             : [];

@@ -448,7 +448,7 @@ export default function EventTable({
 
     const federatedNodesForSearch = useMemo(() => {
         if (configuredNodes.length === 0 || stableLaneMap.size === 0) return undefined;
-        const configuredIds = new Set(configuredNodes.map(node => node?.id).filter(Boolean));
+        const configuredIds = new Set(configuredNodes.map((node: {id?: string}) => node?.id).filter(Boolean));
         const laneMapMatchesStore = Array.from(stableLaneMap.values()).some(
             lane => Boolean(lane?.parentNode?.id && configuredIds.has(lane.parentNode.id)),
         );
@@ -460,7 +460,7 @@ export default function EventTable({
             Array.from(
                 new Set([
                     ...Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name),
-                    ...(federatedNodesForSearch ?? []).map(node => node?.name).filter((name): name is string => Boolean(name)),
+                    ...(federatedNodesForSearch ?? []).map((node: {name?: string}) => node?.name).filter((name: string | undefined): name is string => Boolean(name)),
                 ]),
             ).sort(),
         [federatedNodesForSearch, stableLaneMap],
