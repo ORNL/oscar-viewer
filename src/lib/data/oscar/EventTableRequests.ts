@@ -837,7 +837,13 @@ export function useAbortableEventQueries({
                     return;
                 }
             }
-            const required = (targetPage + 1) * pageSize;
+            const seedNextPageFromInitial = targetPage === 0
+                && prefetchNextPage
+                && !filterModeActive
+                && pageQueryPlans.length > 1;
+            const required = seedNextPageFromInitial
+                ? pageSize * 2
+                : (targetPage + 1) * pageSize;
             const fetchLimit = required + boundedExtra;
             const results = await runWithConcurrency(
                 pageQueryPlans,
@@ -849,7 +855,29 @@ export function useAbortableEventQueries({
             const activeRowFilter = filterModeActive ? rowFilterRef.current : undefined;
             const filtered = activeRowFilter ? deduped.filter(activeRowFilter) : deduped;
             const merged = filtered.sort(sortComparatorRef.current);
-            const pageSlice = merged.slice(targetPage * pageSize, required);
+            const pageEnd = (targetPage + 1) * pageSize;
+            const pageSlice = merged.slice(targetPage * pageSize, pageEnd);
+            if (seedNextPageFromInitial && merged.length > pageSize) {
+                const prefetchedPageOne = merged.slice(pageSize, pageSize * 2);
+                const nextPrefetchKey = buildNextPagePrefetchKey({
+                    targetPage: 1,
+                    pageSize,
+                    effectiveCutoff,
+                    plans: pageQueryPlans,
+                    phenomenonTimeForCutoff,
+                    disjointPriorityPlans,
+                    filterModeActive,
+                    boundedExtra: 0,
+                    invalidationVersion: prefetchInvalidationRef.current,
+                });
+                nextPagePrefetchRef.current = {
+                    key: nextPrefetchKey,
+                    targetPage: 1,
+                    rows: prefetchedPageOne,
+                    promise: Promise.resolve(prefetchedPageOne),
+                    controller: new AbortController(),
+                };
+            }
             renderedPageRef.current = targetPage;
             currentPageRef.current = targetPage;
             rowsLengthRef.current = pageSlice.length;
