@@ -445,6 +445,7 @@ export function useAbortableEventQueries({
         controller: AbortController;
     } | null>(null);
     const nextPagePrefetchRef = useRef<NextPagePrefetchEntry | null>(null);
+    const pageZeroHeadsRef = useRef<{key: string; heads: EventTableData[][]} | null>(null);
     const maybeStartNextPagePrefetchRef = useRef<() => void>(() => {});
     const rowFilterRef = useRef(rowFilter);
     const sortComparatorRef = useRef(sortComparator);
@@ -484,6 +485,7 @@ export function useAbortableEventQueries({
 
     const invalidatePrefetch = useCallback(() => {
         prefetchInvalidationRef.current += 1;
+        pageZeroHeadsRef.current = null;
         clearNextPagePrefetch();
         if (prefetchNextPage) {
             setPrefetchEpoch(previous => previous + 1);
@@ -644,14 +646,59 @@ export function useAbortableEventQueries({
         }
     }, [clearNextPagePrefetch, queryPlans, fetchPlanCount, phenomenonTimeForCutoff, prewarmBucketCounts, prefetchNextPage]);
 
+    const resolvePageOneFromHeads = useCallback(
+        async (
+            heads: EventTableData[][],
+            effectiveCutoff: string,
+            signal: AbortSignal,
+        ): Promise<EventTableData[] | null> => {
+            let guaranteedBefore = 0;
+            let extraPlanIndex = -1;
+            for (let i = 0; i < heads.length; i++) {
+                const headLen = heads[i].length;
+                if (guaranteedBefore < pageSize && headLen >= pageSize) {
+                    extraPlanIndex = i;
+                    break;
+                }
+                guaranteedBefore += headLen;
+                if (guaranteedBefore >= pageSize * 2) {
+                    break;
+                }
+            }
+            let extraRows: EventTableData[] = [];
+            if (extraPlanIndex >= 0) {
+                extraRows = await fetchPlanRows(
+                    pageQueryPlans[extraPlanIndex],
+                    pageSize,
+                    pageSize,
+                    effectiveCutoff,
+                    signal,
+                );
+                if (signal.aborted) return null;
+            }
+            const combined: EventTableData[] = [];
+            for (let i = 0; i < heads.length; i++) {
+                combined.push(...heads[i]);
+                if (i === extraPlanIndex) {
+                    combined.push(...extraRows);
+                }
+            }
+            const merged = deduplicateEvents(combined).sort(sortComparatorRef.current);
+            return merged.slice(pageSize, pageSize * 2);
+        },
+        [fetchPlanRows, pageQueryPlans, pageSize],
+    );
+
     const fetchPage = useCallback(async (targetPage: number, cutoffOverride?: string, minExtraRows = 0) => {
         clearPendingPageDebounce();
         if (cutoffOverride !== undefined) {
             activeCutoffRef.current = cutoffOverride;
             prefetchInvalidationRef.current += 1;
+            pageZeroHeadsRef.current = null;
             clearNextPagePrefetch();
         } else if (minExtraRows > 0) {
             prefetchInvalidationRef.current += 1;
+            pageZeroHeadsRef.current = null;
             clearNextPagePrefetch();
         }
         const effectiveCutoff = cutoffOverride ?? activeCutoffRef.current;
@@ -836,14 +883,28 @@ export function useAbortableEventQueries({
                     setPageQueryError(false);
                     return;
                 }
+                if (
+                    targetPage === 1
+                    && boundedExtra === 0
+                    && pageZeroHeadsRef.current?.key === cacheKey
+                    && pageZeroHeadsRef.current.heads.length === pageQueryPlans.length
+                ) {
+                    const pageOneRows = await resolvePageOneFromHeads(
+                        pageZeroHeadsRef.current.heads,
+                        effectiveCutoff,
+                        controller.signal,
+                    );
+                    if (controller.signal.aborted || requestId !== pageRequestRef.current || pageOneRows === null) return;
+                    renderedPageRef.current = targetPage;
+                    currentPageRef.current = targetPage;
+                    rowsLengthRef.current = pageOneRows.length;
+                    pageQueryErrorRef.current = false;
+                    setRows(pageOneRows);
+                    setPageQueryError(false);
+                    return;
+                }
             }
-            const seedNextPageFromInitial = targetPage === 0
-                && prefetchNextPage
-                && !filterModeActive
-                && pageQueryPlans.length > 1;
-            const required = seedNextPageFromInitial
-                ? pageSize * 2
-                : (targetPage + 1) * pageSize;
+            const required = (targetPage + 1) * pageSize;
             const fetchLimit = required + boundedExtra;
             const results = await runWithConcurrency(
                 pageQueryPlans,
@@ -851,33 +912,23 @@ export function useAbortableEventQueries({
                 plan => fetchPlanRows(plan, fetchLimit, 0, effectiveCutoff, controller.signal),
             );
             if (controller.signal.aborted || requestId !== pageRequestRef.current) return;
+            if (
+                targetPage === 0
+                && disjointPriorityPlans
+                && !filterModeActive
+                && pageQueryPlans.length > 1
+                && boundedExtra === 0
+            ) {
+                pageZeroHeadsRef.current = {
+                    key: buildBucketCountsCacheKey(effectiveCutoff, pageQueryPlans, phenomenonTimeForCutoff),
+                    heads: results,
+                };
+            }
             const deduped = deduplicateEvents(results.flat());
             const activeRowFilter = filterModeActive ? rowFilterRef.current : undefined;
             const filtered = activeRowFilter ? deduped.filter(activeRowFilter) : deduped;
             const merged = filtered.sort(sortComparatorRef.current);
-            const pageEnd = (targetPage + 1) * pageSize;
-            const pageSlice = merged.slice(targetPage * pageSize, pageEnd);
-            if (seedNextPageFromInitial && merged.length > pageSize) {
-                const prefetchedPageOne = merged.slice(pageSize, pageSize * 2);
-                const nextPrefetchKey = buildNextPagePrefetchKey({
-                    targetPage: 1,
-                    pageSize,
-                    effectiveCutoff,
-                    plans: pageQueryPlans,
-                    phenomenonTimeForCutoff,
-                    disjointPriorityPlans,
-                    filterModeActive,
-                    boundedExtra: 0,
-                    invalidationVersion: prefetchInvalidationRef.current,
-                });
-                nextPagePrefetchRef.current = {
-                    key: nextPrefetchKey,
-                    targetPage: 1,
-                    rows: prefetchedPageOne,
-                    promise: Promise.resolve(prefetchedPageOne),
-                    controller: new AbortController(),
-                };
-            }
+            const pageSlice = merged.slice(targetPage * pageSize, required);
             renderedPageRef.current = targetPage;
             currentPageRef.current = targetPage;
             rowsLengthRef.current = pageSlice.length;
@@ -918,6 +969,7 @@ export function useAbortableEventQueries({
         pageSize,
         phenomenonTimeForCutoff,
         prefetchNextPage,
+        resolvePageOneFromHeads,
     ]);
 
     const maybeStartNextPagePrefetch = useCallback(() => {
@@ -938,7 +990,12 @@ export function useAbortableEventQueries({
         const nextPage = currentPage + 1;
         const singlePlanUnfiltered = pageQueryPlans.length === 1 && !filterModeActive;
         const hasKnownMoreRows = rowCountRef.current > nextPage * pageSize;
-        const hasPendingCountFullPage = !countSettledRef.current && singlePlanUnfiltered && rowsLengthRef.current >= pageSize;
+        const hasPendingCountFullPage = !countSettledRef.current
+            && rowsLengthRef.current >= pageSize
+            && (
+                singlePlanUnfiltered
+                || (disjointPriorityPlans && !filterModeActive && nextPage === 1 && pageZeroHeadsRef.current !== null)
+            );
         if (!hasKnownMoreRows && !hasPendingCountFullPage) {
             return;
         }
@@ -1026,6 +1083,18 @@ export function useAbortableEventQueries({
                     if (prefetchController.signal.aborted) return null;
                     return deduplicateEvents(sliceResults.flat()).slice(0, pageSize);
                 }
+                if (
+                    nextPage === 1
+                    && boundedExtra === 0
+                    && pageZeroHeadsRef.current?.key === bucketKey
+                    && pageZeroHeadsRef.current.heads.length === pageQueryPlans.length
+                ) {
+                    return resolvePageOneFromHeads(
+                        pageZeroHeadsRef.current.heads,
+                        effectiveCutoff,
+                        prefetchController.signal,
+                    );
+                }
                 if (nextPage > 2) {
                     return null;
                 }
@@ -1073,6 +1142,7 @@ export function useAbortableEventQueries({
         pageSize,
         phenomenonTimeForCutoff,
         prefetchNextPage,
+        resolvePageOneFromHeads,
     ]);
     maybeStartNextPagePrefetchRef.current = maybeStartNextPagePrefetch;
 
@@ -1112,6 +1182,7 @@ export function useAbortableEventQueries({
             } else {
                 bucketCountsCacheRef.current = null;
             }
+            pageZeroHeadsRef.current = null;
             countSettledRef.current = true;
             renderedPageRef.current = snap.page;
             previousPageRef.current = snap.page;
@@ -1128,6 +1199,7 @@ export function useAbortableEventQueries({
             return;
         }
         bucketCountsCacheRef.current = null;
+        pageZeroHeadsRef.current = null;
         renderedPageRef.current = null;
         const targetPage = pageRef.current;
         previousPageRef.current = targetPage;
