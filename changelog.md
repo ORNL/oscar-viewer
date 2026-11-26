@@ -1,6 +1,24 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.12.0
+
+### Added
+
+- Integrated **Mobile Radiation Detectors (`RS-350` Backpack & `Kromek D5` Walker)** (`ORNL/oscar-viewer#50`, co-authored with `@mjd948`): live roving markers, bounded `<= 24 h` GPS patrol breadcrumb trails and spectroscopic alarm popups on **Map (`/map`)**, mobile detector summary card, live GPS/gamma/neutron waveforms, `1,024`-channel spectra, and RS-350 operational status indicators in **Lane View (`/lane-view`)**.
+- Integrated opt-in **Custom Widget Dashboards (`/dashboards`)** (`ORNL/oscar-viewer#49`, co-authored with `@mjd948`) powered by `react-grid-layout` with starter templates (`Multi-Lane Wallboard`, `Alarm & Map Overview`), persistent global `<AlarmAudio />` across route transitions, per-page browser stability guardrails (`<= 4` live video widgets and `<= 6` live chart widgets), Operational View scoping, and validated JSON layout import/export (`<= 512 KiB`).
+- Added Training Sandbox labs and `VideoGuidesCatalog` entries (`en`, `es`, `fr`, `el`) for Video Guides `#32` (`32-custom-widget-dashboards`) and `#33` (`33-mobile-radiation-detectors`), and wired federated peer nodes into multi-pass Vehicle Search with `90 s` cold-archive timeout and bounded single retry on transient `HTTP 5xx`.
+
+### Changed
+
+- Hardened Dashboard and Event Log pagination (`EventTableRequests.ts`, `EventTable.tsx`): coalesced identical `/observations/count` queries and reused settled counts across sort toggles, preserved `limit = 15` on Page 0 while seeding Page 1 from non-exhausted Page-0 heads, deferred disjoint priority bucket-count prewarm until `page >= 2`, restored SQL-backed priority bucket prewarm for $O(1)$ backward pagination, and increased the rapid-click debounce window to `200 ms` (`0` extra count calls on Dashboard Next Page).
+- Updated `HelpDialog.tsx` Parquet Cold Tier glossary across `en`, `es`, `fr`, and `el` for OSCAR 3.12.0 Option A split-at-export (`RAW_TELEMETRY` + event-only `MONTHLY_EVENTS` compaction), and synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.12.0`), Video Guide `#31` asset names, and hardware-replacement checklist references with **OSCAR 3.12.0**.
+- Updated `AGENTS.md` to document bounded mobile patrol-track replay, custom-dashboard widget concurrency caps, and `StatusTable` summary counter lockstep.
+
+### Fixed
+
+- Preserved trailing slashes on internal routes for zero-reload static RSC navigation, stabilized `AdjudicationDetail` vehicle-search dependencies, preserved dirty WebRelay draft inputs during background refreshes, keyed mobile-detector alarm refresh on scalar stream signatures rather than raw `laneMap` object references, honored positionally coerced ISO 6346 check digits for single-frame OCR auto-fill, and resolved strict `tsc --noEmit` callback types (`ORNL/oscar-viewer#44`, `#46`).
+
 ## 3.11.15
 
 ### Changed
