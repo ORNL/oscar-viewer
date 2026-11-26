@@ -290,7 +290,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Parquet Cold Tier (`PARQUET_PRIMARY`)',
-                meaning: 'Default storage mode where completed 30-minute PostgreSQL staging partitions across all 22 operational and evidentiary outputs (including `vehicleOcr`) are exported to ZSTD-compressed Apache Parquet files for compact long-term retention.',
+                meaning: 'Default storage mode where completed 30-minute PostgreSQL staging partitions across all 26 operational and evidentiary outputs (including `vehicleOcr` and mobile detector streams) split directly at export into ZSTD-compressed Apache Parquet V2 profiles: write-once `RAW_TELEMETRY` (high-rate 1 Hz streams written once and never rewritten) and Bloom-indexed `RAW_EVENTS` (the 9 searchable event/summary streams, compacted into `DAILY_EVENTS` and `MONTHLY_EVENTS`).',
             },
             {
                 term: 'Container & License Plate OCR (`ocrConfig`)',
@@ -503,7 +503,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Nivel frío Parquet (`PARQUET_PRIMARY`)',
-                meaning: 'Modo predeterminado donde las particiones de 30 minutos de PostgreSQL de las 22 salidas operativas y probatorias (incluido `vehicleOcr`) se exportan a archivos Apache Parquet comprimidos con ZSTD.',
+                meaning: 'Modo predeterminado donde las particiones de 30 minutos de PostgreSQL de las 26 salidas operativas y probatorias (incluidos `vehicleOcr` y detectores móviles) se dividen directamente al exportar en perfiles Apache Parquet V2 con ZSTD: `RAW_TELEMETRY` de escritura única (flujos de 1 Hz escritos una sola vez) y `RAW_EVENTS` con filtros Bloom (las 9 salidas de eventos buscables, compactadas en `DAILY_EVENTS` y `MONTHLY_EVENTS`).',
             },
             {
                 term: 'OCR de contenedores y matrículas (`ocrConfig`)',
@@ -716,7 +716,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Niveau froid Parquet (`PARQUET_PRIMARY`)',
-                meaning: 'Mode par défaut où les partitions PostgreSQL de 30 minutes des 22 flux opérationnels et probants (dont `vehicleOcr`) sont exportées en fichiers Apache Parquet compressés ZSTD.',
+                meaning: 'Mode par défaut où les partitions PostgreSQL de 30 minutes des 26 flux opérationnels et probants (dont `vehicleOcr` et les détecteurs mobiles) sont scindées dès l’export en profils Apache Parquet V2 compressés ZSTD : `RAW_TELEMETRY` en écriture unique (flux 1 Hz jamais réécrits) et `RAW_EVENTS` avec filtres Bloom (les 9 flux d’événements consultables, compactés en `DAILY_EVENTS` puis `MONTHLY_EVENTS`).',
             },
             {
                 term: 'OCR conteneurs et plaques (`ocrConfig`)',
@@ -929,7 +929,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Ψυχρό επίπεδο Parquet (`PARQUET_PRIMARY`)',
-                meaning: 'Προεπιλεγμένη λειτουργία όπου τα τμήματα 30 λεπτών της PostgreSQL για όλες τις 22 λειτουργικές και αποδεικτικές ροές (συμπεριλαμβανομένου του `vehicleOcr`) εξάγονται σε αρχεία Apache Parquet συμπιεσμένα με ZSTD.',
+                meaning: 'Προεπιλεγμένη λειτουργία όπου τα τμήματα 30 λεπτών της PostgreSQL για όλες τις 26 λειτουργικές και αποδεικτικές ροές (συμπεριλαμβανομένων του `vehicleOcr` και των κινητών ανιχνευτών) διαχωρίζονται απευθείας κατά την εξαγωγή σε προφίλ Apache Parquet V2 με ZSTD: `RAW_TELEMETRY` μίας εγγραφής (ροές 1 Hz που δεν ξαναγράφονται ποτέ) και `RAW_EVENTS` με φίλτρα Bloom (οι 9 αναζητήσιμες ροές συμβάντων που συμπυκνώνονται σε `DAILY_EVENTS` και `MONTHLY_EVENTS`).',
             },
             {
                 term: 'OCR εμπορευματοκιβωτίων & πινακίδων (`ocrConfig`)',
