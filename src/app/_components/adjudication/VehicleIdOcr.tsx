@@ -167,21 +167,21 @@ export default function VehicleIdOcr({
 
         let active = true;
         let foundAny = false;
+        let currentResults: IVehicleOcrResult[] = [];
         const timers = new Set<number>();
 
         const applyRawCandidates = (incoming: readonly IVehicleOcrResult[], mergeExisting: boolean) => {
             if (!active) return;
-            setResults(previous => {
-                const combined = mergeExisting ? [...previous, ...incoming] : [...incoming];
-                const deduped = dedupeOcrResults(combined);
-                if (deduped.length > 0) {
-                    foundAny = true;
-                    timers.forEach(timerId => window.clearTimeout(timerId));
-                    timers.clear();
-                }
-                onResultsRef.current?.(deduped);
-                return deduped;
-            });
+            const combined = mergeExisting ? [...currentResults, ...incoming] : [...incoming];
+            const deduped = dedupeOcrResults(combined);
+            currentResults = deduped;
+            if (deduped.length > 0) {
+                foundAny = true;
+                timers.forEach(timerId => window.clearTimeout(timerId));
+                timers.clear();
+            }
+            setResults(deduped);
+            onResultsRef.current?.(deduped);
         };
 
         const runQuery = async () => {
