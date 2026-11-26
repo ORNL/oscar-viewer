@@ -1656,7 +1656,7 @@ export default function EventTable({
             : 0;
         const safeTotalCount = countQueryError
             ? Math.max(rowCount, lowerBoundCount)
-            : (rowCount > 0 ? rowCount : (!loading ? lowerBoundCount : 0));
+            : rowCount;
 
         if (!effectiveUnreadOnly) return safeTotalCount;
         if (!postWatermarkReadKeysSummary.hasPostWatermarkKeys) return safeTotalCount;
