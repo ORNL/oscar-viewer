@@ -162,6 +162,23 @@ export default function MapComponent({
     const refreshMobileAlarmsRef = useRef<() => void>(() => {});
     const pendingAlarmRefreshTimerRef = useRef<number | null>(null);
     const mobileLaneSetRef = useRef<Set<string>>(new Set());
+    const laneMapRef = useRef(laneMap);
+    laneMapRef.current = laneMap;
+
+    const mobileAlarmStreamsKey = useMemo(() => {
+        const parts: string[] = [];
+        laneMap.forEach((lane) => {
+            if (!isMobileDetectorLane(lane)) return;
+            const occIds = lane.datastreams
+                .filter((ds) => isOccupancyDataStream(ds))
+                .map((ds) => String(ds?.properties?.id ?? ""))
+                .filter(Boolean)
+                .sort()
+                .join(",");
+            parts.push(`${lane.parentNode?.id ?? ""}\u001f${lane.laneName}\u001f${occIds}`);
+        });
+        return parts.sort().join("\u001e");
+    }, [laneMap]);
 
     locationListRef.current = locationList;
 
@@ -537,8 +554,7 @@ export default function MapComponent({
             markers.clear();
             return;
         }
-        const mobileLanes = Array.from(laneMap.values()).filter((lane) => isMobileDetectorLane(lane));
-        if (mobileLanes.length === 0) {
+        if (!mobileAlarmStreamsKey) {
             refreshMobileAlarmsRef.current = () => {};
             markers.forEach((marker) => marker.remove());
             markers.clear();
@@ -551,6 +567,8 @@ export default function MapComponent({
 
         const refresh = async () => {
             if (inFlight || cancelled) return;
+            const mobileLanes = Array.from(laneMapRef.current.values()).filter((lane) => isMobileDetectorLane(lane));
+            if (mobileLanes.length === 0) return;
             inFlight = true;
             const controller = new AbortController();
             activeAbortController = controller;
@@ -680,7 +698,7 @@ export default function MapComponent({
             markers.forEach((marker) => marker.remove());
             markers.clear();
         };
-    }, [alarmTimeWindow, isInit, laneMap, scopedHref, showAlarmMarkers, showMobileUnits, t]);
+    }, [alarmTimeWindow, isInit, mobileAlarmStreamsKey, scopedHref, showAlarmMarkers, showMobileUnits, t]);
 
     useEffect(() => {
         if (!leafletViewRef.current && !isInit) {
