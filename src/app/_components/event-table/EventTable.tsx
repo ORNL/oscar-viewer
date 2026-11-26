@@ -907,7 +907,7 @@ export default function EventTable({
         extraFetchRows: effectiveUnreadOnly ? postWatermarkReadKeysSummary.totalEstimatedCount : 0,
         filterModeActive: effectiveUnreadOnly,
         disjointPriorityPlans: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
-        prewarmBucketCounts: !hasRS350Lane && paginationModel.page >= 2 && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
+        prewarmBucketCounts: !hasRS350Lane && effectiveQueryPlans.length === 1 && effectivePageQueryPlans.length > 1,
         prefetchNextPage: true,
         cachedSnapshot: isEventLog ? restoredSnapshot : null,
         fetchPlanRows,
