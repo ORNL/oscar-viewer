@@ -74,7 +74,12 @@ export default function LaneWebRelayDialog({
 
     const [lanes, setLanes] = useState<LaneWebRelayStatusEntry[]>([]);
     const [selectedLaneUid, setSelectedLaneUid] = useState<string>('');
-    const [draft, setDraft] = useState<FormDraft>(() => buildDraftFromLane(undefined));
+    const [draft, setDraftState] = useState<FormDraft>(() => buildDraftFromLane(undefined));
+    const dirtyDraftRef = useRef(false);
+    const setDraft = useCallback((updater: React.SetStateAction<FormDraft>) => {
+        dirtyDraftRef.current = true;
+        setDraftState(updater);
+    }, []);
     const [showPassword, setShowPassword] = useState(false);
     const [busy, setBusy] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
@@ -91,7 +96,9 @@ export default function LaneWebRelayDialog({
             setLanes(nextLanes);
             if (nextLanes.length === 0) {
                 setSelectedLaneUid('');
-                setDraft(buildDraftFromLane(undefined));
+                if (!dirtyDraftRef.current) {
+                    setDraftState(buildDraftFromLane(undefined));
+                }
                 return;
             }
             const needle = (preferredUidOrName ?? '').trim().toLowerCase();
@@ -104,7 +111,9 @@ export default function LaneWebRelayDialog({
                 : undefined;
             const chosen = matched ?? nextLanes[0];
             setSelectedLaneUid(chosen.laneUid);
-            setDraft(buildDraftFromLane(chosen));
+            if (!dirtyDraftRef.current) {
+                setDraftState(buildDraftFromLane(chosen));
+            }
         },
         []
     );
@@ -148,6 +157,7 @@ export default function LaneWebRelayDialog({
         const dialog = dialogRef.current;
         if (!dialog) return;
         if (open) {
+            dirtyDraftRef.current = false;
             setStatusMessage('');
             setErrorMessage('');
             setHostValidationError(false);
@@ -163,9 +173,10 @@ export default function LaneWebRelayDialog({
 
     const handleLaneSelectChange = (evt: React.ChangeEvent<HTMLSelectElement>) => {
         const nextUid = evt.target.value;
+        dirtyDraftRef.current = false;
         setSelectedLaneUid(nextUid);
         const found = lanes.find((item) => item.laneUid === nextUid);
-        setDraft(buildDraftFromLane(found));
+        setDraftState(buildDraftFromLane(found));
         setStatusMessage('');
         setErrorMessage('');
         setHostValidationError(false);
@@ -268,8 +279,9 @@ export default function LaneWebRelayDialog({
                 soundOnNeutronAlarm: draft.soundOnNeutronAlarm,
                 pollIntervalSeconds: Number(draft.pollIntervalSeconds) || 10,
             });
+            dirtyDraftRef.current = false;
             setLanes(res.lanes);
-            setDraft(buildDraftFromLane(res.lane));
+            setDraftState(buildDraftFromLane(res.lane));
             onUpdated?.(res.lanes);
             setStatusMessage(t('webrelaySavedSuccess', { lane: res.lane.laneName }));
         } catch (err: any) {

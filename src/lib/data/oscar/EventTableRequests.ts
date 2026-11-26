@@ -770,7 +770,7 @@ export function useAbortableEventQueries({
                 let bucketCounts = bucketCountsCacheRef.current?.key === cacheKey
                     ? bucketCountsCacheRef.current.counts
                     : null;
-                if (!bucketCounts && bucketCountsInFlightRef.current?.key === cacheKey) {
+                if (!bucketCounts && targetPage > 2 && bucketCountsInFlightRef.current?.key === cacheKey) {
                     try {
                         const awaitedCounts = await bucketCountsInFlightRef.current.promise;
                         if (controller.signal.aborted || requestId !== pageRequestRef.current) return;
@@ -784,7 +784,7 @@ export function useAbortableEventQueries({
                         }
                     }
                 }
-                if (!bucketCounts) {
+                if (!bucketCounts && targetPage > 2) {
                     try {
                         const fetchedCounts = await runWithConcurrency(
                             pageQueryPlans,
