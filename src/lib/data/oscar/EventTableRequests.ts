@@ -939,8 +939,8 @@ export function useAbortableEventQueries({
         if (disjointPriorityPlans && !filterModeActive && pageQueryPlans.length > 1) {
             const bucketKey = buildBucketCountsCacheKey(effectiveCutoff, pageQueryPlans, phenomenonTimeForCutoff);
             const hasCachedBuckets = bucketCountsCacheRef.current?.key === bucketKey;
-            const hasInFlightBuckets = bucketCountsInFlightRef.current?.key === bucketKey;
-            if (!hasCachedBuckets && !hasInFlightBuckets) {
+            const hasInFlightBuckets = nextPage > 2 && bucketCountsInFlightRef.current?.key === bucketKey;
+            if (nextPage > 2 && !hasCachedBuckets && !hasInFlightBuckets) {
                 return;
             }
         }
@@ -973,29 +973,34 @@ export function useAbortableEventQueries({
                 let bucketCounts = bucketCountsCacheRef.current?.key === bucketKey
                     ? bucketCountsCacheRef.current.counts
                     : null;
-                if (!bucketCounts && bucketCountsInFlightRef.current?.key === bucketKey) {
+                if (!bucketCounts && nextPage > 2 && bucketCountsInFlightRef.current?.key === bucketKey) {
                     bucketCounts = await bucketCountsInFlightRef.current.promise;
                 }
-                if (prefetchController.signal.aborted || !bucketCounts) {
+                if (prefetchController.signal.aborted) {
                     return null;
                 }
-                const slicePlans = sliceDisjointBucketPlans(pageQueryPlans, bucketCounts, nextPage, pageSize);
-                if (slicePlans.length === 0) {
-                    return [];
+                if (bucketCounts) {
+                    const slicePlans = sliceDisjointBucketPlans(pageQueryPlans, bucketCounts, nextPage, pageSize);
+                    if (slicePlans.length === 0) {
+                        return [];
+                    }
+                    const sliceResults = await runWithConcurrency(
+                        slicePlans,
+                        6,
+                        slice => fetchPlanRows(
+                            slice.plan,
+                            slice.limit,
+                            slice.offset,
+                            effectiveCutoff,
+                            prefetchController.signal,
+                        ),
+                    );
+                    if (prefetchController.signal.aborted) return null;
+                    return deduplicateEvents(sliceResults.flat()).slice(0, pageSize);
                 }
-                const sliceResults = await runWithConcurrency(
-                    slicePlans,
-                    6,
-                    slice => fetchPlanRows(
-                        slice.plan,
-                        slice.limit,
-                        slice.offset,
-                        effectiveCutoff,
-                        prefetchController.signal,
-                    ),
-                );
-                if (prefetchController.signal.aborted) return null;
-                return deduplicateEvents(sliceResults.flat()).slice(0, pageSize);
+                if (nextPage > 2) {
+                    return null;
+                }
             }
             const required = (nextPage + 1) * pageSize;
             const fetchLimit = required + boundedExtra;
