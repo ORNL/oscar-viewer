@@ -10,6 +10,7 @@ import eventDataReducer, {
     requestDashboardAcknowledgeAll,
     setAlarmTrigger,
     setDashboardUnreadAlarmCount,
+    toggleDashboardUnreadOnly,
 } from "../../src/lib/state/EventDataSlice";
 import oscarClientReducer, {
     setAlarmAudioVolume,
@@ -1557,5 +1558,182 @@ describe("Site-shared per-lane Dashboard alarm read state and latching audio", (
         cy.get(".MuiDataGrid-row").eq(1).should("contain.text", "3001");
         cy.get(".MuiDataGrid-row").eq(2).should("contain.text", "3002");
         cy.get(".MuiDataGrid-row").eq(3).should("contain.text", "3003");
+    });
+
+    it("renders loaded EventTable rows without a false error banner when /observations/count returns HTTP 500 and deduplicates unread-count calls", () => {
+        const nowMs = Date.now();
+        const startIso = new Date(nowMs - 120_000).toISOString();
+        const endIso = new Date(nowMs - 110_000).toISOString();
+        const watermarkIso = new Date(nowMs - 300_000).toISOString();
+        const countUrls: string[] = [];
+
+        cy.intercept("GET", "**/observations/count*", (req) => {
+            countUrls.push(req.url);
+            req.reply({
+                statusCode: 500,
+                body: {message: "cold-cql-count timeout"},
+            });
+        });
+
+        const mockReadStateFetch: DashboardReadStateFetch = async () =>
+            new Response(
+                JSON.stringify({
+                    schemaVersion: 1,
+                    revision: 2,
+                    updatedAt: new Date().toISOString(),
+                    lanes: {
+                        LaneResilient: {
+                            acknowledgedThroughMs: Date.parse(watermarkIso),
+                            readKeys: [`t:${nowMs - 100_000}`],
+                        },
+                    },
+                }),
+                {status: 200, headers: {"Content-Type": "application/json"}},
+            );
+
+        const obsRows = [
+            {
+                id: "obs-resilient-1",
+                properties: {id: "obs-resilient-1", "datastream@id": "ds-occ-resilient"},
+                phenomenonTime: endIso,
+                resultTime: endIso,
+                result: {
+                    occupancyCount: 4101,
+                    startTime: startIso,
+                    endTime: endIso,
+                    gammaAlarm: true,
+                    neutronAlarm: false,
+                    maxGamma: 1450,
+                    maxNeutron: 2,
+                    adjudicatedIds: [],
+                    videoPaths: [],
+                },
+            },
+            {
+                id: "obs-resilient-2",
+                properties: {id: "obs-resilient-2", "datastream@id": "ds-occ-resilient"},
+                phenomenonTime: endIso,
+                resultTime: endIso,
+                result: {
+                    occupancyCount: 4102,
+                    startTime: startIso,
+                    endTime: endIso,
+                    gammaAlarm: false,
+                    neutronAlarm: true,
+                    maxGamma: 180,
+                    maxNeutron: 28,
+                    adjudicatedIds: [],
+                    videoPaths: [],
+                },
+            },
+        ];
+
+        const fakeNode: any = {
+            id: "node-resilient",
+            name: "PortalNode",
+            address: "127.0.0.1",
+            port: 8282,
+            isSecure: false,
+            isDefaultNode: true,
+            oshPathRoot: "/sensorhub",
+            bucketsEndpoint: "/buckets",
+            getConnectedSystemsEndpoint: () => "https://node.example/sensorhub/api",
+            getBasicAuthHeader: () => ({}),
+            getObservationsApi: async () => ({
+                searchObservations: async (obsFilter: any) => {
+                    const filterStr = decodeURIComponent(obsFilter?.props?.filter ?? "");
+                    const matched = obsRows.filter(item => {
+                        if (filterStr.includes("gammaAlarm=true AND neutronAlarm=true")) {
+                            return item.result.gammaAlarm && item.result.neutronAlarm;
+                        }
+                        if (filterStr.includes("gammaAlarm=false AND neutronAlarm=true")) {
+                            return !item.result.gammaAlarm && item.result.neutronAlarm;
+                        }
+                        if (filterStr.includes("gammaAlarm=true AND neutronAlarm=false")) {
+                            return item.result.gammaAlarm && !item.result.neutronAlarm;
+                        }
+                        return item.result.gammaAlarm || item.result.neutronAlarm;
+                    });
+                    return {fetchData: async () => matched};
+                },
+            }),
+        };
+
+        const laneMap = new Map<string, any>([
+            [
+                "LaneResilient",
+                {
+                    laneName: "LaneResilient",
+                    parentNode: fakeNode,
+                    isRS350Backpack: false,
+                    datastreams: [
+                        {
+                            properties: {
+                                id: "ds-occ-resilient",
+                                "system@id": "sys-LaneResilient",
+                                observedProperties: [{definition: OCCUPANCY_PILLAR_DEF}],
+                            },
+                        },
+                    ],
+                    datastreamSourceMap: new Map(),
+                    findDataStreamByObsProperty: () => null,
+                    lookupSystemIdFromDataStreamId: () => "sys-LaneResilient",
+                },
+            ],
+        ]);
+
+        const store = configureStore({
+            reducer: {
+                eventLogSlice: eventDataReducer,
+                oscarClientSlice: oscarClientReducer,
+                eventPreview: eventPreviewReducer,
+            },
+            middleware: getDefault => getDefault({serializableCheck: false}),
+        });
+        store.dispatch(toggleDashboardUnreadOnly());
+
+        const mockRouter: any = {
+            push: cy.stub(),
+            replace: cy.stub(),
+            prefetch: cy.stub(),
+            back: cy.stub(),
+            forward: cy.stub(),
+            refresh: cy.stub(),
+        };
+
+        cy.mount(
+            <AppRouterContext.Provider value={mockRouter}>
+                <Provider store={store}>
+                    <LanguageProvider>
+                        <DataSourceContext.Provider value={{
+                            laneMapRef: {current: laneMap},
+                            activeViewKey: null,
+                            viewError: null,
+                            scopedHref: (href: string) => href,
+                        } as any}>
+                            <EventTable
+                                tableMode="alarmtable"
+                                laneMap={laneMap}
+                                readStateFetch={mockReadStateFetch}
+                            />
+                        </DataSourceContext.Provider>
+                    </LanguageProvider>
+                </Provider>
+            </AppRouterContext.Provider>,
+        );
+
+        // Rows from /observations (HTTP 200) render cleanly with zero red error alert banner despite /observations/count HTTP 500
+        cy.get(".MuiDataGrid-row").should("have.length", 2);
+        cy.contains("4101").should("be.visible");
+        cy.contains("4102").should("be.visible");
+        cy.contains("Events could not be loaded").should("not.exist");
+        cy.contains("1–2 of 2").should("be.visible");
+
+        // Verify unread-count reconciliation and total-count query coalesced instead of duplicating identical URLs simultaneously
+        cy.wait(100);
+        cy.then(() => {
+            const watermarkCountCalls = countUrls.filter(u => decodeURIComponent(u).includes("endTime>"));
+            expect(watermarkCountCalls.length).to.equal(1);
+        });
     });
 });

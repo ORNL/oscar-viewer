@@ -33,6 +33,52 @@ function normalizeKind(raw: unknown): OcrKind {
     return "unknown";
 }
 
+function coerceCheckGlyphToDigit(ch: string): string {
+    switch (ch) {
+        case "O":
+        case "Q":
+        case "D":
+            return "0";
+        case "I":
+        case "L":
+            return "1";
+        case "Z":
+            return "2";
+        case "S":
+            return "5";
+        case "G":
+            return "6";
+        case "B":
+            return "8";
+        default:
+            return ch;
+    }
+}
+
+function hasOpticallyConfirmedCheckDigit(rawAlnum: string, canonicalValue: string): boolean {
+    if (canonicalValue.length !== 11 || rawAlnum.length < 11) {
+        return false;
+    }
+    if (rawAlnum.includes(canonicalValue)) {
+        return true;
+    }
+    const prefix10 = canonicalValue.slice(0, 10);
+    const expectedCheck = canonicalValue[10];
+    let searchFrom = 0;
+    while (searchFrom <= rawAlnum.length - 10) {
+        const idx = rawAlnum.indexOf(prefix10, searchFrom);
+        if (idx < 0) {
+            break;
+        }
+        const rawCheck = rawAlnum[idx + 10];
+        if (rawCheck && coerceCheckGlyphToDigit(rawCheck) === expectedCheck) {
+            return true;
+        }
+        searchFrom = idx + 1;
+    }
+    return false;
+}
+
 function normalizeInstant(raw: unknown): string {
     if (typeof raw === "number" && Number.isFinite(raw)) {
         // SensorHub SWE JSON timestamps are epoch seconds (floating point) or epoch ms.
@@ -128,7 +174,7 @@ export class VehicleOcrResult implements IVehicleOcrResult {
             && (rawAlnum.length < 11
                 || (canonicalValue.length === 11
                     && rawAlnum.includes(canonicalValue.slice(0, 10))
-                    && !rawAlnum.includes(canonicalValue)));
+                    && !hasOpticallyConfirmedCheckDigit(rawAlnum, canonicalValue)));
         const explicitChecksum = rawExplicitChecksum && !singleFrameSynthesizedCheckDigit;
         const rawConf = Number(result?.confidence ?? 0);
         const confidence = Number.isFinite(rawConf) ? Math.max(0, Math.min(1, rawConf)) : 0;

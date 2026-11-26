@@ -29,29 +29,40 @@ export class ChartInterceptProps {
         threshold: typeof ConSysApi
     };
     setChartReady: (ready: boolean) => void;
+    /** Unique DOM container suffix when multiple ChartWidgets mount on a custom dashboard. */
+    instanceId?: string;
 }
 type ChartMode = 'total' | 'gamma' | 'neutron';
 
-const neutronDetectorChartIds = [
+const BASE_NEUTRON_DETECTOR_IDS = [
     "neutron-detector-1",
     "neutron-detector-2",
     "neutron-detector-3",
     "neutron-detector-4",
 ];
 
-const gammaDetectorChartIds = [
+const BASE_GAMMA_DETECTOR_IDS = [
     "gamma-detector-1",
     "gamma-detector-2",
     "gamma-detector-3",
     "gamma-detector-4",
 ];
-const combinedGammaChartID = "gamma-detectors-combined";
-const combinedNeutronChartID = "neutron-detectors-combined";
-const gammaChartID = "chart-view-gamma";
-const neutronChartID = "chart-view-neutron";
 
-export default function ChartLane({laneName, datasources, setChartReady}: ChartInterceptProps) {
+export default function ChartLane({laneName, datasources, setChartReady, instanceId}: ChartInterceptProps) {
     const {t} = useLanguage();
+    const idSuffix = instanceId ? `-${instanceId}` : "";
+    const gammaChartID = `chart-view-gamma${idSuffix}`;
+    const neutronChartID = `chart-view-neutron${idSuffix}`;
+    const combinedGammaChartID = `gamma-detectors-combined${idSuffix}`;
+    const combinedNeutronChartID = `neutron-detectors-combined${idSuffix}`;
+    const gammaDetectorChartIds = React.useMemo(
+        () => BASE_GAMMA_DETECTOR_IDS.map((base) => `${base}${idSuffix}`),
+        [idSuffix],
+    );
+    const neutronDetectorChartIds = React.useMemo(
+        () => BASE_NEUTRON_DETECTOR_IDS.map((base) => `${base}${idSuffix}`),
+        [idSuffix],
+    );
 
     const [mode, setMode] = useState<ChartMode>('total');
     const [detectorLayout, setDetectorLayout] = useState<DetectorPlotLayout>(() => getStoredDetectorPlotLayout());
@@ -173,7 +184,21 @@ export default function ChartLane({laneName, datasources, setChartReady}: ChartI
             views.forEach(destroyChartView);
             chartViewsRef.current = [];
         };
-    }, [datasources.gamma, datasources.neutron, datasources.threshold, detectorLayout, laneName, mode, t]);
+    }, [
+        combinedGammaChartID,
+        combinedNeutronChartID,
+        datasources.gamma,
+        datasources.neutron,
+        datasources.threshold,
+        detectorLayout,
+        gammaChartID,
+        gammaDetectorChartIds,
+        laneName,
+        mode,
+        neutronChartID,
+        neutronDetectorChartIds,
+        t,
+    ]);
 
     useEffect(() => {
         const ready = Boolean(datasources.gamma || datasources.neutron);

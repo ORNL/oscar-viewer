@@ -80,8 +80,13 @@ const radUri = "http://www.opengis.net/def/"
 
 export const SENSOR_LOCATION_DEF = radUri + "property/OGC/0/SensorLocation";
 export const LOCATION_VECTOR_DEF = smlUri + "LocationVector";
+/** SensorML system definition set by MobileDetectorSystem in osh-oakridge-modules. */
+export const MOBILE_DETECTOR_SYSTEM_DEF = "http://sensorml.com/ont/swe/system/MobileDetectorLane";
 /** Kromek D5 1 Hz radiometric status report (first field: dose alarm active). */
 export const D5_RAD_STATUS_DEF = smlUri + "doseAlarmActive";
+/** Kromek D5 1 Hz 4,096-channel spectrum report. */
+export const D5_RADIOMETRICS_REPORT_DEF = smlUri + "KromekDetectorRadiometricsV1Report";
+export const D5_SPECTRUM_BINS_DEF = smlUri + "spectrumBins";
 export const RASTER_IMAGE_DEF = smlUri + "RasterImage";
 export const VIDEO_FRAME_DEF = smlUri + "VideoFrame";
 export const CONFIG_DEF =  smlUri + "Config";

@@ -25,10 +25,13 @@ import {
     GridCellParams,
     gridClasses,
     GridColDef,
+    GridColumnOrderChangeParams,
+    GridColumnResizeParams,
     GridColumnVisibilityModel,
     GridRowParams,
     GridRowSelectionModel,
     GridSortModel,
+    useGridApiRef,
 } from "@mui/x-data-grid";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
@@ -72,6 +75,7 @@ import {convertToMap} from "@/app/utils/Utils";
 import {OCCUPANCY_PILLAR_DEF} from "@/lib/data/Constants";
 import {getObservations} from "@/app/utils/ChartUtils";
 import {useAppDispatch} from "@/lib/state/Hooks";
+import {selectNodes} from "@/lib/state/OSHSlice";
 import {
     selectSelectedRowId,
     setEventPreview,
@@ -167,6 +171,13 @@ import {
 import {formatIso6346} from "@/lib/data/oscar/adjudication/Iso6346";
 import {useVehicleOcrMap} from "@/app/_components/event-table/useVehicleOcrMap";
 import SavedQueriesPopover from "@/app/_components/event-table/SavedQueriesPopover";
+import {EventTableColumnSetting} from "@/lib/layout/PageConfigTypes";
+import {
+    applyColumnSettings,
+    applyFieldOrder,
+    resolveEventTableColumns,
+    visibilityFromColumnSettings,
+} from "@/lib/layout/EventTableColumns";
 import {
     CachedEventLogQuerySnapshot,
     clearFilteredEventLogSnapshot,
@@ -195,6 +206,11 @@ interface TableProps {
     setEvents?: unknown;
     readStateFetch?: DashboardReadStateFetch;
     restoreFiltered?: boolean;
+    /** Isolates custom-dashboard widgets from global Dashboard unread/snapshot Redux state. */
+    isWidgetMode?: boolean;
+    columnSettings?: EventTableColumnSetting[];
+    onColumnSettingsChange?: (columns: EventTableColumnSetting[]) => void;
+    fillHeight?: boolean;
 }
 
 type QueryPlan = EventQueryPlan;
@@ -219,13 +235,20 @@ export default function EventTable({
     currentLane,
     readStateFetch,
     restoreFiltered,
+    isWidgetMode = false,
+    columnSettings,
+    onColumnSettingsChange,
+    fillHeight = false,
 }: TableProps) {
     const isAlarmTable = tableMode === "alarmtable";
     const isEventLog = tableMode === "eventlog";
     const selectedRowId = useSelector(selectSelectedRowId);
     const adjudicatedEventId = useSelector(selectAdjudicatedEventId);
     const dashboardAcknowledgeNonce = useSelector(selectDashboardAcknowledgeNonce);
-    const unreadOnly = useSelector(selectDashboardUnreadOnly);
+    const globalUnreadOnly = useSelector(selectDashboardUnreadOnly);
+    const configuredNodes = useSelector(selectNodes);
+    const [widgetUnreadOnly, setWidgetUnreadOnly] = useState(false);
+    const unreadOnly = isWidgetMode ? widgetUnreadOnly : globalUnreadOnly;
     const effectiveUnreadOnly = isAlarmTable && unreadOnly;
     const lastHandledAckNonceRef = useRef(dashboardAcknowledgeNonce);
     const [ackStatusMessage, setAckStatusMessage] = useState("");
@@ -252,7 +275,7 @@ export default function EventTable({
     const locale = getIntlLocale(language);
 
     const [initialHydration] = useState(() => {
-        if (!isEventLog) return null;
+        if (!isEventLog || isWidgetMode) return null;
         const shouldRestore = restoreFiltered === true
             || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("restore") === "1");
         if (!shouldRestore) return null;
@@ -278,7 +301,9 @@ export default function EventTable({
         adjudicatedIds: viewAdjudicated,
         adjudicationCode: viewAdjudicated,
         vehicleId: Boolean(initialHydration?.criteria.vehicleSearch),
+        ...(columnSettings ? visibilityFromColumnSettings(columnSettings) : {}),
     }));
+    const gridApiRef = useGridApiRef();
     const [syncedViewAdjudicated, setSyncedViewAdjudicated] = useState(viewAdjudicated);
     if (syncedViewAdjudicated !== viewAdjudicated) {
         setSyncedViewAdjudicated(viewAdjudicated);
@@ -421,7 +446,25 @@ export default function EventTable({
     }>>(new Set());
     const failedBulkRef = useRef<EventTableData[]>([]);
 
-    const nodeOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name))).sort(), [stableLaneMap]);
+    const federatedNodesForSearch = useMemo(() => {
+        if (configuredNodes.length === 0 || stableLaneMap.size === 0) return undefined;
+        const configuredIds = new Set(configuredNodes.map((node: {id?: string}) => node?.id).filter(Boolean));
+        const laneMapMatchesStore = Array.from(stableLaneMap.values()).some(
+            lane => Boolean(lane?.parentNode?.id && configuredIds.has(lane.parentNode.id)),
+        );
+        return laneMapMatchesStore ? configuredNodes : undefined;
+    }, [configuredNodes, stableLaneMap]);
+
+    const nodeOptions = useMemo(
+        () =>
+            Array.from(
+                new Set([
+                    ...Array.from(stableLaneMap.values()).map(lane => lane.parentNode.name),
+                    ...(federatedNodesForSearch ?? []).map((node: {name?: string}) => node?.name).filter((name: string | undefined): name is string => Boolean(name)),
+                ]),
+            ).sort(),
+        [federatedNodesForSearch, stableLaneMap],
+    );
     const laneOptions = useMemo(() => Array.from(new Set(Array.from(stableLaneMap.values()).map(lane => lane.laneName))).sort(), [stableLaneMap]);
 
     const customCodeNodes = useMemo(() => {
@@ -1121,8 +1164,12 @@ export default function EventTable({
     }, [clearSelection, timeWindowPreset]);
 
     const handleToggleUnreadOnly = useCallback(() => {
+        if (isWidgetMode) {
+            setWidgetUnreadOnly(previous => !previous);
+            return;
+        }
         dispatch(toggleDashboardUnreadOnly());
-    }, [dispatch]);
+    }, [dispatch, isWidgetMode]);
 
     const handleToggleSortByTimeOnly = useCallback(() => {
         const next = !sortByTimeOnly;
@@ -1131,13 +1178,15 @@ export default function EventTable({
         setSortByTimeOnly(next);
         setSortModel(next ? [{field: "startTime", sort: "desc"}] : [{field: "status", sort: "asc"}]);
         setPaginationModel(previous => (previous.page === 0 ? previous : {...previous, page: 0}));
-        setFilterEpoch(previous => previous + 1);
+        if (latestCutoffRef.current > pageLoadedTime) {
+            setFilterEpoch(previous => previous + 1);
+        }
         setAckStatusMessage(
             next
                 ? t(isAlarmTable ? "dashboardSortedByTimeAnnouncement" : "eventsSortedByTimeAnnouncement")
                 : t(isAlarmTable ? "dashboardSortedByPriorityAnnouncement" : "eventsSortedByPriorityAnnouncement"),
         );
-    }, [isAlarmTable, sortByTimeOnly, t]);
+    }, [isAlarmTable, pageLoadedTime, sortByTimeOnly, t]);
 
     const timeWindowOptions = useMemo<ToolbarTimeWindowOption[]>(
         () => [
@@ -1255,6 +1304,7 @@ export default function EventTable({
                     vehicleId: effectiveVehicleId,
                     matchMode: effectiveMatchMode,
                     laneMap: stableLaneMap,
+                    nodes: federatedNodesForSearch,
                     activeViewKey,
                     startTimeIso,
                     signal: controller.signal,
@@ -1275,7 +1325,7 @@ export default function EventTable({
         })();
 
         return () => controller.abort();
-    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, isEventLog, primaryEventLogNode, stableLaneMap]);
+    }, [activeVehicleQuery, activeViewKey, cacheEventBounded, federatedNodesForSearch, isEventLog, primaryEventLogNode, stableLaneMap]);
 
     const vehicleFilteredRows = useMemo<EventTableData[]>(() => {
         if (!isVehicleSearchMode || !vehicleSearchResult) return [];
@@ -1413,9 +1463,23 @@ export default function EventTable({
         setScopedUnreadReady(true);
     }, [canUseZeroQueryPage0VisibleCount, unreadVisibleCount]);
 
+    const unreadReconcileAbortRef = useRef<AbortController | null>(null);
+    const inFlightUnreadKeyRef = useRef<string | null>(null);
+    const settledUnreadKeyRef = useRef<string | null>(null);
+
+    useEffect(() => () => {
+        unreadReconcileAbortRef.current?.abort();
+        unreadReconcileAbortRef.current = null;
+        inFlightUnreadKeyRef.current = null;
+    }, []);
+
     useEffect(() => {
         if (!isAlarmTable) return;
         if (canUseZeroQueryTotalCount || canUseZeroQueryUnreadOnlyCount) {
+            unreadReconcileAbortRef.current?.abort();
+            unreadReconcileAbortRef.current = null;
+            inFlightUnreadKeyRef.current = null;
+            settledUnreadKeyRef.current = null;
             setScopedUnreadReady(false);
             return;
         }
@@ -1423,15 +1487,45 @@ export default function EventTable({
             return;
         }
         if (unreadScopePlanBundle.plans.length === 0) {
+            unreadReconcileAbortRef.current?.abort();
+            unreadReconcileAbortRef.current = null;
+            inFlightUnreadKeyRef.current = null;
+            settledUnreadKeyRef.current = null;
             setScopedUnreadSummary({count: 0, capped: false});
             setScopedUnreadReady(true);
             return;
         }
 
-        const controller = new AbortController();
         const effectiveCutoff = latestCutoffRef.current > pageLoadedTime
             ? latestCutoffRef.current
             : pageLoadedTime;
+        const plansKey = unreadScopePlanBundle.plans
+            .map(plan => `${plan.node?.id ?? plan.key}\u001f${plan.datastreamIds.join(",")}\u001f${plan.filter}`)
+            .join("\u001d");
+        const reconcileKey = [
+            effectiveCutoff,
+            plansKey,
+            readKeysSignature,
+            String(postWatermarkReadKeysSummary.hasPostWatermarkKeys),
+            String(postWatermarkReadKeysSummary.totalEstimatedCount),
+            String(unreadReconcileEpoch),
+        ].join("\u001e");
+
+        if (settledUnreadKeyRef.current === reconcileKey) {
+            return;
+        }
+        if (
+            inFlightUnreadKeyRef.current === reconcileKey
+            && unreadReconcileAbortRef.current
+            && !unreadReconcileAbortRef.current.signal.aborted
+        ) {
+            return;
+        }
+
+        unreadReconcileAbortRef.current?.abort();
+        const controller = new AbortController();
+        unreadReconcileAbortRef.current = controller;
+        inFlightUnreadKeyRef.current = reconcileKey;
 
         void (async () => {
             try {
@@ -1447,6 +1541,7 @@ export default function EventTable({
                 const serverPostWatermarkCount = planCounts.reduce((sum, count) => sum + count, 0);
 
                 if (!postWatermarkReadKeysSummary.hasPostWatermarkKeys || serverPostWatermarkCount === 0) {
+                    settledUnreadKeyRef.current = reconcileKey;
                     setScopedUnreadSummary({count: serverPostWatermarkCount, capped: false});
                     setScopedUnreadReady(true);
                     return;
@@ -1478,12 +1573,14 @@ export default function EventTable({
                 );
 
                 if (serverPostWatermarkCount <= MAX_UNREAD_RECONCILIATION_FETCH) {
+                    settledUnreadKeyRef.current = reconcileKey;
                     setScopedUnreadSummary({count: unreadInSample, capped: false});
                     setScopedUnreadReady(true);
                     return;
                 }
 
                 if (unreadInSample > UNREAD_COUNT_RECONCILIATION_CAP) {
+                    settledUnreadKeyRef.current = reconcileKey;
                     setScopedUnreadSummary({count: UNREAD_COUNT_RECONCILIATION_CAP, capped: true});
                     setScopedUnreadReady(true);
                     return;
@@ -1502,16 +1599,18 @@ export default function EventTable({
                 } else {
                     setScopedUnreadSummary({count: estimatedUnread, capped: false});
                 }
+                settledUnreadKeyRef.current = reconcileKey;
                 setScopedUnreadReady(true);
             } catch (error) {
                 if (controller.signal.aborted || isAbortRequestError(error)) return;
                 console.error("Unable to reconcile unread dashboard alarm count", error);
+            } finally {
+                if (unreadReconcileAbortRef.current === controller) {
+                    unreadReconcileAbortRef.current = null;
+                    inFlightUnreadKeyRef.current = null;
+                }
             }
         })();
-
-        return () => {
-            controller.abort();
-        };
     }, [
         canUseZeroQueryTotalCount,
         canUseZeroQueryUnreadOnlyCount,
@@ -1552,20 +1651,29 @@ export default function EventTable({
     ]);
 
     const effectiveRowCount = useMemo(() => {
-        if (!effectiveUnreadOnly) return rowCount;
-        if (!postWatermarkReadKeysSummary.hasPostWatermarkKeys) return rowCount;
-        if (!loading && paginationModel.page === 0 && rowCount <= PAGE_SIZE && rows.length <= rowCount) {
+        const lowerBoundCount = !pageQueryError && rows.length > 0
+            ? paginationModel.page * PAGE_SIZE + rows.length + (!loading && rows.length >= PAGE_SIZE ? 1 : 0)
+            : 0;
+        const safeTotalCount = countQueryError
+            ? Math.max(rowCount, lowerBoundCount)
+            : rowCount;
+
+        if (!effectiveUnreadOnly) return safeTotalCount;
+        if (!postWatermarkReadKeysSummary.hasPostWatermarkKeys) return safeTotalCount;
+        if (!loading && paginationModel.page === 0 && safeTotalCount <= PAGE_SIZE && rows.length <= safeTotalCount) {
             return rows.length;
         }
         const estimated = scopedUnreadReady
             ? (scopedUnreadSummary.capped
-                ? Math.max(0, rowCount - postWatermarkReadKeysSummary.totalEstimatedCount)
+                ? Math.max(0, safeTotalCount - postWatermarkReadKeysSummary.totalEstimatedCount)
                 : scopedUnreadSummary.count)
-            : Math.max(0, rowCount - postWatermarkReadKeysSummary.totalEstimatedCount);
+            : Math.max(0, safeTotalCount - postWatermarkReadKeysSummary.totalEstimatedCount);
         return Math.max(rows.length, estimated);
     }, [
+        countQueryError,
         effectiveUnreadOnly,
         loading,
+        pageQueryError,
         paginationModel.page,
         postWatermarkReadKeysSummary,
         rowCount,
@@ -1575,17 +1683,17 @@ export default function EventTable({
     ]);
 
     useEffect(() => {
-        if (!isAlarmTable) return;
+        if (!isAlarmTable || isWidgetMode) return;
         dispatch(setDashboardUnreadAlarmSummary(effectiveUnreadSummary));
-    }, [isAlarmTable, effectiveUnreadSummary, dispatch]);
+    }, [isAlarmTable, isWidgetMode, effectiveUnreadSummary, dispatch]);
 
     useEffect(() => {
-        if (!isAlarmTable) return;
+        if (!isAlarmTable || isWidgetMode) return;
         return () => {
             dispatch(setDashboardUnreadAlarmCount(0));
             dispatch(setDashboardUnreadOnly(false));
         };
-    }, [isAlarmTable, dispatch]);
+    }, [isAlarmTable, isWidgetMode, dispatch]);
 
     const getLatestGB = async (event: EventTableData) => {
         for (const lane of stableLaneMap.values()) {
@@ -2167,16 +2275,16 @@ export default function EventTable({
     }, [activeViewKey, applyCriteriaAndSnapshot]);
 
     useEffect(() => {
-        if (!isEventLog) return;
+        if (!isEventLog || isWidgetMode) return;
         setCurrentEventLogFilteredFlag(activeViewKey, hasActiveQuery);
         return () => {
             setCurrentEventLogFilteredFlag(activeViewKey, false);
         };
-    }, [activeViewKey, hasActiveQuery, isEventLog]);
+    }, [activeViewKey, hasActiveQuery, isEventLog, isWidgetMode]);
 
     const prevRestoreFilteredRef = useRef<boolean | undefined>(restoreFiltered);
     useEffect(() => {
-        if (!isEventLog) return;
+        if (!isEventLog || isWidgetMode) return;
         const prev = prevRestoreFilteredRef.current;
         prevRestoreFilteredRef.current = restoreFiltered;
         if (restoreFiltered === undefined || prev === restoreFiltered) return;
@@ -2188,11 +2296,11 @@ export default function EventTable({
         } else if (prev === true && hasActiveQueryRef.current) {
             handleResetEventLogQuery();
         }
-    }, [activeViewKey, applyCriteriaAndSnapshot, handleResetEventLogQuery, isEventLog, restoreFiltered]);
+    }, [activeViewKey, applyCriteriaAndSnapshot, handleResetEventLogQuery, isEventLog, isWidgetMode, restoreFiltered]);
 
     // Update the single-slot return snapshot when a filtered /event-log query settles
     useEffect(() => {
-        if (!isEventLog || !hasActiveQuery || stableLaneMap.size === 0) return;
+        if (!isEventLog || isWidgetMode || !hasActiveQuery || stableLaneMap.size === 0) return;
         if (isVehicleSearchMode) {
             if (vehicleSearchLoading || vehicleSearchError || !vehicleSearchResult) return;
             setFilteredEventLogSnapshot(activeViewKey, {
@@ -2741,6 +2849,41 @@ export default function EventTable({
         },
     ], [formatAdjudicationCodeLabel, isRowUnread, locale, renderCompactHeader, renderCompactTimestamp, t]);
 
+    const resolvedColumnSettings = useMemo(
+        () => (columnSettings ? resolveEventTableColumns(columnSettings) : undefined),
+        [columnSettings],
+    );
+    const displayColumns = useMemo(
+        () => (resolvedColumnSettings ? applyColumnSettings(columns, resolvedColumnSettings) : columns),
+        [columns, resolvedColumnSettings],
+    );
+    const reportColumnSettings = (next: EventTableColumnSetting[]) => {
+        if (onColumnSettingsChange) {
+            onColumnSettingsChange(next);
+        }
+    };
+    const handleColumnVisibilityChange = (model: GridColumnVisibilityModel) => {
+        setColumnVisibilityModel(model);
+        if (resolvedColumnSettings) {
+            reportColumnSettings(
+                resolvedColumnSettings.map((c) => (c.key in model ? {...c, visible: model[c.key] !== false} : c)),
+            );
+        }
+    };
+    const handleColumnOrderChange = (params: GridColumnOrderChangeParams) => {
+        if (!resolvedColumnSettings) return;
+        const fields = gridApiRef.current?.getAllColumns?.().map((c) => c.field) ?? [];
+        reportColumnSettings(applyFieldOrder(resolvedColumnSettings, fields.length ? fields : [params.column.field]));
+    };
+    const handleColumnWidthChange = (params: GridColumnResizeParams) => {
+        if (!resolvedColumnSettings) return;
+        reportColumnSettings(
+            resolvedColumnSettings.map((c) =>
+                c.key === params.colDef.field ? {...c, width: Math.round(params.width)} : c,
+            ),
+        );
+    };
+
     const getColumnList = () => columns
         .filter(column => viewAdjudicated || (column.field !== "adjudicatedIds" && column.field !== "adjudicationCode"))
         .map(column => column.field);
@@ -2774,7 +2917,7 @@ export default function EventTable({
     const tableLoading = isVehicleSearchMode ? vehicleSearchLoading : loading;
 
     return (
-        <Box sx={{display: "flex", flexDirection: "column", ...(isEventLog ? {minHeight: 860} : {height: 800}), width: "100%"}}>
+        <Box sx={{display: "flex", flexDirection: "column", ...(fillHeight ? {height: "100%"} : isEventLog ? {minHeight: 860} : {height: 800}), width: "100%"}}>
             {supportsSortByTimeToggle && (
                 <Box
                     role="status"
@@ -3050,7 +3193,7 @@ export default function EventTable({
                     </Stack>
                 </Alert>
             )}
-            {(countQueryError || pageQueryError) && !isVehicleSearchMode && (
+            {pageQueryError && !isVehicleSearchMode && (
                 <Alert
                     severity="error"
                     role="alert"
@@ -3172,14 +3315,17 @@ export default function EventTable({
                     )}
                 </Box>
             )}
-            <Box sx={{...(isEventLog ? {height: 680} : {flex: 1, minHeight: 0}), width: "100%"}}>
+            <Box sx={{...(isEventLog && !fillHeight ? {height: 680} : {flex: 1, minHeight: 0}), width: "100%"}}>
                 <DataGrid
                     localeText={getDataGridLocaleText(language)}
                     rows={effectiveDisplayRows}
                     getRowId={eventSelectionKey}
-                    columns={columns}
+                    apiRef={gridApiRef}
+                    columns={displayColumns}
                     columnVisibilityModel={columnVisibilityModel}
-                    onColumnVisibilityModelChange={setColumnVisibilityModel}
+                    onColumnVisibilityModelChange={handleColumnVisibilityChange}
+                    onColumnOrderChange={handleColumnOrderChange}
+                    onColumnWidthChange={handleColumnWidthChange}
                     columnHeaderHeight={48}
                     rowHeight={48}
                     loading={tableLoading}
@@ -3354,6 +3500,7 @@ export default function EventTable({
                     vehicleId={comparisonDialogState.vehicleId}
                     matchMode={comparisonDialogState.matchMode}
                     laneMap={stableLaneMap}
+                    nodes={federatedNodesForSearch}
                     activeViewKey={activeViewKey}
                     startTimeIso={comparisonDialogState.initialResult ? activeVehicleStartTimeIso : null}
                     initialResult={comparisonDialogState.initialResult ?? null}

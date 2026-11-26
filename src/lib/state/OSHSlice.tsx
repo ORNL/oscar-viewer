@@ -165,7 +165,9 @@ export const {
     changeConfigNode,
 } = Slice.actions;
 
-export const selectNodes = (state: RootState) => state.oshSlice.nodes;
-export const selectDefaultNode = (state: RootState) => state.oshSlice.nodes.find((node: INode) => node.isDefaultNode);
+const EMPTY_NODES: INode[] = [];
+
+export const selectNodes = (state: RootState) => state.oshSlice?.nodes ?? EMPTY_NODES;
+export const selectDefaultNode = (state: RootState) => state.oshSlice?.nodes?.find((node: INode) => node.isDefaultNode);
 
 export default Slice.reducer;

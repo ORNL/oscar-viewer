@@ -327,7 +327,7 @@ export default function HealthPage() {
                                                     labels={{online: t("online"), offline: t("offline"), unknown: t("waiting")}}
                                                 />
                                             ))}
-                                            {isAdmin && (
+                                            {isAdmin && !lane.mobile && (
                                                 <Button
                                                     type="button"
                                                     size="small"
@@ -344,13 +344,27 @@ export default function HealthPage() {
                                         </Stack>
                                     </TableCell>
                                     <TableCell sx={{verticalAlign: "top", minWidth: 390}}>
+                                        {lane.mobile ? (
+                                            <Typography variant="body2" color="text.secondary" data-testid={`health-mobile-faults-${lane.laneName}`}>
+                                                {t("mobileFaultsNotMonitored")}
+                                            </Typography>
+                                        ) : (
                                         <Stack direction="row" gap={0.75} flexWrap="wrap">
-                                            <FaultIndicator label={t("gammaHigh")} state={lane.faults.gammaHigh} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
-                                            <FaultIndicator label={t("gammaLow")} state={lane.faults.gammaLow} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
-                                            <FaultIndicator label={t("neutronHigh")} state={lane.faults.neutronHigh} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
-                                            <FaultIndicator label={t("tamper")} state={lane.faults.tamper} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
+                                            {(lane.monitoredFaults == null || lane.monitoredFaults.includes("gammaHigh")) && (
+                                                <FaultIndicator label={t("gammaHigh")} state={lane.faults.gammaHigh} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
+                                            )}
+                                            {(lane.monitoredFaults == null || lane.monitoredFaults.includes("gammaLow")) && (
+                                                <FaultIndicator label={t("gammaLow")} state={lane.faults.gammaLow} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
+                                            )}
+                                            {(lane.monitoredFaults == null || lane.monitoredFaults.includes("neutronHigh")) && (
+                                                <FaultIndicator label={t("neutronHigh")} state={lane.faults.neutronHigh} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
+                                            )}
+                                            {(lane.monitoredFaults == null || lane.monitoredFaults.includes("tamper")) && (
+                                                <FaultIndicator label={t("tamper")} state={lane.faults.tamper} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
+                                            )}
                                             <FaultIndicator label={t("extendedOccupancy")} state={lane.extendedOccupancy} faultText={t("fault")} clearText={t("clear")} unknownText={t("unknown")}/>
                                         </Stack>
+                                        )}
                                     </TableCell>
                                     <TableCell sx={{verticalAlign: "top", minWidth: 150}}>
                                         {lane.occupancyState === "unknown" ? (

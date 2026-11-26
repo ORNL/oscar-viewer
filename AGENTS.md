@@ -9,8 +9,8 @@ Both human contributors and AI coding agents (`Codex`, `Claude Code`, `Gemini` /
 ## 1. Non-Negotiable UI, Safety & 50-Lane Scale Invariants
 
 1. **Canonical Operator Routes & Regression Selector Contracts:**
-   - The 8 canonical operator routes (`/`, `/map`, `/event-log`, `/lane-view`, `/report-view`, `/health`, `/servers`, `/users`) and their `data-testid` / `aria-label` contracts are continuously verified by [`ORNL/oscar-regression`](https://github.com/ORNL/oscar-regression) (`25` E2E scenarios) and [`ORNL/oscar-video-guides`](https://github.com/ORNL/oscar-video-guides) (`29` localized MP4 workflow guides + `54` operator manual screenshots).
-   - **Never** remove, replace, or redirect away from canonical routes by default. New navigation views (such as `v3.12.0` Custom Dashboards) **must** be **opt-in and additive** (e.g., `/dashboards`).
+   - The 8 canonical operator routes (`/`, `/map/`, `/event-log/`, `/lane-view/`, `/report/`, `/health/`, `/servers/`, `/users/`) and their `data-testid` / `aria-label` contracts are continuously verified by [`ORNL/oscar-regression`](https://github.com/ORNL/oscar-regression) (`27` E2E scenarios) and [`ORNL/oscar-video-guides`](https://github.com/ORNL/oscar-video-guides) (`33` localized MP4 workflow guides + `57` operator manual screenshots).
+   - **Never** remove, replace, or redirect away from canonical routes by default. New navigation views (such as `v3.12.0` Custom Dashboards at `/dashboards/`) **must** be **opt-in and additive**.
 2. **Safety-Critical Global `AlarmAudio` Singleton (`src/app/Providers.tsx`):**
    - [`AlarmAudio`](src/app/_components/AlarmAudio.tsx) **must** remain mounted once inside [`Providers.tsx`](src/app/Providers.tsx) so audible Gamma (`gamma.mp3`) and Neutron (`neutron.mp3`) radiation alarms sound on **every** route in the application and never instantiate duplicate overlapping audio players inside individual widgets.
 3. **Bounded ConSys API & DuckDB Concurrency at 50-Lane Scale:**
@@ -18,10 +18,13 @@ Both human contributors and AI coding agents (`Codex`, `Claude Code`, `Gemini` /
    - Always bound observation queries by time window:
      - `Observations` collection API (`/sensorhub/api/observations`): bound with `phenomenonTime` or `resultTime="latest"` in small batches (`HEALTH_QUERY_BATCH_SIZE = 10`, `HEALTH_QUERY_CONCURRENCY = 2`; see [`useLaneHealth.ts`](src/lib/data/oscar/useLaneHealth.ts)).
      - `osh-js` `DataStream.searchObservations(filter, pageSize)`: note that `osh-js` `DataStream.js` excludes `phenomenonTime` from its query string (`toQueryString([], ['phenomenonTime'])`), so always pass `resultTime: "<startIso>/<endIso>"` alongside any CQL `filter` (see [`WebIdAnalysis.tsx`](src/app/_components/adjudication/WebIdAnalysis.tsx)).
+   - Keep `DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 200` (with the `2x` rapid-follow-up window) in [`EventTableRequests.ts`](src/lib/data/oscar/EventTableRequests.ts) so single clicks execute with `0 ms` delay while rapid `130–180 ms` pagination bursts coalesce even when fast `Newest first` queries settle in `< 80 ms`.
+   - Bound historical mobile patrol-track / GPS breadcrumb replay queries (`location` / `LiveDriverLocationOutput`, archived into write-once `RAW_TELEMETRY`) to `<= 24 h` time windows with an explicit `limit` (never run unbounded multi-month GPS track queries against `RAW_TELEMETRY`), and keep Custom Dashboards capped at `MAX_VIDEO_WIDGETS_PER_PAGE = 4` and `MAX_CHART_WIDGETS_PER_PAGE = 6` (`PageConfigTypes.ts` / `ConfigValidation.ts`).
+   - Do not alter the exact CQL literals in [`StatusTable.tsx`](src/app/_components/lane-view/StatusTable.tsx) (`STATUS_FAULT_FILTER`) without keeping `ORNL/osh-addons` `JsonCqlEvaluator.tamperOrFaultSummarySpec` and `TestArchiveLifecycleInvariants` in lockstep so `24h`/`7d`/`15d` fault counts stay zero-DuckDB in PostgreSQL.
 4. **Realtime WebSocket Lease Discipline (`SharedConnectionPool`):**
    - Acquire realtime `osh-js` stream connections exclusively via [`acquireSharedConnection`](src/lib/data/oscar/SharedConnectionPool.ts) and release both the callback (`removeRealtimeEventSubscription`) and lease (`lease.release()`) in `useEffect` cleanup. Never call `source.connect()` / `source.disconnect()` directly on shared lane datasources.
-5. **Scoped Multi-View Navigation (`scopedHref`):**
-   - Preserve `?view=<scope>` query parameters across internal navigation using `scopedHref(...)` in [`Navbar.tsx`](src/app/_components/Navbar.tsx) and route links so scoped operator accounts keep their assigned lane view.
+5. **Scoped Multi-View & Zero-Reload Static RSC Navigation (`scopedHref` & `ensureTrailingSlashRoute`):**
+   - Preserve `?view=<scope>` query parameters and canonical trailing slashes (`trailingSlash: true` in [`next.config.js`](next.config.js)) across internal navigation using `scopedHref(...)` / `ensureTrailingSlashRoute(...)` in [`DataSourceContext.tsx`](src/app/contexts/DataSourceContext.tsx) and [`Navbar.tsx`](src/app/_components/Navbar.tsx) so Next.js fetches `<route>/index.txt` without falling back to MPA document reloads that drop in-memory Federation Service Tokens.
 6. **4-Locale Translation Parity (`en`, `es`, `fr`, `el`):**
    - Every user-visible string added to `public/locales/en/*.json` **must** have matching keys in `es`, `fr`, and `el`, verified by `npm run validate:locales`.
 7. **Repository Hygiene:**

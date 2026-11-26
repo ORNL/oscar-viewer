@@ -1,10 +1,12 @@
 "use client"
 
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
+import {useRouter} from "next/navigation";
 import {
     acquireSharedConnection,
     findRealtimeDataSourceForStream,
     LaneDSColl,
+    LaneMapEntry,
     type SharedConnectionLease,
 } from "@/lib/data/oscar/LaneCollection";
 import LeafletView from "osh-js/source/core/ui/view/map/LeafletView";
@@ -16,10 +18,22 @@ import {DataSourceContext} from "@/app/contexts/DataSourceContext";
 import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
 import "leaflet/dist/leaflet.css"
 import {
-    isConnectionDataStream, isGammaDataStream, isLocationDataStream,
-    isNeutronDataStream, isSiteDiagramPathDataStream,
-    isTamperDataStream
+    isBackgroundDataStream,
+    isConnectionDataStream,
+    isD5RadiometricStatusDataStream,
+    isD5SpectrumDataStream,
+    isForegroundDataStream,
+    isGammaDataStream,
+    isLocationDataStream,
+    isMobileDetectorLane,
+    isMobileGpsDataStream,
+    isNeutronDataStream,
+    isOccupancyDataStream,
+    isSiteDiagramPathDataStream,
+    isTamperDataStream,
 } from "@/lib/data/oscar/Utilities";
+import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
+import {fetchCollectionDataWithSignal, isAbortRequestError} from "@/lib/data/oscar/EventTableRequests";
 import {setCurrentLane} from "@/lib/state/LaneViewSlice";
 import {useAppDispatch} from "@/lib/state/Hooks";
 import L from "leaflet";
@@ -32,22 +46,36 @@ import {EventType} from "osh-js/source/core/event/EventType";
 import {removeRealtimeEventSubscription} from "@/lib/data/oscar/RealtimeEventNotification";
 import {
     buildLaneExtentSignature,
+    buildMobileAlarmPopupHtml,
     buildSiteDiagramUrl,
+    escapeHtml,
     LANE_EXTENT_FIT_OPTIONS,
     LANE_MARKER_ICON_ANCHOR,
     LANE_MARKER_ICON_SIZE,
     LANE_MARKER_PANE,
     LANE_MARKER_PANE_Z_INDEX,
+    LANE_SILENCE_THRESHOLD_MS,
     LaneMapLocation,
+    MOBILE_ALARM_COLOR,
+    MOBILE_ALARM_FLASH_MS,
+    MOBILE_ALARM_QUERY_LIMIT,
+    MOBILE_ALARM_REFRESH_MS,
+    MOBILE_SWEEP_MS,
+    mobileAlarmPosition,
     OSM_TILE_URL,
     resolveLaneMapLocation,
     SITE_DIAGRAM_FIT_OPTIONS,
     SITE_DIAGRAM_PANE,
     SITE_DIAGRAM_PANE_Z_INDEX,
     SiteDiagramBounds,
+    startOfLocalDayIso,
+    toLaneMapLocation,
     toLaneMapLocationFromSystem,
     toLeafletLaneExtentBounds,
     toLeafletSiteDiagramBounds,
+    UNADJUDICATED_ALARM_FILTER,
+    walkerIconHtml,
+    walkerState,
 } from "@/app/_components/maps/MapUtils";
 import {fetchActiveOfflineMapInfo} from "@/lib/data/oscar/RuntimeExtensionsApi";
 import {createLeafletPmTilesLayer, isValidOfflineMapBounds} from "@/app/_components/maps/PmTilesLayerFactory";
@@ -56,13 +84,59 @@ interface LaneMarkerState {
     laneName: string;
     location: LaneMapLocation;
     status: string;
+    /** Mobile detector lane: drawn as a walker that follows live GPS fixes. */
+    mobile?: boolean;
+    /** Initial fix used for lane-extent fitting so moving walkers do not reset pan/zoom. */
+    fitLocation?: LaneMapLocation;
+    /** Browser arrival timestamp of the walker's latest fix or live detector heartbeat. */
+    lastFixAt?: number;
+    /** Active alarm flash expiration timestamp. */
+    alarmUntil?: number;
 }
 
+const fitLocationOf = (marker: LaneMarkerState) => marker.fitLocation ?? marker.location;
 
-export default function MapComponent() {
+export interface MapComponentProps {
+    /** Unique DOM container ID when multiple maps mount on a custom dashboard. */
+    containerId?: string;
+    /** CSS height of the map container. */
+    height?: string;
+    /** Optional subset of lane names selected in a widget configuration. */
+    allowedLaneNames?: string[];
+    showMobileUnits?: boolean;
+    showAlarmMarkers?: boolean;
+    alarmTimeWindow?: "today" | "1h" | "8h" | "24h";
+}
+
+function resolveAlarmWindowStartIso(windowMode: "today" | "1h" | "8h" | "24h" = "today"): string {
+    const now = Date.now();
+    if (windowMode === "1h") return new Date(now - 60 * 60_000).toISOString();
+    if (windowMode === "8h") return new Date(now - 8 * 60 * 60_000).toISOString();
+    if (windowMode === "24h") return new Date(now - 24 * 60 * 60_000).toISOString();
+    return startOfLocalDayIso();
+}
+
+export default function MapComponent({
+    containerId = "mapcontainer",
+    height = "100vh",
+    allowedLaneNames,
+    showMobileUnits = true,
+    showAlarmMarkers = true,
+    alarmTimeWindow = "today",
+}: MapComponentProps = {}) {
     const {language, t} = useLanguage();
-    const mapcontainer: string = "mapcontainer";
-    const laneMap = useSelector((state: RootState) => selectLaneMap(state));
+    const router = useRouter();
+    const mapcontainer: string = containerId;
+    const rawLaneMap = useSelector((state: RootState) => selectLaneMap(state));
+    const laneMap = useMemo(() => {
+        if (!allowedLaneNames) return rawLaneMap;
+        const allowed = new Set(allowedLaneNames);
+        const filtered = new Map<string, LaneMapEntry>();
+        rawLaneMap.forEach((entry, key) => {
+            if (allowed.has(key)) filtered.set(key, entry);
+        });
+        return filtered;
+    }, [allowedLaneNames, rawLaneMap]);
     const leafletViewRef = useRef<typeof LeafletView | null>(null);
     const osmLayerRef = useRef<L.TileLayer | null>(null);
     const esriLayerRef = useRef<L.TileLayer | null>(null);
@@ -83,11 +157,36 @@ export default function MapComponent() {
     const [isInit, setIsInit] = useState(false);
     const [dataSourcesByLane, setDataSourcesByLane] = useState<Map<string, LaneDSColl>>(new Map<string, LaneDSColl>());
     const [locationList, setLocationList] = useState<LaneMarkerState[]>([]);
+    const [sweepTick, setSweepTick] = useState(0);
+    const mobileAlarmMarkersRef = useRef<Map<string, L.CircleMarker>>(new Map());
+    const refreshMobileAlarmsRef = useRef<() => void>(() => {});
+    const pendingAlarmRefreshTimerRef = useRef<number | null>(null);
+    const mobileLaneSetRef = useRef<Set<string>>(new Set());
+    const laneMapRef = useRef(laneMap);
+    laneMapRef.current = laneMap;
+
+    const mobileAlarmStreamsKey = useMemo(() => {
+        const parts: string[] = [];
+        laneMap.forEach((lane) => {
+            if (!isMobileDetectorLane(lane)) return;
+            const occIds = lane.datastreams
+                .filter((ds) => isOccupancyDataStream(ds))
+                .map((ds) => String(ds?.properties?.id ?? ""))
+                .filter(Boolean)
+                .sort()
+                .join(",");
+            parts.push(`${lane.parentNode?.id ?? ""}\u001f${lane.laneName}\u001f${occIds}`);
+        });
+        return parts.sort().join("\u001e");
+    }, [laneMap]);
 
     locationListRef.current = locationList;
 
     const laneExtentSignature = useMemo(
-        () => buildLaneExtentSignature(locationList),
+        () => buildLaneExtentSignature(locationList.map((marker) => ({
+            laneName: marker.laneName,
+            location: fitLocationOf(marker),
+        }))),
         [locationList],
     );
 
@@ -100,7 +199,7 @@ export default function MapComponent() {
             hasUserAdjustedViewRef.current = false;
 
         const laneBoundsCoords = toLeafletLaneExtentBounds(
-            locationListRef.current.map((item) => item.location),
+            locationListRef.current.map(fitLocationOf),
         );
 
         if (laneBoundsCoords) {
@@ -148,13 +247,23 @@ export default function MapComponent() {
 
         let cancelled = false;
         const laneDSMap = new Map<string, LaneDSColl>();
+        const nextMobileSet = new Set<string>();
         const locationSources: Array<{
             laneName: string;
             dataStream: any | null;
             systemLocation: LaneMapLocation | null;
+            mobile: boolean;
         }> = [];
+        const seededAt = Date.now();
 
         for (const [laneName, lane] of laneMap.entries()) {
+            const mobile = isMobileDetectorLane(lane);
+            if (mobile && !showMobileUnits) {
+                continue;
+            }
+            if (mobile) {
+                nextMobileSet.add(laneName);
+            }
             const laneDSColl = new LaneDSColl();
             laneDSMap.set(laneName, laneDSColl);
 
@@ -174,16 +283,36 @@ export default function MapComponent() {
                     laneDSColl.addDS('tamperRT', realtimeSource);
                 if (realtimeSource && isConnectionDataStream(dataStream))
                     laneDSColl.addDS('connectionRT', realtimeSource);
+                if (realtimeSource && isMobileGpsDataStream(dataStream))
+                    laneDSColl.addDS('locRT', realtimeSource);
+                if (realtimeSource && isOccupancyDataStream(dataStream))
+                    laneDSColl.addDS('occRT', realtimeSource);
+                if (
+                    realtimeSource
+                    && (
+                        isForegroundDataStream(dataStream)
+                        || isBackgroundDataStream(dataStream)
+                        || isD5RadiometricStatusDataStream(dataStream)
+                        || isD5SpectrumDataStream(dataStream)
+                    )
+                ) {
+                    laneDSColl.addDS('foregroundRT', realtimeSource);
+                }
             });
 
-            const laneLocationStream = locationStreams.find((dataStream) =>
+            const gpsStream = mobile
+                ? (lane.datastreams.find((dataStream) => isMobileGpsDataStream(dataStream)) ?? null)
+                : null;
+            const laneLocationStream = gpsStream ?? locationStreams.find((dataStream) =>
                 dataStream?.properties?.["system@id"] === laneSystemId) ?? locationStreams[0] ?? null;
             locationSources.push({
                 laneName,
                 dataStream: laneLocationStream,
                 systemLocation: toLaneMapLocationFromSystem(lane.laneSystem),
+                mobile,
             });
         }
+        mobileLaneSetRef.current = nextMobileSet;
         setDataSourcesByLane(laneDSMap);
 
         // Seed lane markers immediately from the lane system GeoJSON geometry
@@ -192,27 +321,33 @@ export default function MapComponent() {
         setLocationList((current) => {
             const currentByLane = new Map(current.map((item) => [item.laneName, item]));
             return locationSources
-                .map(({laneName, systemLocation}) => {
+                .map(({laneName, systemLocation, mobile}) => {
                     const existing = currentByLane.get(laneName);
-                    const location = systemLocation ?? existing?.location ?? null;
+                    const location = (mobile && existing?.location) || systemLocation || existing?.location || null;
                     if (!location)
                         return null;
                     return {
                         laneName,
                         location,
                         status: existing?.status ?? 'None',
+                        ...(mobile ? {
+                            mobile: true,
+                            fitLocation: existing?.fitLocation ?? location,
+                            lastFixAt: existing?.lastFixAt ?? seededAt,
+                            alarmUntil: existing?.alarmUntil,
+                        } : {}),
                     } as LaneMarkerState;
                 })
                 .filter((marker): marker is LaneMarkerState => marker !== null);
         });
 
         const loadLatestLocations = async () => {
-            const markers = await Promise.all(locationSources.map(async ({laneName, dataStream, systemLocation}) => {
+            const markers = await Promise.all(locationSources.map(async ({laneName, dataStream, systemLocation, mobile}) => {
                 if (!dataStream) {
                     if (!systemLocation)
                         console.warn(`No configured location is available for lane ${laneName}`);
                     return systemLocation
-                        ? {laneName, location: systemLocation, status: 'None'} as LaneMarkerState
+                        ? {laneName, location: systemLocation, status: 'None', ...(mobile ? {mobile: true} : {})} as LaneMarkerState
                         : null;
                 }
 
@@ -225,11 +360,11 @@ export default function MapComponent() {
                         console.warn(`No valid latest location is available for lane ${laneName}`);
                         return null;
                     }
-                    return {laneName, location, status: 'None'} as LaneMarkerState;
+                    return {laneName, location, status: 'None', ...(mobile ? {mobile: true} : {})} as LaneMarkerState;
                 } catch (error) {
                     console.error(`Unable to load the latest location for lane ${laneName}`, error);
                     return systemLocation
-                        ? {laneName, location: systemLocation, status: 'None'} as LaneMarkerState
+                        ? {laneName, location: systemLocation, status: 'None', ...(mobile ? {mobile: true} : {})} as LaneMarkerState
                         : null;
                 }
             }));
@@ -237,17 +372,28 @@ export default function MapComponent() {
             if (cancelled) return;
             setLocationList((current) => markers
                 .filter((marker): marker is LaneMarkerState => marker !== null)
-                .map((marker) => ({
-                    ...marker,
-                    status: current.find((item) => item.laneName === marker.laneName)?.status ?? marker.status,
-                })));
+                .map((marker) => {
+                    const existing = current.find((item) => item.laneName === marker.laneName);
+                    if (!marker.mobile)
+                        return {...marker, status: existing?.status ?? marker.status};
+                    const liveFixArrived = existing?.lastFixAt != null && existing.lastFixAt > seededAt;
+                    const location = liveFixArrived ? existing!.location : marker.location;
+                    return {
+                        ...marker,
+                        location,
+                        status: existing?.status ?? marker.status,
+                        fitLocation: marker.location,
+                        lastFixAt: existing?.lastFixAt ?? seededAt,
+                        alarmUntil: existing?.alarmUntil,
+                    };
+                }));
         };
 
         void loadLatestLocations();
         return () => {
             cancelled = true;
         };
-    }, [laneMap, laneMapReady]);
+    }, [laneMap, laneMapReady, showMobileUnits]);
 
 
     const addSubscriptionCallbacks = useCallback(() => {
@@ -273,25 +419,77 @@ export default function MapComponent() {
             });
         };
 
+        const subscribedAt = Date.now();
         for (const [laneName, laneDSColl] of dataSourcesByLane.entries()) {
             const msgLaneName = laneName;
+            const isMobileLane = mobileLaneSetRef.current.has(msgLaneName);
+            if (!isMobileLane && laneDSColl.gammaRT.length + laneDSColl.neutronRT.length > 0)
+                deviceMessageAtRef.current.set(msgLaneName, subscribedAt);
+            const noteDeviceMessage = () => deviceMessageAtRef.current.set(msgLaneName, Date.now());
 
             subscribe(laneDSColl.connectionRT, (message: any) => {
-                const connection = message.values?.[0]?.data?.connection;
-                if (active && connection !== undefined)
-                    updateLocationList(msgLaneName, connection);
+                const data = message.values?.[0]?.data;
+                const connected = data?.isConnected ?? data?.connection;
+                if (!active || typeof connected !== "boolean") return;
+                updateLaneMarker(msgLaneName, (marker) => {
+                    if (!connected)
+                        return marker.status === 'Alarm' ? marker : {...marker, status: 'Offline'};
+                    return marker.status === 'Offline' && !isLaneSilent(msgLaneName, marker, Date.now())
+                        ? {...marker, status: 'None'}
+                        : marker;
+                });
             });
 
             subscribe(laneDSColl.gammaRT, (message: any) => {
+                noteDeviceMessage();
                 const alarmstate = message.values?.[0]?.data?.alarmState;
                 if (active && alarmstate !== undefined)
                     updateLocationList(msgLaneName, alarmstate);
             });
             subscribe(laneDSColl.neutronRT, (message: any) => {
+                noteDeviceMessage();
                 const alarmstate = message.values?.[0]?.data?.alarmState;
                 if (active && alarmstate !== undefined)
                     updateLocationList(msgLaneName, alarmstate);
             });
+
+            if (isMobileLane) {
+                subscribe(laneDSColl.locRT, (message: any) => {
+                    const location = toLaneMapLocation(message.values?.[0]?.data);
+                    if (!active || !location || (location.lat === 0 && location.lon === 0)) return;
+                    updateLaneMarker(msgLaneName, (marker) => ({
+                        ...marker,
+                        location,
+                        fitLocation: marker.fitLocation ?? location,
+                        lastFixAt: Date.now(),
+                        status: marker.status === 'Offline' ? 'None' : marker.status,
+                    }));
+                });
+                subscribe(laneDSColl.foregroundRT, () => {
+                    if (!active) return;
+                    updateLaneMarker(msgLaneName, (marker) => ({
+                        ...marker,
+                        lastFixAt: Date.now(),
+                        status: marker.status === 'Offline' ? 'None' : marker.status,
+                    }));
+                });
+                subscribe(laneDSColl.occRT, (message: any) => {
+                    const data = message.values?.[0]?.data;
+                    if (!active || !(data?.gammaAlarm || data?.neutronAlarm)) return;
+                    updateLaneMarker(msgLaneName, (marker) => ({
+                        ...marker,
+                        lastFixAt: Date.now(),
+                        alarmUntil: Date.now() + MOBILE_ALARM_FLASH_MS,
+                    }));
+                    if (pendingAlarmRefreshTimerRef.current !== null) {
+                        window.clearTimeout(pendingAlarmRefreshTimerRef.current);
+                    }
+                    pendingAlarmRefreshTimerRef.current = window.setTimeout(() => {
+                        pendingAlarmRefreshTimerRef.current = null;
+                        if (active) refreshMobileAlarmsRef.current();
+                    }, 2_000);
+                });
+            }
             subscribe(laneDSColl.tamperRT, (message: any) => {
                 const tamperState = message.values?.[0]?.data?.tamperStatus;
                 if (active && tamperState)
@@ -301,6 +499,10 @@ export default function MapComponent() {
 
         return () => {
             active = false;
+            if (pendingAlarmRefreshTimerRef.current !== null) {
+                window.clearTimeout(pendingAlarmRefreshTimerRef.current);
+                pendingAlarmRefreshTimerRef.current = null;
+            }
             subscriptions.forEach(({source, handler, lease}) => {
                 removeRealtimeEventSubscription(source, handler);
                 void lease.release().catch((error) => {
@@ -314,6 +516,189 @@ export default function MapComponent() {
         if (dataSourcesByLane.size === 0) return;
         return addSubscriptionCallbacks();
     }, [addSubscriptionCallbacks, dataSourcesByLane]);
+
+    // Silence sweep: transitions markers whose device streams have stopped publishing.
+    useEffect(() => {
+        if (dataSourcesByLane.size === 0) return;
+        const sweep = () => {
+            const now = Date.now();
+            setLocationList((current) => {
+                let changed = false;
+                const next = current.map((marker) => {
+                    if (marker.mobile || marker.status === 'Alarm' || marker.status === 'Offline'
+                        || !isLaneSilent(marker.laneName, marker, now))
+                        return marker;
+                    changed = true;
+                    return {...marker, status: 'Offline'};
+                });
+                return changed ? next : current;
+            });
+            setSweepTick((tick) => tick + 1);
+        };
+        const timer = window.setInterval(sweep, MOBILE_SWEEP_MS);
+        const onVisible = () => { if (document.visibilityState === 'visible') sweep(); };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [dataSourcesByLane]);
+
+    // Batched unadjudicated mobile alarms per node, bounded by phenomenonTime and resultTime.
+    useEffect(() => {
+        const view = leafletViewRef.current;
+        const markers = mobileAlarmMarkersRef.current;
+        if (!view?.map || !isInit || !showMobileUnits || !showAlarmMarkers) {
+            refreshMobileAlarmsRef.current = () => {};
+            markers.forEach((marker) => marker.remove());
+            markers.clear();
+            return;
+        }
+        if (!mobileAlarmStreamsKey) {
+            refreshMobileAlarmsRef.current = () => {};
+            markers.forEach((marker) => marker.remove());
+            markers.clear();
+            return;
+        }
+
+        let cancelled = false;
+        let inFlight = false;
+        let activeAbortController: AbortController | null = null;
+
+        const refresh = async () => {
+            if (inFlight || cancelled) return;
+            const mobileLanes = Array.from(laneMapRef.current.values()).filter((lane) => isMobileDetectorLane(lane));
+            if (mobileLanes.length === 0) return;
+            inFlight = true;
+            const controller = new AbortController();
+            activeAbortController = controller;
+            try {
+                const seen = new Set<string>();
+                const windowStart = resolveAlarmWindowStartIso(alarmTimeWindow);
+                const nowIso = new Date().toISOString();
+
+                const byNode = new Map<string, {
+                    node: INode;
+                    occupancyIds: string[];
+                    laneByStreamId: Map<string, LaneMapEntry>;
+                    laneNames: string[];
+                }>();
+                for (const lane of mobileLanes) {
+                    const nodeId = lane.parentNode?.id;
+                    if (!nodeId) continue;
+                    const occStreams = lane.datastreams.filter((ds) => isOccupancyDataStream(ds));
+                    if (occStreams.length === 0) continue;
+                    let group = byNode.get(nodeId);
+                    if (!group) {
+                        group = {
+                            node: lane.parentNode,
+                            occupancyIds: [],
+                            laneByStreamId: new Map(),
+                            laneNames: [],
+                        };
+                        byNode.set(nodeId, group);
+                    }
+                    group.laneNames.push(lane.laneName);
+                    for (const ds of occStreams) {
+                        const streamId = ds?.properties?.id;
+                        if (typeof streamId === "string" && streamId.length > 0) {
+                            group.occupancyIds.push(streamId);
+                            group.laneByStreamId.set(streamId, lane);
+                        }
+                    }
+                }
+
+                await Promise.all(Array.from(byNode.values()).map(async ({node, occupancyIds, laneByStreamId, laneNames}) => {
+                    if (occupancyIds.length === 0) return;
+                    try {
+                        const api = await node.getObservationsApi();
+                        const collection = await api.searchObservations(new ObservationFilter({
+                            dataStream: occupancyIds,
+                            phenomenonTime: `${windowStart}/${nowIso}`,
+                            resultTime: `${windowStart}/${nowIso}`,
+                            filter: encodeURIComponent(UNADJUDICATED_ALARM_FILTER),
+                            order: "desc",
+                        }), MOBILE_ALARM_QUERY_LIMIT);
+                        const observations = typeof collection?.fetchData === "function"
+                            ? await fetchCollectionDataWithSignal(collection, controller.signal)
+                            : await collection.nextPage();
+                        if (cancelled || controller.signal.aborted) return;
+                        (observations ?? []).forEach((observation: any) => {
+                            const obsId = observation?.properties?.id ?? observation?.id;
+                            const streamId = observation?.properties?.["datastream@id"] ?? observation?.["datastream@id"];
+                            const lane = (typeof streamId === "string" ? laneByStreamId.get(streamId) : undefined)
+                                ?? (laneByStreamId.size === 1 ? Array.from(laneByStreamId.values())[0] : undefined);
+                            if (!lane) return;
+                            const result = observation?.properties?.result ?? observation?.result;
+                            const position = mobileAlarmPosition(result);
+                            if (!obsId || !position) return;
+                            const key = `${lane.laneName}\u001f${obsId}`;
+                            seen.add(key);
+                            if (markers.has(key)) return;
+                            const kind = t('status.alarm');
+                            const href = scopedHref(buildEventDetailsHref(obsId, lane.parentNode?.id));
+                            const when = result?.startTime ? new Date(result.startTime).toLocaleString() : '';
+                            const marker = L.circleMarker([position.lat, position.lon], {
+                                className: 'mobile-alarm-marker',
+                                radius: 7,
+                                weight: 2,
+                                color: MOBILE_ALARM_COLOR,
+                                fillColor: MOBILE_ALARM_COLOR,
+                                fillOpacity: 0.15,
+                                pane: LANE_MARKER_PANE,
+                            }).addTo(view.map);
+                            marker.bindPopup(
+                                buildMobileAlarmPopupHtml({
+                                    laneName: lane.laneName,
+                                    kind,
+                                    when,
+                                    href,
+                                    viewEventLabel: t('viewEvent'),
+                                }),
+                            );
+                            marker.getElement()?.setAttribute('data-occ-obs', obsId);
+                            markers.set(key, marker);
+                        });
+                    } catch (error) {
+                        if (cancelled || controller.signal.aborted || isAbortRequestError(error)) return;
+                        console.warn(`Unable to load mobile alarms for node ${node.name}`, error);
+                        markers.forEach((_marker, key) => {
+                            if (laneNames.some((ln) => key.startsWith(`${ln}\u001f`))) {
+                                seen.add(key);
+                            }
+                        });
+                    }
+                }));
+                if (cancelled || controller.signal.aborted) return;
+                markers.forEach((marker, key) => {
+                    if (!seen.has(key)) {
+                        marker.remove();
+                        markers.delete(key);
+                    }
+                });
+            } finally {
+                if (activeAbortController === controller) {
+                    activeAbortController = null;
+                }
+                inFlight = false;
+            }
+        };
+        refreshMobileAlarmsRef.current = () => { void refresh(); };
+        void refresh();
+        const timer = window.setInterval(() => { void refresh(); }, MOBILE_ALARM_REFRESH_MS);
+        const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            cancelled = true;
+            activeAbortController?.abort();
+            activeAbortController = null;
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisible);
+            refreshMobileAlarmsRef.current = () => {};
+            markers.forEach((marker) => marker.remove());
+            markers.clear();
+        };
+    }, [alarmTimeWindow, isInit, mobileAlarmStreamsKey, scopedHref, showAlarmMarkers, showMobileUnits, t]);
 
     useEffect(() => {
         if (!leafletViewRef.current && !isInit) {
@@ -354,6 +739,17 @@ export default function MapComponent() {
             };
             view.map.on("dragstart", markUserAdjustedView);
             view.map.on("zoomstart", markUserAdjustedView);
+            view.map.on("popupopen", (evt: any) => {
+                const popupEl: HTMLElement | undefined = evt?.popup?.getElement?.();
+                if (!popupEl) return;
+                popupEl.querySelectorAll<HTMLButtonElement>(".popup-button[data-nav-href]").forEach((btn) => {
+                    btn.onclick = (clickEvt) => {
+                        clickEvt.preventDefault();
+                        const dest = btn.getAttribute("data-nav-href");
+                        if (dest) router.push(dest);
+                    };
+                });
+            });
 
             const siteDiagramPane = view.map.createPane(SITE_DIAGRAM_PANE);
             siteDiagramPane.style.zIndex = String(SITE_DIAGRAM_PANE_Z_INDEX);
@@ -461,14 +857,30 @@ export default function MapComponent() {
         if (!view || !isInit) return;
 
         const renderedLaneNames = new Set<string>();
-        locationList.forEach(({laneName, location, status}) => {
+        const now = Date.now();
+        locationList.forEach((laneMarker) => {
+            const {laneName, location, status} = laneMarker;
             renderedLaneNames.add(laneName);
-            const iconPath = getMarkerIcon(status);
-            const markerIcon = L.icon({
-                iconUrl: iconPath,
-                iconSize: LANE_MARKER_ICON_SIZE,
-                iconAnchor: LANE_MARKER_ICON_ANCHOR,
-            });
+            let markerIcon: L.Icon | L.DivIcon;
+            if (laneMarker.mobile) {
+                const state = walkerState(laneMarker.lastFixAt, laneMarker.alarmUntil, status === 'Offline', now);
+                const title = state === 'offline' && laneMarker.lastFixAt != null
+                    ? `${laneName} — ${t('mobileNoDataSince', {time: new Date(laneMarker.lastFixAt).toLocaleTimeString()})}`
+                    : laneName;
+                markerIcon = L.divIcon({
+                    className: 'mobile-unit-marker',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15],
+                    popupAnchor: [0, -14],
+                    html: walkerIconHtml(state, title),
+                });
+            } else {
+                markerIcon = L.icon({
+                    iconUrl: getMarkerIcon(status),
+                    iconSize: LANE_MARKER_ICON_SIZE,
+                    iconAnchor: LANE_MARKER_ICON_ANCHOR,
+                });
+            }
             let marker = laneMarkerLayersRef.current.get(laneName);
 
             if (!marker) {
@@ -479,7 +891,7 @@ export default function MapComponent() {
                     title: laneName,
                     alt: laneName,
                 }).addTo(view.map);
-                marker.bindTooltip(`<div class='popup-text-lane'>${laneName}</div>`, {
+                marker.bindTooltip(`<div class='popup-text-lane'>${escapeHtml(laneName)}</div>`, {
                     direction: 'center',
                     offset: L.point(-5, -15),
                 });
@@ -502,7 +914,7 @@ export default function MapComponent() {
                 laneMarkerLayersRef.current.delete(laneName);
             }
         });
-    }, [locationList, isInit, language, t]);
+    }, [locationList, isInit, language, t, sweepTick]);
 
     useEffect(() => {
         if (!isInit || !laneExtentSignature)
@@ -667,15 +1079,31 @@ export default function MapComponent() {
         };
     }, [fitMapToActiveExtent, isInit, laneMap, laneMapReady, nodes, language]);
 
-    const updateLocationList = (laneName: string, newStatus: string) => {
-        setLocationList((prevState) => {
-            const updatedList = prevState.map((data) =>
-                data.laneName === laneName ? {...data, status: newStatus} : data
-            );
+    const deviceMessageAtRef = useRef<Map<string, number>>(new Map());
 
-            return updatedList;
+    const isLaneSilent = (laneName: string, marker: LaneMarkerState, now: number): boolean => {
+        if (marker.mobile)
+            return walkerState(marker.lastFixAt, undefined, false, now) === 'offline';
+        const last = deviceMessageAtRef.current.get(laneName);
+        return last != null && now - last > LANE_SILENCE_THRESHOLD_MS;
+    };
+
+    const updateLaneMarker = (laneName: string, updater: (marker: LaneMarkerState) => LaneMarkerState) => {
+        setLocationList((prevState) => {
+            let changed = false;
+            const next = prevState.map((data) => {
+                if (data.laneName !== laneName) return data;
+                const updated = updater(data);
+                changed ||= updated !== data;
+                return updated;
+            });
+            return changed ? next : prevState;
         });
     };
+
+    const updateLocationList = (laneName: string, newStatus: string) =>
+        updateLaneMarker(laneName, (marker) =>
+            marker.status === newStatus ? marker : {...marker, status: newStatus});
 
     function getMarkerIcon(status: string) {
         const normalizedStatus = typeof status === 'string' ? status : '';
@@ -689,19 +1117,22 @@ export default function MapComponent() {
     function getContent(status: string) {
         const normalizedStatus = typeof status === 'string' && status ? status : 'None';
         const statusKey = normalizedStatus.toLowerCase().replace(/[ -]/g, '');
+        const safeStatus = escapeHtml(t('statusValue', {status: t(`status.${statusKey}`)}));
+        const safeHref = escapeHtml(scopedHref('/lane-view'));
+        const safeLabel = escapeHtml(t('viewLane'));
 
         return (
             `<div id='popup-data-layer' class='point-popup'><hr/>
-                <h3 class='popup-text-status'>${t('statusValue', {status: t(`status.${statusKey}`)})}</h3>
-                <button onClick='location.href="${scopedHref('/lane-view')}"' class="popup-button" type="button">${t('viewLane')}</button>
+                <h3 class='popup-text-status'>${safeStatus}</h3>
+                <button data-nav-href="${safeHref}" class="popup-button" type="button">${safeLabel}</button>
             </div>`
         );
     }
 
     return (
         <Box
-            id="mapcontainer"
-            sx={{width: '100%', height: '100vh'}}
+            id={mapcontainer}
+            sx={{width: '100%', height}}
         />
     );
 }

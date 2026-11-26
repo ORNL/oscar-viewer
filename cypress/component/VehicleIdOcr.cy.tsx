@@ -176,6 +176,24 @@ describe("Vehicle ID OCR ISO 6346 validation, threshold-hybrid auto-fill, and ch
         expect(singleFrameSynthesized!.isoChecksumValid).to.equal(false);
         expect(selectAutoFillCandidate([singleFrameSynthesized!])).to.equal(null);
 
+        // Single-frame optically read 11th check digit with positional glyph coercion ('I' -> '1') auto-fills.
+        const singleFrameCoercedCheck = VehicleOcrResult.fromObservation({
+            id: "ocr-obs-coerced-check",
+            resultTime: "2026-11-14T00:00:06Z",
+            result: {
+                occupancyObsId: "obs-42",
+                idType: "container",
+                value: "SEGU 464776 I",
+                normalizedValue: "SEGU4647761",
+                checksumValid: true,
+                confidence: 0.90,
+                readCount: 1,
+            },
+        });
+        expect(singleFrameCoercedCheck).to.not.equal(null);
+        expect(singleFrameCoercedCheck!.isoChecksumValid).to.equal(true);
+        expect(selectAutoFillCandidate([singleFrameCoercedCheck!])?.value).to.equal("SEGU4647761");
+
         const lowPlate: IVehicleOcrResult = {
             id: "p-low",
             time: "2026-11-14T00:00:06Z",

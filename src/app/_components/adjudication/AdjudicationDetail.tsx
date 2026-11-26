@@ -79,6 +79,7 @@ import WebIdAnalysisResult from "@/lib/data/oscar/adjudication/WebId";
 import {useSelector} from "react-redux";
 import {RootState} from "@/lib/state/Store";
 import {selectLaneMap} from "@/lib/state/OSCARLaneSlice";
+import {selectNodes} from "@/lib/state/OSHSlice";
 import {randomUUID} from "osh-js/source/core/utils/Utils";
 import { useBreakpoint } from "@/app/providers";
 import N42Detail from "@/app/_components/n42/N42Detail";
@@ -170,10 +171,19 @@ export default function AdjudicationDetail(props: {
     const {laneMapRef, activeViewKey, currentSession} = useContext(DataSourceContext);
     const isReadOnlyViewer = Boolean(currentSession?.isReadOnly);
     const laneMap = useSelector((state: RootState) => selectLaneMap(state));
+    const configuredNodes = useSelector(selectNodes);
     const laneUid = laneMap.get(props.event?.laneId)?.laneSystem?.properties?.properties?.uid;
     const effectiveLaneMap = laneMapRef?.current && laneMapRef.current.size > 0
         ? laneMapRef.current
         : laneMap;
+    const federatedNodesForSearch = useMemo(() => {
+        if (configuredNodes.length === 0 || !effectiveLaneMap || effectiveLaneMap.size === 0) return undefined;
+        const configuredIds = new Set(configuredNodes.map((node: INode) => node?.id).filter(Boolean));
+        const laneMapMatchesStore = Array.from(effectiveLaneMap.values()).some(
+            lane => Boolean(lane?.parentNode?.id && configuredIds.has(lane.parentNode.id)),
+        );
+        return laneMapMatchesStore ? configuredNodes : undefined;
+    }, [configuredNodes, effectiveLaneMap]);
 
     const adjudication = props.event ? new AdjudicationData(new Date().toISOString(), props.event.occupancyCount, props.event.occupancyObsId) : null;
     const [adjData, setAdjData] = useState<AdjudicationData>(adjudication);
@@ -335,38 +345,61 @@ export default function AdjudicationDetail(props: {
         () => new Date(Date.now() - VEHICLE_SEARCH_WINDOW_MS["30d"]).toISOString(),
         [effectiveCorrelationVehicleId, relatedSearchNonce],
     );
+    const effectiveLaneMapRef = useRef(effectiveLaneMap);
+    effectiveLaneMapRef.current = effectiveLaneMap;
+    const effectiveLaneTopologyKey = useMemo(
+        () => (effectiveLaneMap && effectiveLaneMap.size > 0
+            ? Array.from(effectiveLaneMap.keys()).sort().join("\u001f")
+            : ""),
+        [effectiveLaneMap],
+    );
 
     useEffect(() => {
         const normalized = normalizeVehicleId(effectiveCorrelationVehicleId);
-        if (normalized.length < 3 || !effectiveLaneMap || effectiveLaneMap.size === 0) {
+        const currentLaneMap = effectiveLaneMapRef.current;
+        if (normalized.length < 3 || !effectiveLaneTopologyKey || !currentLaneMap || currentLaneMap.size === 0) {
             setRelatedVehicleResult(null);
             return;
         }
         const controller = new AbortController();
-        void searchVehiclePassesAcrossNodes({
-            laneMap: effectiveLaneMap,
-            vehicleId: effectiveCorrelationVehicleId,
-            matchMode: "equals",
-            activeViewKey,
-            startTimeIso: relatedVehicleStartTimeIso,
-            signal: controller.signal,
-            fetchImpl: props.ocrFetchImpl,
-        })
-            .then(res => {
-                if (!controller.signal.aborted) {
-                    setRelatedVehicleResult(res);
-                }
+        const runSearch = () => {
+            const latestLaneMap = effectiveLaneMapRef.current;
+            if (!latestLaneMap || latestLaneMap.size === 0 || controller.signal.aborted) return;
+            void searchVehiclePassesAcrossNodes({
+                laneMap: latestLaneMap,
+                nodes: federatedNodesForSearch,
+                vehicleId: effectiveCorrelationVehicleId,
+                matchMode: "equals",
+                activeViewKey,
+                startTimeIso: relatedVehicleStartTimeIso,
+                signal: controller.signal,
+                fetchImpl: props.ocrFetchImpl,
             })
-            .catch((): void => {
-                if (!controller.signal.aborted) {
-                    setRelatedVehicleResult(null);
-                }
-            });
-        return () => controller.abort();
+                .then(res => {
+                    if (!controller.signal.aborted) {
+                        setRelatedVehicleResult(res);
+                    }
+                })
+                .catch((): void => {
+                    if (!controller.signal.aborted) {
+                        setRelatedVehicleResult(null);
+                    }
+                });
+        };
+        if (props.ocrFetchImpl || typeof window === "undefined") {
+            runSearch();
+            return () => controller.abort();
+        }
+        const settleTimer = window.setTimeout(runSearch, 150);
+        return () => {
+            window.clearTimeout(settleTimer);
+            controller.abort();
+        };
     }, [
         activeViewKey,
         effectiveCorrelationVehicleId,
-        effectiveLaneMap,
+        effectiveLaneTopologyKey,
+        federatedNodesForSearch,
         props.ocrFetchImpl,
         relatedVehicleStartTimeIso,
     ]);
@@ -2191,6 +2224,7 @@ export default function AdjudicationDetail(props: {
                     vehicleId={effectiveCorrelationVehicleId}
                     matchMode="equals"
                     laneMap={effectiveLaneMap}
+                    nodes={federatedNodesForSearch}
                     activeViewKey={activeViewKey}
                     startTimeIso={relatedVehicleStartTimeIso}
                     initialResult={relatedVehicleResult}

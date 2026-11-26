@@ -139,7 +139,7 @@ interface LocalizedHelpContent {
 
 const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
     en: {
-        dialogTitle: 'OSCAR 3.11.15 Operator Quick Guide & Glossary',
+        dialogTitle: 'OSCAR 3.12.0 Operator Quick Guide & Glossary',
         dialogSubtitle: 'Plain-language reference for console workflows, multi-format reports, and radiation portal terminology.',
         tabs: {
             pages: 'Console Pages',
@@ -290,7 +290,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Parquet Cold Tier (`PARQUET_PRIMARY`)',
-                meaning: 'Default storage mode where completed 30-minute PostgreSQL staging partitions across all 22 operational and evidentiary outputs (including `vehicleOcr`) are exported to ZSTD-compressed Apache Parquet files for compact long-term retention.',
+                meaning: 'Default storage mode where completed 30-minute PostgreSQL staging partitions across all 26 operational and evidentiary outputs (including `vehicleOcr` and mobile detector streams) split directly at export into ZSTD-compressed Apache Parquet V2 profiles: write-once `RAW_TELEMETRY` (high-rate 1 Hz streams written once and never rewritten) and Bloom-indexed `RAW_EVENTS` (the 9 searchable event/summary streams, compacted into `DAILY_EVENTS` and `MONTHLY_EVENTS`).',
             },
             {
                 term: 'Container & License Plate OCR (`ocrConfig`)',
@@ -318,7 +318,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Hands-On Training Sandbox & Guided Academy (`oscar-sandbox`)',
-                meaning: 'Isolated ephemeral `:8444` training environment (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) reusing the installed OSCAR image with `archive.enabled = false`, zero writes to production PostgreSQL/Parquet/`config.json`, a built-in loopback Rapiscan + RTSP + OCR + Cargo UFF + `WebRelay-Quad` (`127.0.0.1:10180`) micro-emulator, a multi-modal Training Coach (4-language videos, screenshots, destination-aware 1-click fault/alarm injection that opens `/event-log` for `Code 9999` / `Code 9998` / `Clean Pass` and `/health` for faults, Split-Pane SensorHub Admin, outcome auto-verification, and 1-page PDF Completion Record), and complete `< 2 s` flush on exit.',
+                meaning: 'Isolated ephemeral `:8444` training environment (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) reusing the installed OSCAR image with `archive.enabled = false`, zero writes to production PostgreSQL/Parquet/`config.json`, a built-in loopback Rapiscan + RTSP + OCR + Cargo UFF + `WebRelay-Quad` (`127.0.0.1:10180`) + `RS-350` mobile walker (`127.0.0.1:10110`) micro-emulator, a multi-modal Training Coach (4-language videos, screenshots, destination-aware 1-click fault/alarm injection that opens `/event-log` for `Code 9999` / `Code 9998` / `Clean Pass` and `/health` for faults, Split-Pane SensorHub Admin, outcome auto-verification, and 1-page PDF Completion Record), and complete `< 2 s` flush on exit.',
             },
             {
                 term: 'RPM Lights & Sound (`webRelayConfig` — WebRelay-Quad)',
@@ -328,12 +328,20 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Side-by-Side CAS RPM Edge Proxy (`oscar-rpm-proxy`)',
                 meaning: 'Optional isolated Docker stack (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) for portals operating OSCAR alongside an existing Central Alarm Station (CAS). Fans out `1–50` single-client Rapiscan RPM TCP streams simultaneously at `< 1 ms` latency using Port-Mapped (`11601..11650`) or Ubuntu 24.04 Transparent Virtual-IP `:1600` mode, replays cached `SG1..SG3` / `SN1..SN2` setup frames, keeps CAS connected across OSCAR restarts/upgrades, and propagates physical RPM disconnects to both systems in `<= 4.0 s`.',
             },
+            {
+                term: 'Custom Dashboards (/dashboards)',
+                meaning: 'Opt-in operator workspace (`/dashboards`) for building, rearranging, and sharing multi-widget wallboards from starter templates (`Multi-Lane Wallboard`, `Alarm & Map Overview`, `Statistics Overview`) or blank 12-column grids. Scopes layouts per operator and Operational View, enforces scale-safe per-page caps (`<= 4` live video streams, `<= 6` live count-rate charts, `<= 512 KiB` JSON import, and `>= 60 s` or manual statistics refresh), and leaves the built-in `/` Dashboard untouched.',
+            },
+            {
+                term: 'Mobile Detector System',
+                meaning: 'First-class SensorHub system module (`MobileDetectorSystem`, `urn:osh:system:lane:*`) for roving radiation walkers (`RS-350 Backpack` TCP ANSI N42.42 and `Kromek D5`). Enables live child GPS `location` breadcrumb trails and georeferenced alarm pins on `/map`, renders 1,024-channel gamma energy spectra and dose-rate telemetry (plus graceful `Indoor / GPS unavailable` liveness) in `/lane-view`, and suppresses fixed-portal camera, OCR, WebRelay, and Extended Occupancy options.',
+            },
         ],
         linksIntro: 'Open the full administrator manual in SensorHub Admin or watch the bite-sized how-to video guides:',
         adminLinkLabel: 'Open SensorHub Admin & In-UI Operator Manual (`/sensorhub/admin`)',
         adminLinkDesc: 'Requires administrator sign-in. Select OSCAR Service or any sensor module and open its README tab for the localized manual.',
         videoGuidesLinkLabel: 'Open OSCAR How-To Video Guides (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '29 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, Hands-On Training Sandbox, per-lane WebRelay RPM Lights & Sound control, USB NVMe backups, pluggable extensions, offline .pmtiles maps, WCO Cargo UFF 16-bit X-ray inspection, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
+        videoGuidesLinkDesc: '33 bite-sized (< 2 min) narrated/captioned screen recordings covering Ubuntu & Windows field setup, Hands-On Training Sandbox, Custom Dashboards (/dashboards), Mobile Radiation Detectors (RS-350 & Kromek D5), per-lane WebRelay RPM Lights & Sound control, USB NVMe backups, pluggable extensions, offline .pmtiles maps, WCO Cargo UFF 16-bit X-ray inspection, lane setup, adjudication, EML, Vehicle OCR, Users & Passkeys, federation, support bundles, and multi-format reports.',
         supportBundleTitle: 'Troubleshooting & Support Bundle (`.zip`)',
         supportBundleDesc: 'Downloads a single diagnostic `.zip` combining recent browser console/network diagnostics with OSCAR server logs, module states, and JVM/storage health. If the server cannot be reached or fails to start, run `./oscar.sh support-bundle` (Linux) or `oscar.bat support-bundle` (Windows) on the host.',
         supportBundlePrivacyNote: 'Privacy & security: collected only to diagnose technical issues; passwords, tokens, session cookies, RTSP credentials, and private keys are automatically scrubbed.',
@@ -344,7 +352,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Close',
     },
     es: {
-        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.11.15',
+        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.12.0',
         dialogSubtitle: 'Referencia en lenguaje claro para flujos de consola, informes multiformato y terminología de pórticos de radiación.',
         tabs: {
             pages: 'Páginas de consola',
@@ -495,7 +503,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Nivel frío Parquet (`PARQUET_PRIMARY`)',
-                meaning: 'Modo predeterminado donde las particiones de 30 minutos de PostgreSQL de las 22 salidas operativas y probatorias (incluido `vehicleOcr`) se exportan a archivos Apache Parquet comprimidos con ZSTD.',
+                meaning: 'Modo predeterminado donde las particiones de 30 minutos de PostgreSQL de las 26 salidas operativas y probatorias (incluidos `vehicleOcr` y detectores móviles) se dividen directamente al exportar en perfiles Apache Parquet V2 con ZSTD: `RAW_TELEMETRY` de escritura única (flujos de 1 Hz escritos una sola vez) y `RAW_EVENTS` con filtros Bloom (las 9 salidas de eventos buscables, compactadas en `DAILY_EVENTS` y `MONTHLY_EVENTS`).',
             },
             {
                 term: 'OCR de contenedores y matrículas (`ocrConfig`)',
@@ -523,7 +531,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Entorno práctico de formación y academia guiada (`oscar-sandbox`)',
-                meaning: 'Entorno efímero aislado en `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) con `archive.enabled = false`, cero impacto en PostgreSQL/Parquet/`config.json` reales, microemulador local Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`), Guía de Práctica multimodal (vídeos en 4 idiomas, inyección guiada que abre `/event-log` para `Code 9999` / `Code 9998` / `Clean Pass` y `/health` para fallos), SensorHub Admin en pantalla dividida, verificación automática, certificado PDF de 1 página y purga completa en `< 2 s` al salir.',
+                meaning: 'Entorno efímero aislado en `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) con `archive.enabled = false`, cero impacto en PostgreSQL/Parquet/`config.json` reales, microemulador local Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`) + detector móvil `RS-350` (`127.0.0.1:10110`), Guía de Práctica multimodal (vídeos en 4 idiomas, inyección guiada que abre `/event-log` para `Code 9999` / `Code 9998` / `Clean Pass` y `/health` para fallos), SensorHub Admin en pantalla dividida, verificación automática, certificado PDF de 1 página y purga completa en `< 2 s` al salir.',
             },
             {
                 term: 'Luces y sonido del RPM (`webRelayConfig` — WebRelay-Quad)',
@@ -533,12 +541,20 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Proxy de borde RPM para operación paralela con CAS (`oscar-rpm-proxy`)',
                 meaning: 'Pila Docker aislada opcional (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) para operar OSCAR en paralelo con una estación central de alarmas (CAS) existente. Distribuye `1–50` flujos TCP Rapiscan RPM en tiempo real (`< 1 ms`) mediante puertos mapeados (`11601..11650`) o IP virtual transparente `:1600` en Ubuntu 24.04, reproduce tramas `SG1..SG3` / `SN1..SN2`, mantiene la CAS conectada durante reinicios/actualizaciones de OSCAR y propaga desconexiones reales del RPM en `<= 4,0 s`.',
             },
+            {
+                term: 'Paneles personalizados (Custom Dashboards `/dashboards`)',
+                meaning: 'Espacio de trabajo opcional (`/dashboards`) para crear, reorganizar y compartir murales de widgets a partir de plantillas rápidas (`Multi-Lane Wallboard`, `Alarm & Map Overview`, `Statistics Overview`) o cuadrículas en blanco de 12 columnas. Aísla los diseños por operador y Vista operativa, aplica límites seguros por página (`<= 4` vídeos en vivo, `<= 6` gráficos en vivo, `<= 512 KiB` al importar JSON y actualización estadística `>= 60 s` o manual) y mantiene intacto el panel principal `/`.',
+            },
+            {
+                term: 'Sistema de detector móvil (Mobile Detector System)',
+                meaning: 'Módulo de sistema de SensorHub (`MobileDetectorSystem`, `urn:osh:system:lane:*`) para patrullas móviles de radiación (`RS-350 Backpack` TCP ANSI N42.42 y `Kromek D5`). Publica trazas GPS `location` en vivo y marcadores de alarma georreferenciados en `/map`, muestra espectros gamma de 1.024 canales y tasa de dosis (con estado interior sin GPS `Indoor / GPS unavailable`) en `/lane-view`, y omite opciones exclusivas de pórtico fijo (cámaras, OCR, WebRelay y ocupación prolongada).',
+            },
         ],
         linksIntro: 'Abra el manual completo de administración o consulte las videoguías prácticas:',
         adminLinkLabel: 'Abrir administración de SensorHub y manual integrado (`/sensorhub/admin`)',
         adminLinkDesc: 'Requiere cuenta de administrador. Seleccione el Servicio OSCAR o cualquier módulo y abra la pestaña README.',
         videoGuidesLinkLabel: 'Abrir videoguías prácticas de OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '29 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, entorno práctico de formación, luces y sonido RPM por carril (WebRelay-Quad), copias USB NVMe, extensiones, mapas .pmtiles sin conexión, radiografías WCO Cargo UFF de 16 bits, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
+        videoGuidesLinkDesc: '33 vídeos cortos (< 2 min) con subtítulos sobre preparación de campo Ubuntu/Windows, entorno práctico de formación, paneles personalizados (/dashboards), detectores móviles (RS-350 y Kromek D5), luces y sonido RPM por carril (WebRelay-Quad), copias USB NVMe, extensiones, mapas .pmtiles sin conexión, radiografías WCO Cargo UFF de 16 bits, carriles, adjudicación, EML, OCR de vehículos, usuarios y Passkeys, federación, soporte e informes.',
         supportBundleTitle: 'Diagnóstico y paquete de soporte (`.zip`)',
         supportBundleDesc: 'Descarga un archivo `.zip` de diagnóstico que combina eventos recientes del navegador con registros del servidor OSCAR, estado de módulos y salud de JVM/almacenamiento. Si el servidor no responde o no arranca, ejecute `./oscar.sh support-bundle` (Linux) u `oscar.bat support-bundle` (Windows) en el servidor.',
         supportBundlePrivacyNote: 'Privacidad y seguridad: se recopila únicamente para diagnosticar incidencias técnicas; contraseñas, tokens, cookies de sesión, credenciales RTSP y claves privadas se redactan automáticamente.',
@@ -549,7 +565,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Cerrar',
     },
     fr: {
-        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.11.15',
+        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.12.0',
         dialogSubtitle: 'Référence en langage clair pour les flux de console, les rapports multiformats et la terminologie des portiques.',
         tabs: {
             pages: 'Pages de la console',
@@ -700,7 +716,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Niveau froid Parquet (`PARQUET_PRIMARY`)',
-                meaning: 'Mode par défaut où les partitions PostgreSQL de 30 minutes des 22 flux opérationnels et probants (dont `vehicleOcr`) sont exportées en fichiers Apache Parquet compressés ZSTD.',
+                meaning: 'Mode par défaut où les partitions PostgreSQL de 30 minutes des 26 flux opérationnels et probants (dont `vehicleOcr` et les détecteurs mobiles) sont scindées dès l’export en profils Apache Parquet V2 compressés ZSTD : `RAW_TELEMETRY` en écriture unique (flux 1 Hz jamais réécrits) et `RAW_EVENTS` avec filtres Bloom (les 9 flux d’événements consultables, compactés en `DAILY_EVENTS` puis `MONTHLY_EVENTS`).',
             },
             {
                 term: 'OCR conteneurs et plaques (`ocrConfig`)',
@@ -728,7 +744,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Bac à sable de formation pratique et académie guidée (`oscar-sandbox`)',
-                meaning: 'Environnement éphémère isolé sur `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) avec `archive.enabled = false`, zéro écriture dans PostgreSQL/Parquet/`config.json` réels, micro-émulateur local Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`), Coach Formation multimodal (vidéos en 4 langues, injection guidée ouvrant `/event-log` pour `Code 9999` / `Code 9998` / `Clean Pass` et `/health` pour les défauts), SensorHub Admin en vue partagée, auto-vérification, certificat PDF d’une page et purge complète en `< 2 s` à la fermeture.',
+                meaning: 'Environnement éphémère isolé sur `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) avec `archive.enabled = false`, zéro écriture dans PostgreSQL/Parquet/`config.json` réels, micro-émulateur local Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`) + détecteur mobile `RS-350` (`127.0.0.1:10110`), Coach Formation multimodal (vidéos en 4 langues, injection guidée ouvrant `/event-log` pour `Code 9999` / `Code 9998` / `Clean Pass` et `/health` pour les défauts), SensorHub Admin en vue partagée, auto-vérification, certificat PDF d’une page et purge complète en `< 2 s` à la fermeture.',
             },
             {
                 term: 'Feux et sirène du RPM (`webRelayConfig` — WebRelay-Quad)',
@@ -738,12 +754,20 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Proxy de périphérie RPM en parallèle avec une CAS (`oscar-rpm-proxy`)',
                 meaning: 'Pile Docker isolée facultative (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) pour exploiter OSCAR en parallèle d’une station centrale d’alarmes (CAS) existante. Diffuse `1–50` flux TCP Rapiscan RPM en temps réel (`< 1 ms`) en mode ports mappés (`11601..11650`) ou IP virtuelle transparente `:1600` sous Ubuntu 24.04, rejoue les trames `SG1..SG3` / `SN1..SN2`, maintient la CAS connectée lors des redémarrages/mises à niveau d’OSCAR et propage les déconnexions physiques du RPM en `<= 4,0 s`.',
             },
+            {
+                term: 'Tableaux de bord personnalisés (Custom Dashboards `/dashboards`)',
+                meaning: 'Espace opérateur facultatif (`/dashboards`) permettant de créer, agencer et partager des murs de widgets à partir de modèles prêts à l’emploi (`Multi-Lane Wallboard`, `Alarm & Map Overview`, `Statistics Overview`) ou d’une grille vierge à 12 colonnes. Isole les mises en page par opérateur et Vue opérationnelle, applique des garde-fous stricts par page (`<= 4` flux vidéo en direct, `<= 6` graphiques en direct, import JSON `<= 512 KiB` et rafraîchissement statistique `>= 60 s` ou manuel) et préserve le tableau de bord `/` intégré.',
+            },
+            {
+                term: 'Système de détecteur mobile (Mobile Detector System)',
+                meaning: 'Module système SensorHub (`MobileDetectorSystem`, `urn:osh:system:lane:*`) dédié aux rondes mobiles de détection (`RS-350 Backpack` TCP ANSI N42.42 et `Kromek D5`). Publie les traces GPS `location` en direct et les marqueurs d’alarme géolocalisés sur `/map`, affiche les spectres gamma à 1 024 canaux et le débit de dose (avec état intérieur sans GPS `Indoor / GPS unavailable`) dans `/lane-view`, et masque les options propres aux portiques fixes (caméras, OCR, WebRelay et occupation prolongée).',
+            },
         ],
         linksIntro: 'Ouvrez le manuel complet d’administration ou consultez les guides vidéo pratiques :',
         adminLinkLabel: 'Ouvrir l’administration SensorHub et le manuel intégré (`/sensorhub/admin`)',
         adminLinkDesc: 'Connexion administrateur requise. Sélectionnez le Service OSCAR ou un module et ouvrez l’onglet README.',
         videoGuidesLinkLabel: 'Ouvrir les guides vidéo pratiques OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '29 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, bac à sable de formation, feux et sirène RPM par voie (WebRelay-Quad), sauvegardes USB NVMe, extensions, cartes .pmtiles hors ligne, radiographies OMD UFF 16 bits, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
+        videoGuidesLinkDesc: '33 courtes vidéos (< 2 min) sous-titrées couvrant préparation terrain Ubuntu/Windows, bac à sable de formation, tableaux de bord personnalisés (/dashboards), détecteurs mobiles (RS-350 et Kromek D5), feux et sirène RPM par voie (WebRelay-Quad), sauvegardes USB NVMe, extensions, cartes .pmtiles hors ligne, radiographies OMD UFF 16 bits, voies, adjudication, EML, OCR véhicules, utilisateurs et Passkeys, fédération, assistance et rapports.',
         supportBundleTitle: 'Dépannage et archive d’assistance (`.zip`)',
         supportBundleDesc: 'Télécharge une archive `.zip` réunissant les diagnostics récents du navigateur et les journaux du serveur OSCAR, l’état des modules et la santé JVM/stockage. Si le serveur est injoignable ou ne démarre pas, exécutez `./oscar.sh support-bundle` (Linux) ou `oscar.bat support-bundle` (Windows) sur l’hôte.',
         supportBundlePrivacyNote: 'Confidentialité et sécurité : collecté uniquement pour le diagnostic technique ; mots de passe, jetons, cookies de session, identifiants RTSP et clés privées sont automatiquement masqués.',
@@ -754,7 +778,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Fermer',
     },
     el: {
-        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.11.15',
+        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.12.0',
         dialogSubtitle: 'Αναφορά σε απλή γλώσσα για τις ροές εργασίας κονσόλας, τις αναφορές πολλαπλών μορφών και την ορολογία πυλών ακτινοβολίας.',
         tabs: {
             pages: 'Σελίδες κονσόλας',
@@ -905,7 +929,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Ψυχρό επίπεδο Parquet (`PARQUET_PRIMARY`)',
-                meaning: 'Προεπιλεγμένη λειτουργία όπου τα τμήματα 30 λεπτών της PostgreSQL για όλες τις 22 λειτουργικές και αποδεικτικές ροές (συμπεριλαμβανομένου του `vehicleOcr`) εξάγονται σε αρχεία Apache Parquet συμπιεσμένα με ZSTD.',
+                meaning: 'Προεπιλεγμένη λειτουργία όπου τα τμήματα 30 λεπτών της PostgreSQL για όλες τις 26 λειτουργικές και αποδεικτικές ροές (συμπεριλαμβανομένων του `vehicleOcr` και των κινητών ανιχνευτών) διαχωρίζονται απευθείας κατά την εξαγωγή σε προφίλ Apache Parquet V2 με ZSTD: `RAW_TELEMETRY` μίας εγγραφής (ροές 1 Hz που δεν ξαναγράφονται ποτέ) και `RAW_EVENTS` με φίλτρα Bloom (οι 9 αναζητήσιμες ροές συμβάντων που συμπυκνώνονται σε `DAILY_EVENTS` και `MONTHLY_EVENTS`).',
             },
             {
                 term: 'OCR εμπορευματοκιβωτίων & πινακίδων (`ocrConfig`)',
@@ -933,7 +957,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
             },
             {
                 term: 'Πρακτικό περιβάλλον εκπαίδευσης & καθοδηγούμενη ακαδημία (`oscar-sandbox`)',
-                meaning: 'Απομονωμένο προσωρινό περιβάλλον εκπαίδευσης στη θύρα `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) με `archive.enabled = false`, μηδενική εγγραφή στην παραγωγική PostgreSQL/Parquet/`config.json`, τοπικό μικρο-εξομοιωτή Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`), πολυτροπικό Οδηγό Εκπαίδευσης (βίντεο 4 γλωσσών, έξυπνη έγχυση που ανοίγει το `/event-log` για `Code 9999` / `Code 9998` / `Clean Pass` και το `/health` για σφάλματα), διπλή προβολή SensorHub Admin, αυτόματη επαλήθευση, PDF ολοκλήρωσης 1 σελίδας και πλήρη εκκαθάριση σε `< 2 s`.',
+                meaning: 'Απομονωμένο προσωρινό περιβάλλον εκπαίδευσης στη θύρα `:8444` (`sudo bash oscar.sh sandbox start` / `.\\oscar.bat sandbox start`) με `archive.enabled = false`, μηδενική εγγραφή στην παραγωγική PostgreSQL/Parquet/`config.json`, τοπικό μικρο-εξομοιωτή Rapiscan + RTSP + OCR + UFF + `WebRelay-Quad` (`127.0.0.1:10180`) + κινητό ανιχνευτή `RS-350` (`127.0.0.1:10110`), πολυτροπικό Οδηγό Εκπαίδευσης (βίντεο 4 γλωσσών, έξυπνη έγχυση που ανοίγει το `/event-log` για `Code 9999` / `Code 9998` / `Clean Pass` και το `/health` για σφάλματα), διπλή προβολή SensorHub Admin, αυτόματη επαλήθευση, PDF ολοκλήρωσης 1 σελίδας και πλήρη εκκαθάριση σε `< 2 s`.',
             },
             {
                 term: 'Φώτα και ήχος RPM (`webRelayConfig` — WebRelay-Quad)',
@@ -943,12 +967,20 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
                 term: 'Διαμεσολαβητής άκρου RPM για παράλληλη λειτουργία με CAS (`oscar-rpm-proxy`)',
                 meaning: 'Προαιρετική απομονωμένη στοίβα Docker (`sudo bash oscar.sh rpm-proxy` / `.\\oscar.bat rpm-proxy`) για παράλληλη λειτουργία του OSCAR με υπάρχοντα Κεντρικό Σταθμό Συναγερμών (CAS). Διανέμει `1–50` ροές TCP Rapiscan RPM σε πραγματικό χρόνο (`< 1 ms`) μέσω χαρτογραφημένων θυρών (`11601..11650`) ή διαφανούς εικονικής IP `:1600` στο Ubuntu 24.04, αναπαράγει πλαίσια `SG1..SG3` / `SN1..SN2`, διατηρεί τον CAS συνδεδεμένο σε επανεκκινήσεις/αναβαθμίσεις του OSCAR και μεταδίδει φυσικές αποσυνδέσεις RPM σε `<= 4,0 s`.',
             },
+            {
+                term: 'Προσαρμοσμένοι πίνακες (Custom Dashboards `/dashboards`)',
+                meaning: 'Προαιρετικός χώρος εργασίας χειριστή (`/dashboards`) για δημιουργία, αναδιάταξη και κοινή χρήση πινάκων πολλαπλών widgets από πρότυπα (`Multi-Lane Wallboard`, `Alarm & Map Overview`, `Statistics Overview`) ή κενό πλέγμα 12 στηλών. Απομονώνει τις διατάξεις ανά χειριστή και Λειτουργική προβολή, επιβάλλει όρια ασφαλείας ανά σελίδα (`<= 4` ζωντανές ροές βίντεο, `<= 6` ζωντανά γραφήματα, εισαγωγή JSON `<= 512 KiB` και ανανέωση στατιστικών `>= 60 s` ή χειροκίνητα) και διατηρεί ανέπαφο τον κύριο πίνακα `/`.',
+            },
+            {
+                term: 'Σύστημα κινητού ανιχνευτή (Mobile Detector System)',
+                meaning: 'Εξειδικευμένη μονάδα συστήματος SensorHub (`MobileDetectorSystem`, `urn:osh:system:lane:*`) για κινητές περιπόλους ακτινοβολίας (`RS-350 Backpack` TCP ANSI N42.42 και `Kromek D5`). Ενεργοποιεί ζωντανά ίχνη GPS `location` και γεωαναφερθέντες συναγερμούς στον `/map`, προβάλλει φάσματα γάμμα 1.024 καναλιών και ρυθμό δόσης (καθώς και ένδειξη εσωτερικού χώρου χωρίς GPS `Indoor / GPS unavailable`) στην `/lane-view`, και αποκρύπτει ρυθμίσεις σταθερών πυλών (κάμερες, OCR, WebRelay και παρατεταμένη διέλευση).',
+            },
         ],
         linksIntro: 'Ανοίξτε το πλήρες εγχειρίδιο διαχειριστή ή παρακολουθήστε τους σύντομους βιντεοοδηγούς:',
         adminLinkLabel: 'Άνοιγμα διαχείρισης SensorHub & ενσωματωμένου εγχειριδίου (`/sensorhub/admin`)',
         adminLinkDesc: 'Απαιτείται σύνδεση διαχειριστή. Επιλέξτε την Υπηρεσία OSCAR ή οποιαδήποτε μονάδα και ανοίξτε την καρτέλα README.',
         videoGuidesLinkLabel: 'Άνοιγμα βιντεοοδηγών εργασιών OSCAR (`ORNL/oscar-video-guides`)',
-        videoGuidesLinkDesc: '29 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, περιβάλλον εκπαίδευσης, έλεγχο φώτων & ήχου RPM ανά λωρίδα (WebRelay-Quad), αντίγραφα USB NVMe, επεκτάσεις, χάρτες .pmtiles εκτός σύνδεσης, ακτινογραφίες φορτίου WCO UFF 16-bit, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
+        videoGuidesLinkDesc: '33 σύντομα βίντεο (< 2 λεπ.) με υπότιτλους για εγκατάσταση πεδίου Ubuntu/Windows, περιβάλλον εκπαίδευσης, προσαρμοσμένους πίνακες (/dashboards), κινητούς ανιχνευτές (RS-350 & Kromek D5), έλεγχο φώτων & ήχου RPM ανά λωρίδα (WebRelay-Quad), αντίγραφα USB NVMe, επεκτάσεις, χάρτες .pmtiles εκτός σύνδεσης, ακτινογραφίες φορτίου WCO UFF 16-bit, λωρίδες, αξιολόγηση, EML, OCR οχημάτων, χρήστες & Passkeys, ομοσπονδία, πακέτα υποστήριξης και αναφορές.',
         supportBundleTitle: 'Αντιμετώπιση προβλημάτων & πακέτο υποστήριξης (`.zip`)',
         supportBundleDesc: 'Λήψη ενιαίου διαγνωστικού αρχείου `.zip` που συνδυάζει συμβάντα του περιηγητή με αρχεία καταγραφής διακομιστή OSCAR, κατάσταση μονάδων και υγεία JVM/αποθήκευσης. Εάν ο διακομιστής δεν αποκρίνεται ή δεν εκκινεί, εκτελέστε `./oscar.sh support-bundle` (Linux) ή `oscar.bat support-bundle` (Windows) στον κεντρικό υπολογιστή.',
         supportBundlePrivacyNote: 'Απόρρητο & ασφάλεια: συλλέγονται αποκλειστικά για τεχνική διάγνωση· κωδικοί, διακριτικά, cookies συνεδρίας, διαπιστευτήρια RTSP και ιδιωτικά κλειδιά αφαιρούνται αυτόματα.',

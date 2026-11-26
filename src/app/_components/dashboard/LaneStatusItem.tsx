@@ -195,11 +195,23 @@ function LaneStatusItem({
                         />
                     ))}
 
-                    <FaultIndicator laneName={health.laneName} kind="gamma-high" label={t("gammaHigh")} state={health.faults.gammaHigh} glyph="γ↑"/>
-                    <FaultIndicator laneName={health.laneName} kind="gamma-low" label={t("gammaLow")} state={health.faults.gammaLow} glyph="γ↓"/>
-                    <FaultIndicator laneName={health.laneName} kind="neutron-high" label={t("neutronHigh")} state={health.faults.neutronHigh} glyph="n↑"/>
-                    <FaultIndicator laneName={health.laneName} kind="tamper" label={t("tamper")} state={health.faults.tamper}/>
-                    <FaultIndicator laneName={health.laneName} kind="extended-occupancy" label={t("extendedOccupancy")} state={health.extendedOccupancy}/>
+                    {!health.mobile && (
+                        <>
+                            {(health.monitoredFaults == null || health.monitoredFaults.includes("gammaHigh")) && (
+                                <FaultIndicator laneName={health.laneName} kind="gamma-high" label={t("gammaHigh")} state={health.faults.gammaHigh} glyph="γ↑"/>
+                            )}
+                            {(health.monitoredFaults == null || health.monitoredFaults.includes("gammaLow")) && (
+                                <FaultIndicator laneName={health.laneName} kind="gamma-low" label={t("gammaLow")} state={health.faults.gammaLow} glyph="γ↓"/>
+                            )}
+                            {(health.monitoredFaults == null || health.monitoredFaults.includes("neutronHigh")) && (
+                                <FaultIndicator laneName={health.laneName} kind="neutron-high" label={t("neutronHigh")} state={health.faults.neutronHigh} glyph="n↑"/>
+                            )}
+                            {(health.monitoredFaults == null || health.monitoredFaults.includes("tamper")) && (
+                                <FaultIndicator laneName={health.laneName} kind="tamper" label={t("tamper")} state={health.faults.tamper}/>
+                            )}
+                            <FaultIndicator laneName={health.laneName} kind="extended-occupancy" label={t("extendedOccupancy")} state={health.extendedOccupancy}/>
+                        </>
+                    )}
                 </Stack>
             </Box>
 

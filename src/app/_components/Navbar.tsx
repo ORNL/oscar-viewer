@@ -31,6 +31,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import MediationIcon from '@mui/icons-material/Mediation';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
+import DashboardCustomizeRoundedIcon from '@mui/icons-material/DashboardCustomizeRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import {
     Alert,
     Badge,
@@ -68,7 +70,7 @@ import {setEventPreview, setSelectedRowId} from "@/lib/state/EventPreviewSlice";
 import {selectDashboardUnreadAlarmCount, setSelectedEvent} from "@/lib/state/EventDataSlice";
 import {setEventData} from "@/lib/state/EventDetailsSlice";
 import QrCodeScannerRoundedIcon from '@mui/icons-material/QrCodeScannerRounded';
-import {DataSourceContext} from "@/app/contexts/DataSourceContext";
+import {DataSourceContext, ensureTrailingSlashRoute} from "@/app/contexts/DataSourceContext";
 import {buildEventDetailsHref} from "@/lib/data/oscar/EventLookup";
 import {
     ALL_LANES_SELECT_VALUE,
@@ -87,6 +89,11 @@ import {
     SandboxVerificationSnapshot,
 } from "@/lib/data/oscar/TrainingSandboxApi";
 import {RootState} from "@/lib/state/Store";
+import GlobalAlarmStreamMonitor from "@/app/hooks/useGlobalAlarmStreamMonitor";
+import {HeaderSlotProvider} from "@/app/_components/layout/HeaderSlot";
+import AddPageDialog from "@/app/_components/layout/AddPageDialog";
+import {getPageIcon} from "@/app/_components/layout/WidgetRegistry";
+import {buildLayoutScopeKey, selectNavPages, setActiveLayoutScope} from "@/lib/state/PageLayoutSlice";
 
 const drawerWidth = 276;
 const drawerWidthMobile = 236;
@@ -195,7 +202,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const availableViews = dataSourceCtx?.availableViews ?? [];
     const totalCatalogLaneCount = dataSourceCtx?.totalCatalogLaneCount ?? 0;
     const setActiveView = dataSourceCtx?.setActiveView;
-    const scopedHref = dataSourceCtx?.scopedHref ?? ((p: string) => p);
+    const scopedHref = dataSourceCtx?.scopedHref ?? ensureTrailingSlashRoute;
     const currentSession = dataSourceCtx?.currentSession ?? null;
     const scopedViewLabelId = React.useId();
     const scopedViewDropdown = React.useMemo(
@@ -236,8 +243,15 @@ export default function Navbar({children}: { children: React.ReactNode }) {
     const visualUnreadAlert = useSelector(selectVisualUnreadAlert);
     const unreadAlarmCount = useSelector(selectDashboardUnreadAlarmCount);
     const configuredNodes = useSelector((state: RootState) => state.oshSlice?.nodes ?? []);
+    const navPages = useSelector(selectNavPages);
+    const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+    const [addPageDialogOpen, setAddPageDialogOpen] = useState(false);
     const [fallbackUsername, setFallbackUsername] = useState<string | null>(null);
     const authenticatedUsername = currentSession?.username ?? fallbackUsername;
+
+    useEffect(() => {
+        dispatch(setActiveLayoutScope(buildLayoutScopeKey(authenticatedUsername, activeViewKey)));
+    }, [dispatch, authenticatedUsername, activeViewKey]);
 
     useEffect(() => {
         if (currentSession?.username) return;
@@ -458,7 +472,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('events'),
             icon: <WarningRoundedIcon/>,
-            href: "/event-log",
+            href: "/event-log/",
             testId: "nav-item-events",
         },
         {
@@ -470,25 +484,25 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('map'),
             icon: <LocationOnRoundedIcon/>,
-            href: "/map",
+            href: "/map/",
             testId: "nav-item-map",
         },
         {
             title: t('national'),
             icon: <MediationIcon/>,
-            href: "/national-view",
+            href: "/national-view/",
             testId: "nav-item-national",
         },
         {
             title: t('reportGenerator'),
             icon: <InsertChart/>,
-            href: "/report",
+            href: "/report/",
             testId: "nav-item-report",
         },
         {
             title: t('alarmTransfer'),
             icon: <QrCodeScannerRoundedIcon/>,
-            href: "/alarm-transfer",
+            href: "/alarm-transfer/",
             testId: "nav-item-alarm-transfer",
         },
     ]
@@ -498,7 +512,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('usersAndAccess'),
             icon: <ManageAccountsRoundedIcon/>,
-            href: "/users",
+            href: "/users/",
             testId: "nav-item-users",
         },
         ...(currentSession?.isAdmin !== false
@@ -506,13 +520,13 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                 {
                     title: t('usbBackups'),
                     icon: <UsbRoundedIcon/>,
-                    href: "/usb-backups",
+                    href: "/usb-backups/",
                     testId: "nav-item-usb-backups",
                 },
                 {
                     title: t('runtimeExtensions'),
                     icon: <ExtensionRoundedIcon/>,
-                    href: "/extensions",
+                    href: "/extensions/",
                     testId: "nav-item-extensions",
                 },
             ]
@@ -520,7 +534,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
         {
             title: t('servers'),
             icon: <CloudRoundedIcon/>,
-            href: "/servers",
+            href: "/servers/",
             testId: "nav-item-servers",
         }
     ]
@@ -556,6 +570,92 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                     {item.icon}
                                 </ListItemIcon>
                                 <ListItemText primary={item.title} sx={{opacity: drawerOpen ? 1 : 0, display: drawerOpen ? 'block' : 'none'}}/>
+                            </ListItemButton>
+                        </ListItem>
+                    </Link>
+                ))}
+            </List>
+            <Divider/>
+            <List>
+                <ListItem
+                    disablePadding
+                    sx={{display: 'block'}}
+                    secondaryAction={drawerOpen ? (
+                        <Tooltip title={t('addPage')}>
+                            <IconButton
+                                edge="end"
+                                size="small"
+                                aria-label={t('addPage')}
+                                data-testid="add-page-button"
+                                onClick={() => setAddPageDialogOpen(true)}
+                            >
+                                <AddRoundedIcon fontSize="small"/>
+                            </IconButton>
+                        </Tooltip>
+                    ) : undefined}
+                >
+                    <Link
+                        href={scopedHref('/dashboards')}
+                        prefetch={false}
+                        passHref
+                        onClick={!isDesktop ? handleDrawerClose : null}
+                    >
+                        <ListItemButton
+                            data-testid="nav-item-custom-dashboards"
+                            sx={{
+                                minHeight: 48,
+                                justifyContent: drawerOpen ? 'initial' : 'center',
+                                px: 2.5,
+                            }}
+                        >
+                            <ListItemIcon
+                                sx={{
+                                    minWidth: 0,
+                                    mr: drawerOpen ? 2 : 'auto',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <DashboardCustomizeRoundedIcon/>
+                            </ListItemIcon>
+                            <ListItemText
+                                primary={t('customDashboards')}
+                                sx={{opacity: drawerOpen ? 1 : 0, display: drawerOpen ? 'block' : 'none'}}
+                            />
+                        </ListItemButton>
+                    </Link>
+                </ListItem>
+                {navPages.map((page) => (
+                    <Link
+                        href={scopedHref(`/dashboards/?id=${encodeURIComponent(page.id)}`)}
+                        prefetch={false}
+                        passHref
+                        key={page.id}
+                        onClick={!isDesktop ? handleDrawerClose : null}
+                    >
+                        <ListItem disablePadding sx={{display: 'block'}}>
+                            <ListItemButton
+                                data-testid={`nav-custom-page-${page.id}`}
+                                sx={{
+                                    minHeight: 40,
+                                    justifyContent: drawerOpen ? 'initial' : 'center',
+                                    pl: drawerOpen ? 4 : 2.5,
+                                    pr: 2.5,
+                                }}
+                            >
+                                <ListItemIcon
+                                    sx={{
+                                        minWidth: 0,
+                                        mr: drawerOpen ? 1.5 : 'auto',
+                                        justifyContent: 'center',
+                                    }}
+                                >
+                                    {getPageIcon(page.icon)}
+                                </ListItemIcon>
+                                <ListItemText
+                                    primary={page.title}
+                                    primaryTypographyProps={{noWrap: true, variant: 'body2'}}
+                                    sx={{opacity: drawerOpen ? 1 : 0, display: drawerOpen ? 'block' : 'none'}}
+                                />
                             </ListItemButton>
                         </ListItem>
                     </Link>
@@ -657,6 +757,18 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                                 </Button>
                             )}
                         </Stack>
+                        <Box
+                            ref={setHeaderSlot}
+                            data-testid="page-header-slot"
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                flex: '1 1 0%',
+                                minWidth: 0,
+                                overflow: 'hidden',
+                            }}
+                        />
                         {scopedViewDropdown.mode === "badge" && activeViewKey && (
                             <Chip
                                 label={t('operationalViewValue', {view: activeViewKey})}
@@ -959,7 +1071,10 @@ export default function Navbar({children}: { children: React.ReactNode }) {
 
             <Box sx={{display: "none"}}>
                 <AlarmAudio/>
+                <GlobalAlarmStreamMonitor/>
             </Box>
+            <AddPageDialog open={addPageDialogOpen} onClose={() => setAddPageDialogOpen(false)}/>
+            <HeaderSlotProvider node={headerSlot}>
             <Box
                 component="main"
                 sx={(theme) => ({
@@ -1040,6 +1155,7 @@ export default function Navbar({children}: { children: React.ReactNode }) {
                     )}
                 </Box>
             </Box>
+            </HeaderSlotProvider>
             {coachOpen && (
                 <TrainingCoachDock
                     status={sandboxStatus}
