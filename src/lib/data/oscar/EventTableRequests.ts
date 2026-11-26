@@ -261,7 +261,12 @@ export interface UseAbortableEventQueriesArgs {
     ) => Promise<EventTableData[]>;
 }
 
-const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 120;
+// 200 ms trailing debounce (paired with a 2x rapid-follow-up detection window)
+// keeps single page clicks instantaneous (0 ms delay) while still coalescing
+// rapid 130-180 ms pagination bursts even when fast Newest-first queries settle
+// in < 80 ms before the next click arrives.
+const DEFAULT_PAGE_CHANGE_DEBOUNCE_MS = 200;
+const RAPID_PAGE_CHANGE_WINDOW_MULTIPLIER = 2;
 const BUCKET_COUNTS_PREWARM_DELAY_MS = 0;
 
 function buildBucketCountsCacheKey(
@@ -1326,10 +1331,11 @@ export function useAbortableEventQueries({
             const hadPendingDebounce = pageDebounceTimerRef.current !== null;
             const hadActiveFetch = pageAbortRef.current !== null;
             const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            const rapidFollowUpWindowMs = pageChangeDebounceMs * RAPID_PAGE_CHANGE_WINDOW_MULTIPLIER;
             const rapidFollowUp =
                 hadPendingDebounce
                 || hadActiveFetch
-                || now - lastPageChangeMsRef.current < pageChangeDebounceMs;
+                || now - lastPageChangeMsRef.current < rapidFollowUpWindowMs;
             lastPageChangeMsRef.current = now;
             clearPendingPageDebounce();
             pageAbortRef.current?.abort();

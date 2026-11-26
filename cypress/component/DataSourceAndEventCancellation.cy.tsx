@@ -588,7 +588,9 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
                 }
                 const gammaAlarm = plan.key === "p-gn" || plan.key === "p-g";
                 const neutronAlarm = plan.key === "p-gn" || plan.key === "p-n";
-                return Array.from({length: limit}, (_, i) => {
+                const bucketTotal = bucketCountsByFilter[plan.filter] ?? 0;
+                const available = Math.max(0, Math.min(limit, bucketTotal - offset));
+                return Array.from({length: available}, (_, i) => {
                     const globalSeq = offset + i;
                     const ts = new Date(Date.parse(cutoff) - globalSeq * 1000).toISOString();
                     return new EventTableData(
@@ -788,7 +790,9 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
                 rowCalls.push({filter: plan.filter, limit, offset});
                 const gammaAlarm = plan.key === "p-gn" || plan.key === "p-g";
                 const neutronAlarm = plan.key === "p-gn" || plan.key === "p-n";
-                return Array.from({length: limit}, (_, i) => {
+                const bucketTotal = bucketCountsByFilter[plan.filter] ?? 0;
+                const available = Math.max(0, Math.min(limit, bucketTotal - offset));
+                return Array.from({length: available}, (_, i) => {
                     const globalSeq = offset + i;
                     const ts = new Date(Date.parse(cutoff) - globalSeq * 1000).toISOString();
                     return new EventTableData(
@@ -930,7 +934,9 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
                 }
                 const gammaAlarm = plan.key === "p-gn" || plan.key === "p-g";
                 const neutronAlarm = plan.key === "p-gn" || plan.key === "p-n";
-                return Array.from({length: limit}, (_, i) => {
+                const bucketTotal = bucketCountsByFilter[plan.filter] ?? 0;
+                const available = Math.max(0, Math.min(limit, bucketTotal - offset));
+                return Array.from({length: available}, (_, i) => {
                     const globalSeq = offset + i;
                     const ts = new Date(Date.parse(cutoff) - globalSeq * 1000).toISOString();
                     return new EventTableData(
@@ -982,9 +988,10 @@ describe("DataSourceProvider lane-map deduplication and EventTable request cance
         cy.get('[data-testid="pf-first-row"]').should("have.text", "p-gn-0");
 
         // Wait for Page 0 + bucket prewarm + automatic Page 1 background prefetch to settle
+        // (Page 0 heads already return 5 GN + 12 N + 15 G = 32 rows, resolving Page 1 with 0 extra row calls!)
         cy.wrap(null).should(() => {
             expect(countCalls).to.have.length(4);
-            expect(rowCalls).to.have.length(5);
+            expect(rowCalls).to.have.length(3);
         });
 
         cy.then(() => {
