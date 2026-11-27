@@ -1,6 +1,12 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.12.1
+
+### Changed
+
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.12.1`), Video Guide `#31` summary asset names (noting the printable local Technician Handover One-Sheet PDF), and hardware-replacement recovery checklist references with **OSCAR 3.12.1**.
+
 ## 3.12.0
 
 ### Added

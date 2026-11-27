@@ -139,7 +139,7 @@ interface LocalizedHelpContent {
 
 const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
     en: {
-        dialogTitle: 'OSCAR 3.12.0 Operator Quick Guide & Glossary',
+        dialogTitle: 'OSCAR 3.12.1 Operator Quick Guide & Glossary',
         dialogSubtitle: 'Plain-language reference for console workflows, multi-format reports, and radiation portal terminology.',
         tabs: {
             pages: 'Console Pages',
@@ -352,7 +352,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Close',
     },
     es: {
-        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.12.0',
+        dialogTitle: 'Guía rápida y glosario del operador de OSCAR 3.12.1',
         dialogSubtitle: 'Referencia en lenguaje claro para flujos de consola, informes multiformato y terminología de pórticos de radiación.',
         tabs: {
             pages: 'Páginas de consola',
@@ -565,7 +565,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Cerrar',
     },
     fr: {
-        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.12.0',
+        dialogTitle: 'Guide rapide opérateur et glossaire OSCAR 3.12.1',
         dialogSubtitle: 'Référence en langage clair pour les flux de console, les rapports multiformats et la terminologie des portiques.',
         tabs: {
             pages: 'Pages de la console',
@@ -778,7 +778,7 @@ const HELP_CONTENT: Record<Locale, LocalizedHelpContent> = {
         closeLabel: 'Fermer',
     },
     el: {
-        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.12.0',
+        dialogTitle: 'Γρήγορος οδηγός χειριστή & γλωσσάριο OSCAR 3.12.1',
         dialogSubtitle: 'Αναφορά σε απλή γλώσσα για τις ροές εργασίας κονσόλας, τις αναφορές πολλαπλών μορφών και την ορολογία πυλών ακτινοβολίας.',
         tabs: {
             pages: 'Σελίδες κονσόλας',
