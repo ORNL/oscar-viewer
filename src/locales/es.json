@@ -938,5 +938,9 @@
   "rs350Spectrum": "Espectros espectroscópicos",
   "rs350SpectrumOnly": "{lane} no es un carril espectroscópico RS-350 ni Kromek D5.",
   "openFullPage": "Abrir página completa",
-  "selectEventForDetails": "Seleccione un evento en una tabla de alarmas o eventos de este panel para inspeccionar sus detalles."
+  "selectEventForDetails": "Seleccione un evento en una tabla de alarmas o eventos de este panel para inspeccionar sus detalles.",
+  "gatewayTlsWarningTitle": "El certificado HTTPS de la puerta de enlace vencerá pronto",
+  "gatewayTlsCriticalTitle": "El certificado HTTPS de la puerta de enlace requiere renovación inmediata",
+  "gatewayTlsWarningBody": "El certificado TLS de la puerta de enlace HTTPS vence en {days} días ({date}). Renuévelo o rótelo antes del vencimiento para evitar interrupciones de confianza en el navegador.",
+  "gatewayTlsExpiredBody": "El certificado TLS de la puerta de enlace HTTPS venció el {date}. Renuévelo o rótelo de inmediato para restaurar las conexiones HTTPS de confianza."
 }

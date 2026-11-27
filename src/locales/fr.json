@@ -938,5 +938,9 @@
   "rs350Spectrum": "Spectres spectroscopiques",
   "rs350SpectrumOnly": "{lane} n’est pas une voie spectroscopique RS-350 ou Kromek D5.",
   "openFullPage": "Ouvrir la page complète",
-  "selectEventForDetails": "Sélectionnez un événement dans une table d’alarmes ou d’événements de ce tableau pour afficher ses détails."
+  "selectEventForDetails": "Sélectionnez un événement dans une table d’alarmes ou d’événements de ce tableau pour afficher ses détails.",
+  "gatewayTlsWarningTitle": "Expiration prochaine du certificat HTTPS de la passerelle",
+  "gatewayTlsCriticalTitle": "Renouvellement immédiat requis pour le certificat HTTPS de la passerelle",
+  "gatewayTlsWarningBody": "Le certificat TLS de la passerelle HTTPS expire dans {days} jours ({date}). Renouvelez ou remplacez le certificat avant son expiration afin d’éviter toute interruption d’accès HTTPS.",
+  "gatewayTlsExpiredBody": "Le certificat TLS de la passerelle HTTPS a expiré le {date}. Renouvelez ou remplacez immédiatement le certificat pour rétablir des connexions HTTPS fiables."
 }
