@@ -938,5 +938,9 @@
   "rs350Spectrum": "Spectroscopic Spectra",
   "rs350SpectrumOnly": "{lane} is not a spectroscopic RS-350 or Kromek D5 lane.",
   "openFullPage": "Open full page",
-  "selectEventForDetails": "Select an event in an alarm or event table on this dashboard to inspect its details."
+  "selectEventForDetails": "Select an event in an alarm or event table on this dashboard to inspect its details.",
+  "gatewayTlsWarningTitle": "HTTPS gateway certificate expiring soon",
+  "gatewayTlsCriticalTitle": "HTTPS gateway certificate requires immediate renewal",
+  "gatewayTlsWarningBody": "The HTTPS gateway TLS certificate expires in {days} days ({date}). Renew or rotate the gateway certificate before expiration to prevent browser trust interruptions.",
+  "gatewayTlsExpiredBody": "The HTTPS gateway TLS certificate expired on {date}. Renew or rotate the gateway certificate immediately to restore trusted HTTPS connections."
 }

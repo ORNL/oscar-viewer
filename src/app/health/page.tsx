@@ -30,10 +30,15 @@ import {
 import {useLanguage} from "@/app/contexts/LanguageContext";
 import {getIntlLocale} from "@/app/utils/LocaleUtils";
 import LaneWebRelayDialog from "@/app/_components/webrelay/LaneWebRelayDialog";
+import GatewayTlsStatusBanner from "@/app/_components/health/GatewayTlsStatusBanner";
 import {
     getCachedSessionInfo,
     subscribeSessionInfo,
 } from "@/lib/data/oscar/AuthSessionApi";
+import {
+    fetchGatewayTlsStatusSafe,
+    type GatewayTlsStatus,
+} from "@/lib/data/oscar/GatewayTlsApi";
 import {
     fetchLaneWebRelayStatusSafe,
     type LaneWebRelayStatusEntry,
@@ -102,9 +107,34 @@ export default function HealthPage() {
     const {lanes, isLoading, thresholdMinutes} = useLaneHealth();
     const [now, setNow] = useState(Date.now());
     const [isAdmin, setIsAdmin] = useState<boolean>(() => Boolean(getCachedSessionInfo()?.isAdmin));
+    const [hasSession, setHasSession] = useState<boolean>(() => Boolean(getCachedSessionInfo()));
     const [webRelayByLane, setWebRelayByLane] = useState<Map<string, LaneWebRelayStatusEntry>>(new Map());
     const [webRelayDialogOpen, setWebRelayDialogOpen] = useState(false);
     const [webRelayDialogLane, setWebRelayDialogLane] = useState<string | undefined>(undefined);
+    const [gatewayTlsStatus, setGatewayTlsStatus] = useState<GatewayTlsStatus | null>(null);
+
+    useEffect(() => {
+        if (!hasSession) {
+            return;
+        }
+        let active = true;
+        const controller = new AbortController();
+        const pollTls = async () => {
+            const payload = await fetchGatewayTlsStatusSafe({signal: controller.signal});
+            if (active && payload) {
+                setGatewayTlsStatus(payload);
+            }
+        };
+        void pollTls();
+        const interval = window.setInterval(() => {
+            void pollTls();
+        }, 15 * 60 * 1000);
+        return () => {
+            active = false;
+            controller.abort();
+            window.clearInterval(interval);
+        };
+    }, [hasSession]);
 
     useEffect(() => {
         const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -112,9 +142,12 @@ export default function HealthPage() {
     }, []);
 
     useEffect(() => {
-        setIsAdmin(Boolean(getCachedSessionInfo()?.isAdmin));
+        const cached = getCachedSessionInfo();
+        setIsAdmin(Boolean(cached?.isAdmin));
+        setHasSession(Boolean(cached));
         return subscribeSessionInfo((sess) => {
             setIsAdmin(Boolean(sess?.isAdmin));
+            setHasSession(Boolean(sess));
         });
     }, []);
 
@@ -252,6 +285,8 @@ export default function HealthPage() {
                     </Paper>
                 </Stack>
             </Stack>
+
+            <GatewayTlsStatusBanner status={gatewayTlsStatus}/>
 
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 <Chip color="success" variant="outlined" label={`${t("healthyLanes")}: ${summary.healthy}`}/>
