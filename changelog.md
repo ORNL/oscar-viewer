@@ -1,11 +1,15 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
-## 4.0.0
+## 4.0.0-dev.1
+
+### Added
+
+- Added explicit opt-in **Release Channel** selector (**Production (Stable — Latest)** default vs. **Development (Pre-release — Opt-in)**) in [`SystemUpdateCard.tsx`](src/app/_components/update/SystemUpdateCard.tsx) across all 4 locales (`en`, `es`, `fr`, `el`), complete with amber **Dev Pre-release** badges, channel warning notices, confirmation pre-release warnings, `POST /sensorhub/oscar/system-update/channel` API wiring (`SystemUpdateApi.ts`), and Cypress component test coverage (`SystemUpdateCard.cy.tsx`).
 
 ### Changed
 
-- Synchronized **OSCAR 4.0.0** clean-start baseline across operator quick-guide titles (`HelpDialog.tsx`), support-bundle fallback metadata (`SupportDiagnostics.ts`), System Update fallback version & Ubuntu 24.04/26.04 Dual-LTS guidance (`SystemUpdateCard.tsx`), Video Guide catalog entries (`VideoGuidesCatalog.ts`), hardware-replacement recovery checklist (`UsersAccessManager.tsx`), and Cypress component tests (`TrainingSandboxCoach.cy.tsx`, `SystemUpdateCard.cy.tsx`).
+- Synchronized **OSCAR 4.0.0-dev.1** clean-start baseline across operator quick-guide titles (`HelpDialog.tsx`), support-bundle fallback metadata (`SupportDiagnostics.ts`), System Update fallback version & Ubuntu 24.04/26.04 Dual-LTS guidance (`SystemUpdateCard.tsx`), Video Guide catalog entries (`VideoGuidesCatalog.ts`), hardware-replacement recovery checklist (`UsersAccessManager.tsx`), and Cypress component tests (`TrainingSandboxCoach.cy.tsx`, `SystemUpdateCard.cy.tsx`).
 - Updated in-UI Parquet Cold Tier & System Update guidance to reflect OSCAR `4.0.0` (single-pass streaming archive activation, WGS-84 spatial catalog envelopes, native PostgreSQL 19 versioned `PGDATA` with side-by-side major upgrades, and continual in-place `4.0.0 -> 4.x -> 5.x` upgrades).
 
 ## 3.12.2

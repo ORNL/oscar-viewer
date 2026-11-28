@@ -179,4 +179,80 @@ describe("SystemUpdateCard — Zero-Login GitHub & Offline Bundle Updater", () =
         cy.wait("@uploadStage");
         cy.contains("Verified and staged oscar-3.11.9.zip").should("be.visible");
     });
+
+    it("defaults to Production (Stable) channel and supports opting into Development (Pre-release) builds", () => {
+        const stableStatus = {
+            ...BASE_STATUS,
+            currentVersion: "4.0.0-dev.1",
+            releaseChannel: "stable" as const,
+        };
+        cy.intercept("GET", "/sensorhub/oscar/system-update/status", {
+            statusCode: 200,
+            body: stableStatus,
+        }).as("getStableStatus");
+
+        cy.intercept("POST", "/sensorhub/oscar/system-update/channel", (req) => {
+            expect(req.body.channel).to.equal("dev");
+            req.reply({
+                statusCode: 200,
+                body: {
+                    ...stableStatus,
+                    releaseChannel: "dev",
+                    linuxCheckCommand: "sudo bash oscar.sh update check --channel dev",
+                    linuxUpgradeCommand: "sudo bash oscar.sh update apply --channel dev",
+                },
+            });
+        }).as("setDevChannel");
+
+        cy.intercept("POST", "/sensorhub/oscar/system-update/check", (req) => {
+            expect(req.body.channel).to.equal("dev");
+            req.reply({
+                statusCode: 200,
+                body: {
+                    ...stableStatus,
+                    releaseChannel: "dev",
+                    latestRelease: {
+                        checkedAt: "2026-11-28T17:00:00Z",
+                        requiresGitHubLogin: false,
+                        channel: "dev",
+                        isPrerelease: true,
+                        latestVersion: "4.0.0-dev.2",
+                        currentVersion: "4.0.0-dev.1",
+                        tagName: "v4.0.0-dev.2",
+                        releaseTitle: "Release v4.0.0-dev.2 (Dev Pre-release)",
+                        releasePageUrl: "https://github.com/ORNL/oscar/releases/tag/v4.0.0-dev.2",
+                        assetFileName: "oscar-4.0.0-dev.2.zip",
+                        downloadUrl: "https://github.com/ORNL/oscar/releases/download/v4.0.0-dev.2/oscar-4.0.0-dev.2.zip",
+                        assetAvailable: true,
+                        expectedSha256: SAMPLE_SHA256,
+                        downloadBytes: 98_566_144,
+                        comparison: 1,
+                        updateAvailable: true,
+                        upToDate: false,
+                        inPlaceCompatible: true,
+                    },
+                },
+            });
+        }).as("checkDevGitHub");
+
+        cy.mount(
+            <LanguageProvider>
+                <SystemUpdateCard isAdmin={true} />
+            </LanguageProvider>,
+        );
+        cy.wait("@getStableStatus");
+        cy.get('[data-testid="system-update-channel-stable"]').should("have.attr", "aria-pressed", "true");
+        cy.get('[data-testid="system-update-dev-channel-notice"]').should("not.exist");
+
+        cy.get('[data-testid="system-update-channel-dev"]').click();
+        cy.wait("@setDevChannel");
+        cy.get('[data-testid="system-update-dev-channel-notice"]').should("be.visible");
+
+        cy.get('[data-testid="system-update-check-btn"]').click();
+        cy.wait("@checkDevGitHub");
+        cy.get('[data-testid="system-update-release-channel-badge"]').should("contain.text", "Dev Pre-release");
+
+        cy.get('[data-testid="system-update-open-confirm-btn"]').click();
+        cy.get('[data-testid="system-update-dialog-prerelease-warning"]').should("be.visible");
+    });
 });

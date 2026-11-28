@@ -1,6 +1,10 @@
+export type SystemUpdateChannel = 'stable' | 'dev';
+
 export interface SystemUpdateReleaseInfo {
     checkedAt: string;
     requiresGitHubLogin: boolean;
+    channel?: SystemUpdateChannel;
+    isPrerelease?: boolean;
     latestVersion: string;
     currentVersion: string;
     tagName: string;
@@ -50,6 +54,7 @@ export interface SystemUpdateStatusResponse {
     stage: string;
     progressPercent: number;
     currentVersion: string;
+    releaseChannel?: SystemUpdateChannel;
     targetVersion?: string;
     releaseDir?: string;
     availableDiskGib: number;
@@ -118,7 +123,14 @@ export async function fetchSystemUpdateStatus(): Promise<SystemUpdateStatusRespo
     return body as SystemUpdateStatusResponse;
 }
 
-export async function checkGitHubSystemUpdate(force = true): Promise<SystemUpdateStatusResponse> {
+export async function checkGitHubSystemUpdate(
+    force = true,
+    channel?: SystemUpdateChannel,
+): Promise<SystemUpdateStatusResponse> {
+    const payload: Record<string, unknown> = { force };
+    if (channel) {
+        payload.channel = channel;
+    }
     const res = await fetch(`${BASE_PATH}/check`, {
         method: 'POST',
         credentials: 'include',
@@ -127,7 +139,7 @@ export async function checkGitHubSystemUpdate(force = true): Promise<SystemUpdat
             'X-Requested-With': 'XMLHttpRequest',
             Accept: 'application/json',
         },
-        body: JSON.stringify({ force }),
+        body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
     if (res.status === 502 && body?.offlineUploadAvailable) {
@@ -142,10 +154,31 @@ export async function checkGitHubSystemUpdate(force = true): Promise<SystemUpdat
     return body as SystemUpdateStatusResponse;
 }
 
+export async function setSystemUpdateChannel(
+    channel: SystemUpdateChannel,
+): Promise<SystemUpdateStatusResponse> {
+    const res = await fetch(`${BASE_PATH}/channel`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            Accept: 'application/json',
+        },
+        body: JSON.stringify({ channel }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(body?.error || `Could not update release channel (HTTP ${res.status})`);
+    }
+    return body as SystemUpdateStatusResponse;
+}
+
 export async function applyGitHubSystemUpdate(options: {
     targetVersion: string;
     expectedSha256?: string;
     createBackupFirst?: boolean;
+    channel?: SystemUpdateChannel;
 }): Promise<SystemUpdateStatusResponse> {
     const res = await fetch(`${BASE_PATH}/apply`, {
         method: 'POST',
@@ -159,6 +192,7 @@ export async function applyGitHubSystemUpdate(options: {
             targetVersion: options.targetVersion,
             expectedSha256: options.expectedSha256 || '',
             createBackupFirst: Boolean(options.createBackupFirst),
+            ...(options.channel ? { channel: options.channel } : {}),
         }),
     });
     const body = await res.json().catch(() => ({}));

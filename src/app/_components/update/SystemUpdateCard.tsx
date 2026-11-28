@@ -15,12 +15,15 @@ import {
     Paper,
     Stack,
     TextField,
+    ToggleButton,
+    ToggleButtonGroup,
     Typography,
 } from '@mui/material';
 import SystemUpdateAltRoundedIcon from '@mui/icons-material/SystemUpdateAltRounded';
 import CloudSyncRoundedIcon from '@mui/icons-material/CloudSyncRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
+import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import { Locale, useLanguage } from '@/app/contexts/LanguageContext';
@@ -28,6 +31,8 @@ import {
     applyGitHubSystemUpdate,
     checkGitHubSystemUpdate,
     fetchSystemUpdateStatus,
+    setSystemUpdateChannel,
+    SystemUpdateChannel,
     SystemUpdateOfflineError,
     SystemUpdateRestartingError,
     SystemUpdateStatusResponse,
@@ -43,6 +48,13 @@ interface SystemUpdateCopy {
     agentActiveBadge: string;
     agentInactiveBadge: string;
     diskSpaceBadge: (gib: number) => string;
+    channelLabel: string;
+    channelStableOption: string;
+    channelDevOption: string;
+    channelDevOptInNotice: string;
+    prereleaseBadge: string;
+    stableReleaseBadge: string;
+    dialogPrereleaseWarning: string;
     checkGitHubBtn: string;
     checkingBtn: string;
     upToDateBanner: (ver: string) => string;
@@ -88,6 +100,15 @@ const UPDATE_COPY: Record<Locale, SystemUpdateCopy> = {
         agentActiveBadge: 'Host Update Agent: Active',
         agentInactiveBadge: 'Host Update Agent: CLI Mode',
         diskSpaceBadge: (gib) => `Free Disk: ${gib.toFixed(1)} GiB`,
+        channelLabel: 'Release Channel',
+        channelStableOption: 'Production (Stable — Latest)',
+        channelDevOption: 'Development (Pre-release — Opt-in)',
+        channelDevOptInNotice:
+            'Development (Pre-release) opt-in is active. OSCAR will discover pre-release Dev builds published on GitHub alongside Production releases. Production operational portals should remain on Production (Stable — Latest).',
+        prereleaseBadge: 'Dev Pre-release',
+        stableReleaseBadge: 'Production Stable',
+        dialogPrereleaseWarning:
+            'This is an opt-in Development pre-release build (not the current Production Latest release). You can return to Production (Stable) at any time and seamlessly promote to the next stable release in place.',
         checkGitHubBtn: 'Check GitHub for Updates',
         checkingBtn: 'Checking GitHub Releases…',
         upToDateBanner: (ver) => `This OSCAR node is running the latest published GitHub release (${ver}).`,
@@ -154,6 +175,15 @@ const UPDATE_COPY: Record<Locale, SystemUpdateCopy> = {
         agentActiveBadge: 'Agente de actualización: Activo',
         agentInactiveBadge: 'Agente de actualización: Modo CLI',
         diskSpaceBadge: (gib) => `Espacio libre: ${gib.toFixed(1)} GiB`,
+        channelLabel: 'Canal de actualización',
+        channelStableOption: 'Producción (Estable — Última oficial)',
+        channelDevOption: 'Desarrollo (Pre-lanzamiento — Opcional)',
+        channelDevOptInNotice:
+            'El canal opcional de Desarrollo (Pre-lanzamiento) está activo. OSCAR buscará versiones preliminares de desarrollo en GitHub además de las versiones de producción. Los portales operativos deben permanecer en Producción (Estable).',
+        prereleaseBadge: 'Pre-lanzamiento Dev',
+        stableReleaseBadge: 'Producción Estable',
+        dialogPrereleaseWarning:
+            'Esta es una versión opcional de pre-lanzamiento de Desarrollo (no la versión estable de Producción). Puede volver a Producción (Estable) en cualquier momento.',
         checkGitHubBtn: 'Buscar actualizaciones en GitHub',
         checkingBtn: 'Consultando GitHub Releases…',
         upToDateBanner: (ver) => `Este nodo OSCAR ejecuta la última versión publicada en GitHub (${ver}).`,
@@ -220,6 +250,15 @@ const UPDATE_COPY: Record<Locale, SystemUpdateCopy> = {
         agentActiveBadge: 'Agent de mise à jour : Actif',
         agentInactiveBadge: 'Agent de mise à jour : Mode CLI',
         diskSpaceBadge: (gib) => `Disque libre : ${gib.toFixed(1)} Gio`,
+        channelLabel: 'Canal de mise à jour',
+        channelStableOption: 'Production (Stable — Officielle)',
+        channelDevOption: 'Développement (Pré-version — Optionnel)',
+        channelDevOptInNotice:
+            'L’option Développement (Pré-version) est active. OSCAR recherchera les pré-versions de développement publiées sur GitHub en plus des versions stables. Les portails opérationnels doivent rester sur Production (Stable).',
+        prereleaseBadge: 'Pré-version Dev',
+        stableReleaseBadge: 'Production Stable',
+        dialogPrereleaseWarning:
+            'Il s’agit d’une pré-version de développement optionnelle (et non de la version stable de production). Vous pouvez revenir sur Production (Stable) à tout moment.',
         checkGitHubBtn: 'Vérifier les mises à jour sur GitHub',
         checkingBtn: 'Vérification de GitHub Releases…',
         upToDateBanner: (ver) => `Ce nœud OSCAR exécute déjà la dernière version publiée sur GitHub (${ver}).`,
@@ -286,6 +325,15 @@ const UPDATE_COPY: Record<Locale, SystemUpdateCopy> = {
         agentActiveBadge: 'Υπηρεσία ενημέρωσης: Ενεργή',
         agentInactiveBadge: 'Υπηρεσία ενημέρωσης: Λειτουργία CLI',
         diskSpaceBadge: (gib) => `Ελεύθερος χώρος: ${gib.toFixed(1)} GiB`,
+        channelLabel: 'Κανάλι ενημερώσεων',
+        channelStableOption: 'Παραγωγή (Σταθερή — Τελευταία επίσημη)',
+        channelDevOption: 'Ανάπτυξη (Προέκδοση Dev — Προαιρετικό)',
+        channelDevOptInNotice:
+            'Η προαιρετική επιλογή Ανάπτυξης (Προέκδοση Dev) είναι ενεργή. Το OSCAR θα εντοπίζει προεκδόσεις ανάπτυξης στο GitHub μαζί με τις σταθερές εκδόσεις. Οι παραγωγικές πύλες πρέπει να παραμένουν στο κανάλι Παραγωγής (Σταθερή).',
+        prereleaseBadge: 'Προέκδοση Dev',
+        stableReleaseBadge: 'Σταθερή Παραγωγής',
+        dialogPrereleaseWarning:
+            'Πρόκειται για προαιρετική προέκδοση Ανάπτυξης (όχι την τρέχουσα σταθερή έκδοση Παραγωγής). Μπορείτε να επιστρέψετε στο κανάλι Παραγωγής (Σταθερή) ανά πάσα στιγμή.',
         checkGitHubBtn: 'Έλεγχος GitHub για ενημερώσεις',
         checkingBtn: 'Έλεγχος εκδόσεων GitHub…',
         upToDateBanner: (ver) => `Αυτός ο κόμβος OSCAR εκτελεί την τελευταία δημοσιευμένη έκδοση GitHub (${ver}).`,
@@ -361,6 +409,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
     const [status, setStatus] = React.useState<SystemUpdateStatusResponse | null>(null);
     const [loadingStatus, setLoadingStatus] = React.useState(true);
     const [checkingGitHub, setCheckingGitHub] = React.useState(false);
+    const [switchingChannel, setSwitchingChannel] = React.useState(false);
     const [uploadingZip, setUploadingZip] = React.useState(false);
     const [createBackupFirst, setCreateBackupFirst] = React.useState(false);
     const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
@@ -376,6 +425,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
     const [dialogPhase, setDialogPhase] = React.useState<'closed' | 'confirm' | 'progress'>('closed');
     const [pendingTargetVersion, setPendingTargetVersion] = React.useState('');
     const [pendingExpectedSha, setPendingExpectedSha] = React.useState('');
+    const [pendingIsPrerelease, setPendingIsPrerelease] = React.useState(false);
     const [reconnecting, setReconnecting] = React.useState(false);
     const [escAttemptNote, setEscAttemptNote] = React.useState(false);
     const sawContainerRestartRef = React.useRef(false);
@@ -497,11 +547,13 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
         return null;
     }
 
-    const handleCheckGitHub = async () => {
+    const activeChannel: SystemUpdateChannel = status?.releaseChannel === 'dev' ? 'dev' : 'stable';
+
+    const handleCheckGitHub = async (channelOverride?: SystemUpdateChannel) => {
         setCheckingGitHub(true);
         setAlertMessage(null);
         try {
-            const updated = await checkGitHubSystemUpdate(true);
+            const updated = await checkGitHubSystemUpdate(true, channelOverride || activeChannel);
             setStatus(updated);
         } catch (err: any) {
             if (err instanceof SystemUpdateOfflineError) {
@@ -517,9 +569,29 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
         }
     };
 
-    const openConfirmDialog = (targetVer: string, expectedSha?: string) => {
+    const handleChannelChange = async (
+        _event: React.MouseEvent<HTMLElement>,
+        nextChannel: SystemUpdateChannel | null,
+    ) => {
+        if (!nextChannel || nextChannel === activeChannel) {
+            return;
+        }
+        setSwitchingChannel(true);
+        setAlertMessage(null);
+        try {
+            const saved = await setSystemUpdateChannel(nextChannel);
+            setStatus(saved);
+        } catch (err: any) {
+            setAlertMessage({ severity: 'error', text: err?.message || 'Could not change release channel.' });
+        } finally {
+            setSwitchingChannel(false);
+        }
+    };
+
+    const openConfirmDialog = (targetVer: string, expectedSha?: string, isPrerelease = false) => {
         setPendingTargetVersion(targetVer);
         setPendingExpectedSha(expectedSha || '');
+        setPendingIsPrerelease(isPrerelease || targetVer.includes('-'));
         setEscAttemptNote(false);
         setDialogPhase('confirm');
     };
@@ -533,6 +605,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
                 targetVersion: pendingTargetVersion,
                 expectedSha256: pendingExpectedSha,
                 createBackupFirst,
+                channel: activeChannel,
             });
             setStatus(started);
             setDialogPhase('progress');
@@ -572,7 +645,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
         }
     };
 
-    const curVer = status?.currentVersion || '4.0.0';
+    const curVer = status?.currentVersion || '4.0.0-dev.1';
     const rel = status?.latestRelease;
     const activeStageKey = reconnecting ? 'RECONNECTING' : (status?.stage || status?.state || 'IDLE');
     const activeStageLabel = copy.stages[activeStageKey] || status?.message || activeStageKey;
@@ -613,8 +686,8 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
                             <Button
                                 variant="contained"
                                 startIcon={<CloudSyncRoundedIcon />}
-                                disabled={checkingGitHub || loadingStatus}
-                                onClick={handleCheckGitHub}
+                                disabled={checkingGitHub || switchingChannel || loadingStatus}
+                                onClick={() => void handleCheckGitHub()}
                                 data-testid="system-update-check-btn"
                                 sx={{ flexShrink: 0 }}
                             >
@@ -641,6 +714,58 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
                             )}
                         </Stack>
 
+                        {/* Release Channel Selector: Production (Stable — Latest) vs. Development (Pre-release — Opt-in) */}
+                        <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1.25}
+                            alignItems={{ sm: 'center' }}
+                            flexWrap="wrap"
+                            useFlexGap
+                        >
+                            <Typography variant="body2" fontWeight={600} color="text.secondary">
+                                {copy.channelLabel}:
+                            </Typography>
+                            <ToggleButtonGroup
+                                exclusive
+                                size="small"
+                                value={activeChannel}
+                                onChange={handleChannelChange}
+                                disabled={
+                                    loadingStatus ||
+                                    switchingChannel ||
+                                    checkingGitHub ||
+                                    Boolean(status?.sandboxMode) ||
+                                    status?.state === 'RUNNING' ||
+                                    status?.state === 'QUEUED'
+                                }
+                                aria-label={copy.channelLabel}
+                                data-testid="system-update-channel-group"
+                            >
+                                <ToggleButton
+                                    value="stable"
+                                    data-testid="system-update-channel-stable"
+                                    sx={{ textTransform: 'none', px: 1.5 }}
+                                >
+                                    {copy.channelStableOption}
+                                </ToggleButton>
+                                <ToggleButton
+                                    value="dev"
+                                    color="warning"
+                                    data-testid="system-update-channel-dev"
+                                    sx={{ textTransform: 'none', px: 1.5 }}
+                                >
+                                    <ScienceRoundedIcon fontSize="small" sx={{ mr: 0.75 }} />
+                                    {copy.channelDevOption}
+                                </ToggleButton>
+                            </ToggleButtonGroup>
+                        </Stack>
+
+                        {activeChannel === 'dev' && (
+                            <Alert severity="warning" data-testid="system-update-dev-channel-notice">
+                                {copy.channelDevOptInNotice}
+                            </Alert>
+                        )}
+
                         {status?.sandboxMode && (
                             <Alert severity="info" data-testid="system-update-sandbox-alert">
                                 {copy.sandboxReadOnlyAlert}
@@ -664,9 +789,18 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
 
                                     <Grid container spacing={2}>
                                         <Grid item xs={12} md={8}>
-                                            <Typography variant="subtitle2" fontWeight={700}>
-                                                {rel.releaseTitle} ({rel.tagName})
-                                            </Typography>
+                                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                                                <Typography variant="subtitle2" fontWeight={700}>
+                                                    {rel.releaseTitle} ({rel.tagName})
+                                                </Typography>
+                                                <Chip
+                                                    size="small"
+                                                    color={rel.isPrerelease ? 'warning' : 'success'}
+                                                    variant={rel.isPrerelease ? 'filled' : 'outlined'}
+                                                    label={rel.isPrerelease ? copy.prereleaseBadge : copy.stableReleaseBadge}
+                                                    data-testid="system-update-release-channel-badge"
+                                                />
+                                            </Stack>
                                             {rel.expectedSha256 && (
                                                 <Typography
                                                     variant="caption"
@@ -741,7 +875,13 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
                                             color="primary"
                                             startIcon={<SystemUpdateAltRoundedIcon />}
                                             disabled={!canOneClickApply || !rel.inPlaceCompatible || !rel.assetAvailable}
-                                            onClick={() => openConfirmDialog(rel.latestVersion, rel.expectedSha256)}
+                                            onClick={() =>
+                                                openConfirmDialog(
+                                                    rel.latestVersion,
+                                                    rel.expectedSha256,
+                                                    Boolean(rel.isPrerelease),
+                                                )
+                                            }
                                             data-testid="system-update-open-confirm-btn"
                                         >
                                             {rel.updateAvailable
@@ -863,6 +1003,11 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
                             <Typography variant="body2" color="text.secondary">
                                 {copy.dialogConfirmBody(curVer, pendingTargetVersion)}
                             </Typography>
+                            {pendingIsPrerelease && (
+                                <Alert severity="warning" data-testid="system-update-dialog-prerelease-warning">
+                                    {copy.dialogPrereleaseWarning}
+                                </Alert>
+                            )}
                             <Box component="ul" sx={{ pl: 2.5, m: 0, fontSize: '0.875rem' }}>
                                 {copy.dialogSafeGuarantees.map((line, idx) => (
                                     <li key={idx} style={{ marginBottom: 6 }}>
