@@ -58,8 +58,8 @@ import {
     submitSandboxHostAction,
 } from "@/lib/data/oscar/TrainingSandboxApi";
 import {
+    getTrainingLabsForLocale,
     TRAINING_COACH_UI,
-    TRAINING_LABS,
     TRAINING_TRACKS,
     TrainingLabDefinition,
 } from "@/lib/data/oscar/TrainingCurriculum";
@@ -127,17 +127,19 @@ export default function TrainingCoachDock({
 }: TrainingCoachDockProps) {
     const { language: locale } = useLanguage();
     const ui = TRAINING_COACH_UI[locale] ?? TRAINING_COACH_UI.en;
+    const trackProgressLabelId = React.useId();
     const refresherMode = !status.sandboxMode;
     const verification = status.verification ?? EMPTY_VERIFICATION;
 
+    const localizedLabs = React.useMemo(() => getTrainingLabsForLocale(locale), [locale]);
     const [selectedTrack, setSelectedTrack] = React.useState<SandboxTrackId>(
         status.activeTrack ?? "operator",
     );
     const trackLabs = React.useMemo(
-        () => TRAINING_LABS.filter((lab) => lab.trackId === selectedTrack),
-        [selectedTrack],
+        () => localizedLabs.filter((lab) => lab.trackId === selectedTrack),
+        [localizedLabs, selectedTrack],
     );
-    const [selectedLabId, setSelectedLabId] = React.useState<string>("op-1");
+    const [selectedLabId, setSelectedLabId] = React.useState<string>("op-0");
     const [manualCompletedIds, setManualCompletedIds] = React.useState<string[]>([]);
     const [busyAction, setBusyAction] = React.useState<boolean>(false);
     const [transitInProgress, setTransitInProgress] = React.useState<boolean>(false);
@@ -255,17 +257,17 @@ export default function TrainingCoachDock({
     // Polite screen-reader announcement when any lab objective transitions to Auto-Verified
     React.useEffect(() => {
         if (refresherMode) return;
-        for (const lab of TRAINING_LABS) {
+        for (const lab of localizedLabs) {
             const nowVerified = lab.isAutoVerified(verification);
             if (nowVerified && !previouslyVerifiedRef.current.has(lab.id)) {
                 previouslyVerifiedRef.current.add(lab.id);
                 setLiveAnnouncement(`${ui.verifiedBadgeLabel}: ${lab.badge} ${lab.title}`);
             }
         }
-    }, [refresherMode, verification, ui.verifiedBadgeLabel]);
+    }, [localizedLabs, refresherMode, verification, ui.verifiedBadgeLabel]);
 
     const activeLab: TrainingLabDefinition =
-        trackLabs.find((l) => l.id === selectedLabId) ?? trackLabs[0] ?? TRAINING_LABS[0];
+        trackLabs.find((l) => l.id === selectedLabId) ?? trackLabs[0] ?? localizedLabs[0];
     const activeLabIndex = trackLabs.findIndex((l) => l.id === activeLab.id);
     const nextLabInTrack =
         activeLabIndex >= 0 && activeLabIndex + 1 < trackLabs.length
@@ -311,6 +313,7 @@ export default function TrainingCoachDock({
         isLabVerified(lab) || manualCompletedIds.includes(lab.id);
 
     const completedInTrackCount = trackLabs.filter(isLabDone).length;
+    const completedOverallCount = localizedLabs.filter(isLabDone).length;
 
     const sandboxPort = hostStatus?.httpsPort ?? 8444;
     const sandboxTtl = hostStatus?.ttlMinutes ?? status.ttlMinutes ?? 120;
@@ -411,7 +414,7 @@ export default function TrainingCoachDock({
 
     const handleSelectTrack = async (trackId: SandboxTrackId) => {
         setSelectedTrack(trackId);
-        const firstLab = TRAINING_LABS.find((l) => l.trackId === trackId);
+        const firstLab = localizedLabs.find((l) => l.trackId === trackId);
         if (firstLab) {
             activateLabAndSyncRoute(firstLab);
         }
@@ -722,7 +725,7 @@ export default function TrainingCoachDock({
         setBusyAction(true);
         setFeedbackBanner(null);
         try {
-            const submissions: CompletedLabSubmission[] = TRAINING_LABS.filter(isLabDone).map((lab) => ({
+            const submissions: CompletedLabSubmission[] = localizedLabs.filter(isLabDone).map((lab) => ({
                 trackId: lab.trackId,
                 labId: lab.badge,
                 title: lab.title,
@@ -731,7 +734,7 @@ export default function TrainingCoachDock({
             await downloadTrainingCertificatePdf(traineeName, submissions);
             setFeedbackBanner({
                 severity: "success",
-                text: "Downloaded 1-page PDF Training Completion Record.",
+                text: ui.certificateSuccessNotice,
             });
         } catch (err: any) {
             setFeedbackBanner({
@@ -936,7 +939,7 @@ export default function TrainingCoachDock({
                                                     data-testid="coach-sandbox-reset-btn"
                                                     sx={{ textTransform: "none", fontSize: "0.74rem" }}
                                                 >
-                                                    Reset
+                                                    {ui.resetSandboxBtn}
                                                 </Button>
                                                 <Button
                                                     size="small"
@@ -948,7 +951,7 @@ export default function TrainingCoachDock({
                                                     data-testid="coach-sandbox-stop-btn"
                                                     sx={{ textTransform: "none", fontSize: "0.74rem" }}
                                                 >
-                                                    Stop
+                                                    {ui.stopSandboxBtn}
                                                 </Button>
                                             </>
                                         )}
@@ -1029,9 +1032,29 @@ export default function TrainingCoachDock({
                     })}
                 </Stack>
 
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.25, lineHeight: 1.35 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.9, lineHeight: 1.38 }}>
                     {renderInlineCode(activeTrackDef.subtitle[locale] ?? activeTrackDef.subtitle.en)}
                 </Typography>
+
+                <div className="oscar-coach-role-scope" data-testid="training-track-role-scope">
+                    {renderInlineCode(activeTrackDef.roleScope[locale] ?? activeTrackDef.roleScope.en)}
+                </div>
+
+                {/* Semantic Native Track & Overall Progress Bar */}
+                <div className="oscar-coach-progress-wrap" data-testid="training-track-progress">
+                    <div className="oscar-coach-progress-meta">
+                        <span id={trackProgressLabelId}>
+                            {ui.trackProgressLabel(completedInTrackCount, trackLabs.length)}
+                        </span>
+                        <span>{ui.overallProgressLabel(completedOverallCount, localizedLabs.length)}</span>
+                    </div>
+                    <progress
+                        className="oscar-coach-progress"
+                        value={completedInTrackCount}
+                        max={Math.max(trackLabs.length, 1)}
+                        aria-labelledby={trackProgressLabelId}
+                    />
+                </div>
 
                 {/* Lab Pills within Track */}
                 <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mb: 1.5 }}>
@@ -1045,12 +1068,12 @@ export default function TrainingCoachDock({
                                 clickable
                                 size="small"
                                 icon={done ? <CheckCircleRoundedIcon fontSize="small" /> : undefined}
-                                label={`${lab.badge} ${lab.title.split(" ")[0].replace(/[,:;]+$/, "")}`}
+                                label={`${lab.badge} ${lab.chipLabel}`}
                                 color={active ? "primary" : verified ? "success" : done ? "info" : "default"}
                                 variant={active ? "filled" : "outlined"}
                                 onClick={() => activateLabAndSyncRoute(lab)}
                                 data-testid={`training-lab-chip-${lab.id}`}
-                                sx={{ fontWeight: active ? 700 : 500 }}
+                                sx={{ fontWeight: active ? 700 : 500, minHeight: 26 }}
                             />
                         );
                     })}
@@ -1080,7 +1103,7 @@ export default function TrainingCoachDock({
                     <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
                         <Chip
                             size="small"
-                            label={`Lab ${activeLab.badge} · ${activeLab.durationEstimate}`}
+                            label={`${ui.labBadgePrefix} ${activeLab.badge} · ${activeLab.durationEstimate}`}
                             sx={{ fontWeight: 700, bgcolor: "#e0f2fe", color: "#0369a1", height: 22 }}
                         />
                         <Chip
@@ -1280,6 +1303,17 @@ export default function TrainingCoachDock({
                             </Stack>
                         )}
 
+                        {activeLab.commonPitfalls && activeLab.commonPitfalls.length > 0 && (
+                            <div className="oscar-coach-pitfalls" data-testid="training-coach-pitfalls">
+                                <div className="oscar-coach-pitfalls-title">{ui.commonPitfallsHeading}</div>
+                                <ul>
+                                    {activeLab.commonPitfalls.map((tip, tipIdx) => (
+                                        <li key={tipIdx}>{renderInlineCode(tip)}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
                         <Box
                             sx={{
                                 mt: 1,
@@ -1300,7 +1334,7 @@ export default function TrainingCoachDock({
                                         variant="text"
                                         onClick={() => handleToggleManualDone(activeLab.id)}
                                         data-testid="training-manual-complete-btn"
-                                        sx={{ p: 0, textTransform: "none", fontSize: "0.76rem" }}
+                                        sx={{ p: 0, textTransform: "none", fontSize: "0.76rem", minHeight: 24 }}
                                     >
                                         {manualCompletedIds.includes(activeLab.id) ? "✓ " : ""}
                                         {ui.markCompleteLabel}
@@ -1315,15 +1349,36 @@ export default function TrainingCoachDock({
                                         color={isLabDone(activeLab) ? "primary" : "inherit"}
                                         onClick={() => activateLabAndSyncRoute(nextLabInTrack)}
                                         data-testid="training-next-lab-btn"
-                                        sx={{ textTransform: "none", fontSize: "0.75rem", py: 0.25 }}
+                                        sx={{ textTransform: "none", fontSize: "0.75rem", py: 0.25, minHeight: 26 }}
                                     >
-                                        Next Lab ({nextLabInTrack.badge}) →
+                                        {ui.nextLabLabel(nextLabInTrack.badge)}
                                     </Button>
                                 )}
                             </Stack>
                         </Box>
                     </div>
                 </details>
+
+                {/* Non-Exclusive Accordion 2: Key Terms Explained (Plain-Language Cheat Sheet) */}
+                {activeLab.keyTerms && activeLab.keyTerms.length > 0 && (
+                    <details className="oscar-coach-accordion" data-testid="training-coach-key-terms">
+                        <summary className="oscar-coach-summary">
+                            <span>
+                                {ui.keyTermsSummary} ({activeLab.keyTerms.length})
+                            </span>
+                        </summary>
+                        <div className="oscar-coach-accordion-body">
+                            <dl className="oscar-coach-glossary-list">
+                                {activeLab.keyTerms.map((entry, termIdx) => (
+                                    <div key={termIdx} className="oscar-coach-glossary-item">
+                                        <dt>{renderInlineCode(entry.term)}</dt>
+                                        <dd>{renderInlineCode(entry.meaning)}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </div>
+                    </details>
+                )}
 
                 {/* Non-Exclusive Accordion 2: Bite-Sized 1080p Video Guide + Closed Captions */}
                 {videoGuide && (
@@ -1373,19 +1428,21 @@ export default function TrainingCoachDock({
                         <Typography variant="body2" sx={{ fontSize: "0.8rem", mb: 1, lineHeight: 1.4 }}>
                             <strong>{ui.whyItMattersLabel}</strong> {renderInlineCode(activeLab.whyItMatters)}
                         </Typography>
-                        <img
-                            className="oscar-coach-screenshot"
-                            src={`/manual-screenshots/${activeLab.screenshotFile}`}
-                            alt={activeLab.screenshotCaption}
-                            width={1920}
-                            height={1080}
-                            loading="lazy"
-                            decoding="async"
-                            data-testid="training-coach-screenshot"
-                        />
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-                            {activeLab.screenshotCaption}
-                        </Typography>
+                        <figure className="oscar-coach-figure">
+                            <img
+                                className="oscar-coach-screenshot"
+                                src={`/manual-screenshots/${activeLab.screenshotFile}`}
+                                alt={activeLab.screenshotCaption}
+                                width={1920}
+                                height={1080}
+                                loading="lazy"
+                                decoding="async"
+                                data-testid="training-coach-screenshot"
+                            />
+                            <figcaption className="oscar-coach-figcaption">
+                                {activeLab.screenshotCaption}
+                            </figcaption>
+                        </figure>
                     </div>
                 </details>
 

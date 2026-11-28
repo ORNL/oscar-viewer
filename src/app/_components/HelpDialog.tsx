@@ -65,23 +65,23 @@ import TrainingSandboxLauncherCard from '@/app/_components/sandbox/TrainingSandb
 
 const SYSTEM_UPDATE_SHORTCUT_COPY: Record<Locale, { title: string; desc: string; button: string }> = {
     en: {
-        title: 'Zero-Login GitHub & Offline System Update (Administrators)',
-        desc: 'Check ORNL/oscar GitHub Releases anonymously without any GitHub account or token, verify SHA-256 checksums, and upgrade OSCAR in place (with automatic rollback) — or upload an offline release .zip.',
+        title: 'Zero-Login GitHub, Release Channels & Offline System Update (Administrators)',
+        desc: 'Check ORNL/oscar GitHub Releases anonymously without any GitHub account or token (default Production Stable — Latest, or opt-in Development Pre-release), verify SHA-256 checksums, and upgrade OSCAR 4.0.0+ in place with automatic rollback — or upload an offline release .zip.',
         button: 'Open System Update',
     },
     es: {
-        title: 'Actualización del sistema desde GitHub sin cuenta (Administradores)',
-        desc: 'Consulte ORNL/oscar en GitHub Releases sin iniciar sesión ni usar tokens, verifique SHA-256 y actualice OSCAR en el lugar — o cargue un archivo .zip sin conexión.',
+        title: 'Actualización del sistema sin cuenta, canales de versión y .zip (Administradores)',
+        desc: 'Consulte ORNL/oscar en GitHub Releases sin cuenta ni tokens (canal Producción Estable predeterminado o Desarrollo Prelanzamiento opcional), verifique SHA-256 y actualice OSCAR 4.0.0+ en el lugar con reversión automática — o cargue un .zip sin conexión.',
         button: 'Abrir actualización del sistema',
     },
     fr: {
-        title: 'Mise à jour système GitHub sans compte (Administrateurs)',
-        desc: 'Vérifiez anonymement les versions GitHub ORNL/oscar sans compte ni jeton, contrôlez le SHA-256 et mettez à jour OSCAR sur place — ou importez un fichier .zip hors ligne.',
+        title: 'Mise à jour système sans compte, canaux de version et .zip (Administrateurs)',
+        desc: 'Vérifiez anonymement ORNL/oscar sur GitHub Releases sans compte ni jeton (canal Production Stable par défaut ou Développement Préversion optionnel), contrôlez SHA-256 et mettez à niveau OSCAR 4.0.0+ sur place avec repli automatique — ou importez un .zip hors ligne.',
         button: 'Ouvrir la mise à jour système',
     },
     el: {
-        title: 'Ενημέρωση συστήματος GitHub χωρίς σύνδεση λογαριασμού (Διαχειριστές)',
-        desc: 'Ελέγξτε ανώνυμα τις εκδόσεις ORNL/oscar στο GitHub χωρίς λογαριασμό ή διακριτικό, επαληθεύστε το SHA-256 και αναβαθμίστε το OSCAR επιτόπου — ή μεταφορτώστε αρχείο .zip εκτός σύνδεσης.',
+        title: 'Ενημέρωση συστήματος χωρίς σύνδεση, κανάλια εκδόσεων & .zip (Διαχειριστές)',
+        desc: 'Ελέγξτε ανώνυμα το ORNL/oscar στο GitHub χωρίς λογαριασμό ή διακριτικό (προεπιλογή Παραγωγή Σταθερή ή προαιρετική Ανάπτυξη Προέκδοση), επαληθεύστε SHA-256 και αναβαθμίστε το OSCAR 4.0.0+ επιτόπου με αυτόματη επαναφορά — ή μεταφορτώστε .zip εκτός σύνδεσης.',
         button: 'Άνοιγμα ενημέρωσης συστήματος',
     },
 };

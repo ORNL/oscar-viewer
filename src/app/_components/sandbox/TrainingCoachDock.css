@@ -4,9 +4,9 @@
  */
 
 .oscar-training-coach-aside {
-    inline-size: 404px;
+    inline-size: 420px;
     max-inline-size: 100vw;
-    flex: 0 0 404px;
+    flex: 0 0 420px;
     min-inline-size: 0;
     border-inline-start: 1px solid rgba(15, 23, 42, 0.14);
     background-color: #f8fafc;
@@ -62,6 +62,65 @@
     rotate: 0deg;
 }
 
+/* Native <progress> custom styling (separate vendor pseudo-elements, no grouping) */
+.oscar-coach-progress-wrap {
+    margin-block-end: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+
+.oscar-coach-progress-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #334155;
+    margin-block-end: 5px;
+}
+
+.oscar-coach-progress {
+    appearance: none;
+    border: 0 solid;
+    overflow: clip;
+    display: block;
+    inline-size: 100%;
+    block-size: 7px;
+    border-radius: 1e5px;
+    background: #e2e8f0;
+    box-shadow: inset 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.oscar-coach-progress::-webkit-progress-bar {
+    background: transparent;
+}
+
+.oscar-coach-progress::-webkit-progress-value {
+    background: #0284c7;
+    border-radius: 1e5px;
+    transition: inline-size 0.3s ease;
+}
+
+.oscar-coach-progress::-moz-progress-bar {
+    background: #0284c7;
+    border-radius: 1e5px;
+    transition: inline-size 0.3s ease;
+}
+
+.oscar-coach-role-scope {
+    padding: 7px 10px;
+    margin-block-end: 10px;
+    border-radius: 6px;
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    color: #0c4a6e;
+    font-size: 0.74rem;
+    line-height: 1.38;
+}
+
 .oscar-coach-accordion {
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -72,8 +131,9 @@
 
 .oscar-coach-summary {
     cursor: pointer;
-    padding: 9px 12px;
-    font-size: 0.84rem;
+    min-block-size: 34px;
+    padding: 8px 12px;
+    font-size: 0.83rem;
     font-weight: 600;
     color: #0f172a;
     display: flex;
@@ -99,6 +159,10 @@
     rotate: -90deg;
 }
 
+.oscar-coach-summary:dir(rtl)::before {
+    rotate: 90deg;
+}
+
 .oscar-coach-accordion[open] > .oscar-coach-summary {
     border-block-end: 1px solid #e2e8f0;
     background-color: #f1f5f9;
@@ -110,9 +174,26 @@
     rotate: 0deg;
 }
 
+.oscar-coach-accordion::details-content {
+    interpolate-size: allow-keywords;
+    overflow: clip;
+    contain: layout;
+}
+
+.oscar-coach-accordion:not([open])::details-content {
+    block-size: 0;
+}
+
 @media (prefers-reduced-motion: no-preference) {
     .oscar-coach-summary::before {
         transition: rotate 0.18s ease;
+    }
+
+    .oscar-coach-accordion::details-content {
+        transition: block-size, content-visibility, display;
+        transition-duration: 0.22s;
+        transition-timing-function: ease-in-out;
+        transition-behavior: allow-discrete;
     }
 }
 
@@ -125,6 +206,76 @@
 .oscar-coach-accordion-body {
     padding: 10px 12px 12px;
     min-inline-size: 0;
+}
+
+.oscar-coach-pitfalls {
+    margin-block-start: 10px;
+    margin-block-end: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background-color: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #78350f;
+}
+
+.oscar-coach-pitfalls-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-block-end: 4px;
+}
+
+.oscar-coach-pitfalls ul {
+    margin: 0;
+    padding-inline-start: 16px;
+}
+
+.oscar-coach-pitfalls li {
+    font-size: 0.76rem;
+    line-height: 1.38;
+    margin-block-end: 4px;
+}
+
+.oscar-coach-pitfalls li:last-child {
+    margin-block-end: 0;
+}
+
+.oscar-coach-glossary-list {
+    margin: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.oscar-coach-glossary-item {
+    padding: 7px 9px;
+    border-radius: 6px;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.oscar-coach-glossary-item dt {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-block-end: 2px;
+}
+
+.oscar-coach-glossary-item dd {
+    margin: 0;
+    font-size: 0.76rem;
+    line-height: 1.4;
+    color: #334155;
+}
+
+.oscar-coach-figure {
+    margin: 0;
+}
+
+.oscar-coach-figcaption {
+    display: block;
+    margin-block-start: 6px;
+    font-size: 0.74rem;
+    line-height: 1.38;
+    color: #475569;
 }
 
 .oscar-coach-code {

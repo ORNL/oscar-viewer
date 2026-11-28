@@ -2,14 +2,22 @@ import React from "react";
 import { LanguageProvider } from "../../src/app/contexts/LanguageContext";
 import HelpDialog from "../../src/app/_components/HelpDialog";
 import TrainingCoachDock from "../../src/app/_components/sandbox/TrainingCoachDock";
-import { TRAINING_LABS, TRAINING_TRACKS } from "../../src/lib/data/oscar/TrainingCurriculum";
+import {
+    getLocalizedTrainingLab,
+    TRAINING_LABS,
+    TRAINING_TRACKS,
+} from "../../src/lib/data/oscar/TrainingCurriculum";
 import {
     resolveSandboxLaunchTarget,
     SandboxActiveStatus,
     SANDBOX_WATERMARK_TEXT,
     setTrainingSandboxRuntimeActiveForTests,
 } from "../../src/lib/data/oscar/TrainingSandboxApi";
-import { getVideoGuideBySlug, VIDEO_GUIDES_CATALOG } from "../../src/lib/data/oscar/VideoGuidesCatalog";
+import {
+    getVideoGuideBySlug,
+    VIDEO_GUIDE_CAPTION_LOCALES,
+    VIDEO_GUIDES_CATALOG,
+} from "../../src/lib/data/oscar/VideoGuidesCatalog";
 
 describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
     beforeEach(() => {
@@ -19,7 +27,7 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         setTrainingSandboxRuntimeActiveForTests(false);
     });
 
-    it("maps all 15 curriculum labs across 3 role tracks to valid 33-guide catalog entries", () => {
+    it("maps all 22 curriculum labs across 3 role tracks with complete 4-locale copy, key terms, pitfalls, and valid 33-guide entries", () => {
         expect(VIDEO_GUIDES_CATALOG.length).to.equal(33);
         expect(getVideoGuideBySlug("30-zero-login-github-system-update")?.badge).to.equal("30");
         expect(getVideoGuideBySlug("31-bare-metal-autoinstall-usb-creator")?.badge).to.equal("31");
@@ -37,11 +45,26 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
             "supervisor",
             "administrator",
         ]);
-        expect(TRAINING_LABS.length).to.equal(15);
+        expect(TRAINING_LABS.length).to.equal(22);
+        expect(TRAINING_LABS.filter((l) => l.trackId === "operator").length).to.equal(8);
+        expect(TRAINING_LABS.filter((l) => l.trackId === "supervisor").length).to.equal(5);
+        expect(TRAINING_LABS.filter((l) => l.trackId === "administrator").length).to.equal(9);
+
         for (const lab of TRAINING_LABS) {
             const matchedGuide = getVideoGuideBySlug(lab.videoGuideSlug);
             expect(matchedGuide, `Video guide for ${lab.id}`).to.not.equal(undefined);
             expect(lab.screenshotFile).to.match(/\.png$/);
+            for (const loc of VIDEO_GUIDE_CAPTION_LOCALES) {
+                const localized = getLocalizedTrainingLab(lab, loc);
+                expect(localized.chipLabel.trim().length, `${lab.id} chipLabel (${loc})`).to.be.greaterThan(2);
+                expect(localized.title.trim().length, `${lab.id} title (${loc})`).to.be.greaterThan(10);
+                expect(localized.steps.length, `${lab.id} steps (${loc})`).to.be.at.least(3);
+                expect(localized.keyTerms.length, `${lab.id} keyTerms (${loc})`).to.be.at.least(2);
+                expect(localized.commonPitfalls.length, `${lab.id} commonPitfalls (${loc})`).to.be.at.least(1);
+                if (loc === "el") {
+                    expect(localized.title, `${lab.id} Greek title`).to.match(/[\u0370-\u03ff]/);
+                }
+            }
         }
     });
 
@@ -155,22 +178,30 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
 
         cy.mount(<Wrapper />);
 
-        // Verify Lab 1.1 auto-verified because onlineLaneCount >= 1 && totalOccupancies >= 1
+        // Verify Lab 1.1 Orientation renders role scope, native <progress>, Key Terms, and Pitfalls, then click Lab 1.2 Health & Faults
+        cy.get('[data-testid="training-track-role-scope"]').should("be.visible");
+        cy.get('[data-testid="training-track-progress"] progress')
+            .should("have.attr", "max", "8");
         cy.get('[data-testid="training-active-lab-status"]').should("contain.text", "Auto-Verified");
         cy.get('[data-testid="coach-sandbox-session-banner"]')
             .should("be.visible")
             .and("contain.text", "Auto-shutdown in");
+        cy.get('[data-testid="training-coach-pitfalls"]').should("be.visible");
+        cy.get('[data-testid="training-lab-chip-op-1"]').click();
+        cy.get('[data-testid="training-active-lab-status"]').should("contain.text", "Auto-Verified");
 
-        // Verify zero headings inside <summary> and non-exclusive <details> (no name attribute)
-        cy.get(".oscar-coach-accordion").should("have.length", 3).each(($details) => {
+        // Verify zero headings inside <summary> and 4 non-exclusive <details> (Steps, Key Terms, Video, Screenshot — no name attribute)
+        cy.get(".oscar-coach-accordion").should("have.length", 4).each(($details) => {
             expect($details.attr("name")).to.equal(undefined);
             expect($details.find("summary h1, summary h2, summary h3, summary h4, summary h5, summary h6").length).to.equal(0);
         });
 
-        // Open video & screenshot accordions simultaneously (non-exclusive)
+        // Open Key Terms, video, & screenshot accordions simultaneously (non-exclusive)
         cy.get(".oscar-coach-accordion").eq(1).find("summary").click();
         cy.get(".oscar-coach-accordion").eq(2).find("summary").click();
-        cy.get(".oscar-coach-accordion[open]").should("have.length", 3);
+        cy.get(".oscar-coach-accordion").eq(3).find("summary").click();
+        cy.get(".oscar-coach-accordion[open]").should("have.length", 4);
+        cy.get('[data-testid="training-coach-key-terms"] dl dt').should("have.length.at.least", 2);
 
         cy.get('[data-testid="training-coach-video"]')
             .should("have.attr", "width", "1920")
@@ -514,11 +545,58 @@ describe("Hands-On Training Sandbox Coach, Curriculum & Help Launcher", () => {
         cy.get('[data-testid="training-lab-chip-op-3"]').click();
         cy.get('[data-testid="current-route-readout"]').should("have.text", "/event-log");
 
-        // Injecting norm_eml shows in-flight status then Code 9999 completion explanation and auto-verifies Lab 1.3
+        // Injecting norm_eml shows in-flight status then Code 9999 completion explanation and auto-verifies Lab 1.5
         cy.get('[data-testid="training-inject-norm_eml"]').click();
         cy.wait("@injectCall");
         cy.contains("Simulating ~4s balanced 4-panel NORM cargo transit").should("be.visible");
         cy.contains("Code 9999: EML Non-Threat", { timeout: 6000 }).should("be.visible");
         cy.get('[data-testid="training-active-lab-status"]').should("contain.text", "Auto-Verified");
+    });
+
+    it("renders fully localized labs, role scope, key terms, and Lab 3.9 Release Channels in non-English locales (Greek)", () => {
+        window.localStorage.setItem("language", "el");
+        cy.intercept("GET", "/sensorhub/oscar/sandbox/host", {
+            statusCode: 200,
+            body: {
+                agentActive: false,
+                sandboxRunning: false,
+                httpsPort: 8444,
+                ttlMinutes: 120,
+                linuxStartCommand: "sudo bash oscar.sh sandbox start --port 8444",
+                linuxStopCommand: "sudo bash oscar.sh sandbox stop",
+                linuxEnableBridgeCommand: "sudo bash oscar.sh sandbox enable-ui-bridge",
+                windowsStartCommand: ".\\oscar.bat sandbox start --port 8444",
+                windowsStopCommand: ".\\oscar.bat sandbox stop",
+                windowsEnableBridgeCommand: ".\\oscar.bat sandbox enable-ui-bridge",
+            },
+        });
+
+        cy.mount(
+            <LanguageProvider>
+                <TrainingCoachDock
+                    status={{ sandboxMode: false }}
+                    onStatusUpdated={() => {}}
+                    onRefreshRequested={() => {}}
+                    onNavigateRoute={() => {}}
+                    splitAdminOpen={false}
+                    onToggleSplitAdmin={() => {}}
+                    onMinimize={() => {}}
+                />
+            </LanguageProvider>,
+        );
+
+        cy.get('[data-testid="training-coach-dock"]')
+            .should("contain.text", "Βασικές αρχές OSCAR")
+            .and("contain.text", "Επόμενη (1.2)");
+        cy.get('[data-testid="training-track-role-scope"]').should("contain.text", "Θεατής");
+        cy.get('[data-testid="training-coach-key-terms"] > summary').click();
+        cy.get('[data-testid="training-coach-key-terms"]').should("contain.text", "Διέλευση");
+
+        // Switch to Administrator Track and open Lab 3.9 (Updates & Release Channels)
+        cy.get('[data-testid="training-track-btn-administrator"]').click();
+        cy.get('[data-testid="training-lab-chip-adm-lifecycle"]').click();
+        cy.get('[data-testid="training-coach-dock"]')
+            .should("contain.text", "Ενημερώσεις χωρίς σύνδεση GitHub")
+            .and("contain.text", "PARQUET_PRIMARY");
     });
 });
