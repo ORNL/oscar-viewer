@@ -1,6 +1,16 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 3.12.2
+
+### Added
+
+- Surfaced conditional gateway TLS certificate expiration warning banner on **Status of Health (`/health`)** across all 4 locales (`en`, `es`, `fr`, `el`) powered by `GET /sensorhub/oscar/diagnostics/tls-status` (`ORNL/oscar-viewer#56`).
+
+### Changed
+
+- Synchronized operator quick-guide titles, support-bundle fallback metadata, System Update fallback version (`3.12.2`), Video Guide `#31` summary asset names, and hardware-replacement recovery checklist references with **OSCAR 3.12.2**.
+
 ## 3.12.1
 
 ### Changed

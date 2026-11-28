@@ -572,7 +572,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
         }
     };
 
-    const curVer = status?.currentVersion || '3.12.1';
+    const curVer = status?.currentVersion || '3.12.2';
     const rel = status?.latestRelease;
     const activeStageKey = reconnecting ? 'RECONNECTING' : (status?.stage || status?.state || 'IDLE');
     const activeStageLabel = copy.stages[activeStageKey] || status?.message || activeStageKey;
