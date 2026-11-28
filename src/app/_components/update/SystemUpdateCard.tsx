@@ -572,7 +572,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
         }
     };
 
-    const curVer = status?.currentVersion || '3.12.2';
+    const curVer = status?.currentVersion || '4.0.0';
     const rel = status?.latestRelease;
     const activeStageKey = reconnecting ? 'RECONNECTING' : (status?.stage || status?.state || 'IDLE');
     const activeStageLabel = copy.stages[activeStageKey] || status?.message || activeStageKey;
@@ -829,7 +829,7 @@ export default function SystemUpdateCard({ isAdmin }: SystemUpdateCardProps) {
                             <Grid container spacing={1.5}>
                                 <Grid item xs={12} md={6}>
                                     <Paper variant="outlined" sx={{ p: 1.25, fontFamily: 'monospace', fontSize: '0.78rem' }}>
-                                        <div># Ubuntu 24.04 LTS</div>
+                                        <div># Ubuntu 24.04 / 26.04 LTS</div>
                                         <div>{status?.linuxCheckCommand || 'sudo bash oscar.sh update check'}</div>
                                         <div>{status?.linuxUpgradeCommand || 'sudo bash oscar.sh update apply'}</div>
                                     </Paper>

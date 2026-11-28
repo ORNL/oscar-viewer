@@ -1,6 +1,13 @@
 # OSCAR Viewer Change Log
 All notable changes to this project will be documented in this file. 
 
+## 4.0.0
+
+### Changed
+
+- Synchronized **OSCAR 4.0.0** clean-start baseline across operator quick-guide titles (`HelpDialog.tsx`), support-bundle fallback metadata (`SupportDiagnostics.ts`), System Update fallback version & Ubuntu 24.04/26.04 Dual-LTS guidance (`SystemUpdateCard.tsx`), Video Guide catalog entries (`VideoGuidesCatalog.ts`), hardware-replacement recovery checklist (`UsersAccessManager.tsx`), and Cypress component tests (`TrainingSandboxCoach.cy.tsx`, `SystemUpdateCard.cy.tsx`).
+- Updated in-UI Parquet Cold Tier & System Update guidance to reflect OSCAR `4.0.0` (single-pass streaming archive activation, WGS-84 spatial catalog envelopes, native PostgreSQL 19 versioned `PGDATA` with side-by-side major upgrades, and continual in-place `4.0.0 -> 4.x -> 5.x` upgrades).
+
 ## 3.12.2
 
 ### Added
